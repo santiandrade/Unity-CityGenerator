@@ -60,6 +60,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: e9a833b3ed1542646bf058fc41011a62, type: 3}
+      propertyPath: m_CastShadows
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: e9a833b3ed1542646bf058fc41011a62, type: 3}
       propertyPath: m_Name
       value: Building-Skyscraper-E
@@ -70,15 +74,15 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: e9a833b3ed1542646bf058fc41011a62, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 5085598908792839242}
+      addedObject: {fileID: -1074478285543811915}
   m_SourcePrefab: {fileID: 100100000, guid: e9a833b3ed1542646bf058fc41011a62, type: 3}
 --- !u!1 &494511993428010523 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: e9a833b3ed1542646bf058fc41011a62, type: 3}
   m_PrefabInstance: {fileID: 728938655590079306}
   m_PrefabAsset: {fileID: 0}
---- !u!64 &5085598908792839242
-MeshCollider:
+--- !u!65 &-1074478285543811915
+BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -95,7 +99,6 @@ MeshCollider:
   m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 0
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 471836023069485021, guid: e9a833b3ed1542646bf058fc41011a62, type: 3}
+  serializedVersion: 3
+  m_Size: {x: 1.2949997, y: 4.08, z: 1.2420002}
+  m_Center: {x: -0.00000011920929, y: 2.04, z: 0.000000059604645}

@@ -60,6 +60,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: 3745185f738f0c8418546bc1afd5fb17, type: 3}
+      propertyPath: m_CastShadows
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 3745185f738f0c8418546bc1afd5fb17, type: 3}
       propertyPath: m_Name
       value: Building-F
@@ -70,15 +74,15 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 3745185f738f0c8418546bc1afd5fb17, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 9147565409583357296}
+      addedObject: {fileID: 633860064832549694}
   m_SourcePrefab: {fileID: 100100000, guid: 3745185f738f0c8418546bc1afd5fb17, type: 3}
 --- !u!1 &882258551535098194 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 3745185f738f0c8418546bc1afd5fb17, type: 3}
   m_PrefabInstance: {fileID: 71776855786644483}
   m_PrefabAsset: {fileID: 0}
---- !u!64 &9147565409583357296
-MeshCollider:
+--- !u!65 &633860064832549694
+BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -95,7 +99,6 @@ MeshCollider:
   m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 0
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 7534085653682730532, guid: 3745185f738f0c8418546bc1afd5fb17, type: 3}
+  serializedVersion: 3
+  m_Size: {x: 0.84, y: 1.693, z: 1.0300002}
+  m_Center: {x: 0, y: 0.8465, z: 0.00000011920929}
