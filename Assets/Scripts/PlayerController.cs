@@ -20,14 +20,14 @@ namespace TestAI
         [SerializeField] private string jumpActionName = "Jump";
         [SerializeField] private string sprintActionName = "Sprint";
 
-        [Header("Movimiento")]
+        [Header("Movement")]
         [SerializeField] private float walkSpeed = 2f;
         [SerializeField] private float runSpeed = 5f;
         [SerializeField] private float rotationSmoothTime = 0.1f;
         [SerializeField] private float gravity = -20f;
         [SerializeField] private float jumpHeight = 1.2f;
 
-        [Header("Referencias")]
+        [Header("References")]
         [SerializeField] private Transform cameraTransform;
 
         private CharacterController controller;
@@ -65,12 +65,12 @@ namespace TestAI
                 }
                 else
                 {
-                    Debug.LogWarning($"PlayerController: no se encontro el action map '{actionMapName}' en {inputActions.name}.", this);
+                    Debug.LogWarning($"PlayerController: action map '{actionMapName}' not found in {inputActions.name}.", this);
                 }
             }
             else
             {
-                Debug.LogWarning("PlayerController: no hay InputActionAsset asignado.", this);
+                Debug.LogWarning("PlayerController: no InputActionAsset assigned.", this);
             }
         }
 

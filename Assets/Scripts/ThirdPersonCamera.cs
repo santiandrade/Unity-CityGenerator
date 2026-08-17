@@ -9,7 +9,7 @@ namespace TestAI
     /// </summary>
     public class ThirdPersonCamera : MonoBehaviour
     {
-        [Header("Objetivo")]
+        [Header("Target")]
         [SerializeField] private Transform target;
         [SerializeField] private float verticalOffset = 1f;
         [SerializeField] private float horizontalOffset = 0f;
@@ -19,16 +19,16 @@ namespace TestAI
         [SerializeField] private string actionMapName = "Player";
         [SerializeField] private string lookActionName = "Look";
 
-        [Header("Orbita")]
+        [Header("Orbit")]
         [SerializeField] private float distance = 5f;
         [SerializeField] private float minDistance = 1f;
         [SerializeField] private float sensitivity = 0.12f;
         [SerializeField] private float minPitch = -20f;
         [SerializeField] private float maxPitch = 60f;
-        [Tooltip("Suaviza solo el seguimiento de la posicion del jugador (por ejemplo al caminar), nunca la rotacion de la camara.")]
+        [Tooltip("Smooths only the tracking of the player's position (e.g. while walking), never the camera's rotation.")]
         [SerializeField] private float followSmoothTime = 0.08f;
 
-        [Header("Colision")]
+        [Header("Collision")]
         [SerializeField] private LayerMask collisionMask = ~0;
         [SerializeField] private float collisionRadius = 0.3f;
 
@@ -51,11 +51,11 @@ namespace TestAI
                 if (playerMap != null)
                     lookAction = playerMap.FindAction(lookActionName);
                 else
-                    Debug.LogWarning($"ThirdPersonCamera: no se encontro el action map '{actionMapName}' en {inputActions.name}.", this);
+                    Debug.LogWarning($"ThirdPersonCamera: action map '{actionMapName}' not found in {inputActions.name}.", this);
             }
             else
             {
-                Debug.LogWarning("ThirdPersonCamera: no hay InputActionAsset asignado.", this);
+                Debug.LogWarning("ThirdPersonCamera: no InputActionAsset assigned.", this);
             }
 
             if (target != null)

@@ -18,18 +18,18 @@ namespace TestAI
     /// </summary>
     public class TrafficLight : MonoBehaviour
     {
-        [Header("Lámparas")]
+        [Header("Lamps")]
         [SerializeField] private MeshRenderer redLamp;
         [SerializeField] private MeshRenderer amberLamp;
         [SerializeField] private MeshRenderer greenLamp;
 
-        [Header("Materiales")]
+        [Header("Materials")]
         [SerializeField] private Material redOnMaterial;
         [SerializeField] private Material amberOnMaterial;
         [SerializeField] private Material greenOnMaterial;
         [SerializeField] private Material offMaterial;
 
-        [Header("Estado")]
+        [Header("State")]
         [SerializeField] private TrafficLightState state = TrafficLightState.Red;
 
         public TrafficLightState State => state;

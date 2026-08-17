@@ -35,30 +35,30 @@ namespace TestAI
             public readonly List<Exit> Exits = new List<Exit>();
         }
 
-        [Header("Trazado")]
-        [Tooltip("Coordenadas de los ejes de calle, en orden ascendente. Valen para X y para Z.")]
+        [Header("Layout")]
+        [Tooltip("Street axis coordinates, in ascending order. Used for both X and Z.")]
         [SerializeField] private float[] axes = { -84f, -28f, 28f, 84f };
 
-        [Tooltip("Separación del carril respecto al eje de la calle. Debe caber dentro de la calzada.")]
+        [Tooltip("Lane offset from the street axis. Must fit within the roadway.")]
         [SerializeField] private float laneOffset = 2.6f;
 
-        [Header("Circulación")]
-        [Tooltip("Distancia por delante de la entrada del cruce donde se detiene un coche en rojo.")]
+        [Header("Traffic flow")]
+        [Tooltip("Distance ahead of the crossing entry where a car stops on red.")]
         [SerializeField] private float stopLineBack = 6.5f;
 
         [SerializeField] private float straightWeight = 2.5f;
         [SerializeField] private float turnWeight = 1f;
 
-        [Tooltip("Multiplica el peso de las salidas que llevan hacia el interior de la retícula.")]
+        [Tooltip("Multiplies the weight of exits that lead towards the interior of the grid.")]
         [SerializeField] private float interiorBias = 1.8f;
 
-        [Tooltip("Penaliza las salidas que mantienen al vehículo dando vueltas por las calles del perímetro.")]
+        [Tooltip("Penalizes exits that keep the vehicle circling the perimeter streets.")]
         [SerializeField] private float borderPenalty = 0.35f;
 
-        [Tooltip("Tiempo tras el que se libera la prioridad de un cruce sin semáforo si su dueño no ha pasado.")]
+        [Tooltip("Time after which an unsignalled crossing's priority is released if its owner hasn't passed.")]
         [SerializeField] private float reservationTimeout = 4f;
 
-        [Header("Depuración")]
+        [Header("Debugging")]
         [SerializeField] private bool drawGraph = true;
 
         // Directions of travel and, for each one, the index of the direction to its right and left.

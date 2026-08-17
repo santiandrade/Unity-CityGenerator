@@ -11,37 +11,44 @@ namespace TestAI
     [DisallowMultipleComponent]
     public class CarAgent : MonoBehaviour
     {
-        [Header("Red")]
+        [Header("Network")]
         [SerializeField] private TrafficNetwork network;
 
-        [Header("Marcha")]
+        [Header("Driving")]
         [SerializeField] private float maxSpeed = 9f;
         [SerializeField] private float acceleration = 5f;
         [SerializeField] private float braking = 14f;
-        [Tooltip("Velocidad de giro en grados por segundo. Determina el radio de las curvas.")]
+        [Tooltip("Turn speed in degrees per second. Determines the radius of the corners.")]
         [SerializeField] private float turnSpeed = 230f;
-        [Tooltip("Fracción de la velocidad máxima que se mantiene al trazar una curva.")]
+        [Tooltip("Fraction of max speed kept while taking a corner.")]
         [SerializeField] private float cornerSpeedFactor = 0.45f;
 
-        [Header("Nodos")]
+        [Header("Nodes")]
         [SerializeField] private float arriveRadius = 1.5f;
 
-        [Header("Detección")]
+        [Header("Detection")]
         [SerializeField] private LayerMask vehicleMask = ~0;
         [SerializeField] private float sensorRange = 12f;
         [SerializeField] private float sensorRadius = 0.7f;
         [SerializeField] private float minGap = 2.2f;
-        [Tooltip("Distancia a partir de la cual se empieza a frenar ante un obstáculo o un rojo.")]
+        [Tooltip("Distance from which the car starts braking for an obstacle or a red light.")]
         [SerializeField] private float brakeDistance = 10f;
 
-        [Header("Cruces sin semáforo")]
-        [Tooltip("Distancia a la línea desde la que se aminora al acercarse a un cruce sin semáforo.")]
+        [Header("Unsignalled crossings")]
+        [Tooltip("Distance from the stop line at which the car slows down when approaching an unsignalled crossing.")]
         [SerializeField] private float yieldDistance = 12f;
 
-        [Tooltip("Distancia a la línea desde la que se reclama la prioridad del cruce.")]
+        [Tooltip("Distance from the stop line at which the crossing's priority is claimed.")]
         [SerializeField] private float claimDistance = 5f;
 
         [SerializeField] private float yieldSpeed = 4.5f;
+
+        [Header("Deadlock recovery")]
+        [Tooltip("Seconds stopped before trying to break a nose-to-nose deadlock.")]
+        [SerializeField] private float deadlockTimeout = 6f;
+
+        [Tooltip("Seconds a car keeps pushing through once it starts breaking a deadlock.")]
+        [SerializeField] private float deadlockBreakDuration = 4f;
 
         private readonly RaycastHit[] hits = new RaycastHit[8];
 
@@ -55,6 +62,13 @@ namespace TestAI
         private float distanceTravelled;
         private float stoppedTime;
         private StopReason stopReason;
+        // Previous frame's reason: the current one is still being computed while the
+        // forward sensor runs, so the deadlock check has to look at the last known value.
+        private StopReason lastStopReason;
+        // Latched deadlock override. It has to outlive stoppedTime, which resets the moment the
+        // car pulls away: keying the override on stoppedTime alone made it cancel itself one frame
+        // after it started working, and the pair crawled forward centimetre by centimetre instead.
+        private float breakingDeadlockUntil;
         private bool approachingUnsignalled;
 
         /// <summary>Reason the vehicle is braking, useful for debugging jams.</summary>
@@ -67,6 +81,8 @@ namespace TestAI
         }
 
         public float Speed => speed;
+        /// <summary>Identifier used for crossing reservations and to break ties in deadlocks.</summary>
+        public int CarId => carId;
         public int TargetNode => targetNode;
         public int ReservedIntersection => reservedIntersection;
         public float DistanceTravelled => distanceTravelled;
@@ -83,7 +99,7 @@ namespace TestAI
 
             if (network == null)
             {
-                Debug.LogError($"{name}: no hay TrafficNetwork en la escena.", this);
+                Debug.LogError($"{name}: no TrafficNetwork found in the scene.", this);
                 enabled = false;
                 return;
             }
@@ -92,7 +108,7 @@ namespace TestAI
             targetNode = network.FindNodeAhead(transform.position, transform.forward);
             if (targetNode < 0)
             {
-                Debug.LogError($"{name}: no se encontró un nodo de la red por delante del vehículo.", this);
+                Debug.LogError($"{name}: no network node found ahead of the vehicle.", this);
                 enabled = false;
             }
         }
@@ -105,6 +121,7 @@ namespace TestAI
             toTarget.y = 0f;
             float distance = toTarget.magnitude;
 
+            lastStopReason = stopReason;
             stopReason = StopReason.None;
             approachingUnsignalled = false;
 
@@ -136,6 +153,9 @@ namespace TestAI
                 targetSpeed = Mathf.Min(targetSpeed, yieldSpeed);
             }
 
+            // Steering runs even while stopped, on purpose: a car waiting at a crossing lines
+            // itself up with the exit it picked, so when it pulls away it tracks its own lane
+            // instead of swinging wide through the middle of the crossing and into oncoming traffic.
             if (distance > 0.05f)
             {
                 Vector3 desired = toTarget / distance;
@@ -239,11 +259,46 @@ namespace TestAI
                     continue;
                 }
 
+                // Only head-on obstacles can deadlock: regular traffic never produces one
+                // (opposing lanes are separated by laneOffset), so this cannot fire on a queue.
+                if (Vector3.Dot(transform.forward, other.transform.forward) < -0.3f)
+                {
+                    if (IsDeadlockedWith(other))
+                    {
+                        breakingDeadlockUntil = Time.time + deadlockBreakDuration;
+                    }
+
+                    if (Time.time < breakingDeadlockUntil)
+                    {
+                        continue;
+                    }
+                }
+
                 float gap = hits[i].distance <= 0.001f ? 0f : hits[i].distance - minGap;
                 clearance = Mathf.Min(clearance, gap);
             }
 
             return clearance;
+        }
+
+        /// <summary>
+        /// Whether this car and a head-on obstacle are in a mutual deadlock. Two cars whose paths
+        /// cross inside a crossing can end up nose to nose, each one seeing the other and setting
+        /// its own speed to zero: that state is absorbing, nothing else in the logic undoes it,
+        /// and the queues behind them grow until the whole city stops.
+        ///
+        /// The lower <see cref="CarId"/> pulls away first so only one of the pair moves; if that
+        /// one is itself blocked and the jam outlives three timeouts, the tie-break is dropped so
+        /// the deadlock always resolves.
+        /// </summary>
+        private bool IsDeadlockedWith(CarAgent other)
+        {
+            if (stoppedTime < deadlockTimeout || lastStopReason != StopReason.VehicleAhead)
+            {
+                return false;
+            }
+
+            return carId < other.CarId || stoppedTime > deadlockTimeout * 3f;
         }
 
         /// <summary>

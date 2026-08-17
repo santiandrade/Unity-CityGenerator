@@ -10,20 +10,20 @@ namespace TestAI
     /// </summary>
     public class TrafficLightIntersection : MonoBehaviour
     {
-        [Header("Grupos de semáforos")]
+        [Header("Traffic light groups")]
         [SerializeField] private List<TrafficLight> eastWest = new List<TrafficLight>();
         [SerializeField] private List<TrafficLight> northSouth = new List<TrafficLight>();
 
-        [Header("Tiempos (segundos)")]
+        [Header("Timings (seconds)")]
         [SerializeField] private float greenDuration = 8f;
         [SerializeField] private float amberDuration = 2f;
         [SerializeField] private float allRedDuration = 1f;
 
-        [Header("Desfase inicial")]
-        [Tooltip("Retardo antes de arrancar el ciclo. Permite desincronizar intersecciones vecinas.")]
+        [Header("Initial offset")]
+        [Tooltip("Delay before the cycle starts. Lets neighbouring intersections be desynchronized.")]
         [SerializeField] private float startOffset;
 
-        [Tooltip("Si está activo, el ciclo empieza dando paso al eje norte-sur.")]
+        [Tooltip("If enabled, the cycle starts by giving way to the north-south axis.")]
         [SerializeField] private bool startWithNorthSouth;
 
         private void Start()
