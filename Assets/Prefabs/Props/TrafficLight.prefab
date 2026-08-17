@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 3720778546362700571}
   - component: {fileID: 798156397270348112}
   - component: {fileID: 1433345330933536151}
+  - component: {fileID: 1247197315733571554}
   m_Layer: 0
   m_Name: Housing
   m_TagString: Untagged
@@ -308,6 +309,27 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1146798995479517352}
   m_Mesh: {fileID: 0}
+--- !u!65 &1247197315733571554
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1146798995479517352}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.5, y: 1.55, z: 0.42}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1728856063519030854
 GameObject:
   m_ObjectHideFlags: 0
@@ -2936,6 +2958,7 @@ GameObject:
   - component: {fileID: 2079949547660991718}
   - component: {fileID: 6963246116560269284}
   - component: {fileID: 5378356349697278276}
+  - component: {fileID: 1406441415656415792}
   m_Layer: 0
   m_Name: Pole
   m_TagString: Untagged
@@ -4182,6 +4205,27 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5055301010696176481}
   m_Mesh: {fileID: 0}
+--- !u!65 &1406441415656415792
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5055301010696176481}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.18, y: 4.3, z: 0.17119017}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &6581159443711975390
 GameObject:
   m_ObjectHideFlags: 0
@@ -8690,6 +8734,7 @@ GameObject:
   - component: {fileID: 8547183739779173693}
   - component: {fileID: 8288060019616376140}
   - component: {fileID: 1859353869996365791}
+  - component: {fileID: 7530123276044245026}
   m_Layer: 0
   m_Name: Arm
   m_TagString: Untagged
@@ -8986,6 +9031,27 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7896617490241887648}
   m_Mesh: {fileID: 0}
+--- !u!65 &7530123276044245026
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7896617490241887648}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 2.9, y: 0.14, z: 0.14}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &7907870471541674269
 GameObject:
   m_ObjectHideFlags: 0
@@ -8998,6 +9064,7 @@ GameObject:
   - component: {fileID: 1717779263506120445}
   - component: {fileID: 8480065825483707199}
   - component: {fileID: 9127925906056889985}
+  - component: {fileID: 2561757016893422004}
   m_Layer: 0
   m_Name: Visor
   m_TagString: Untagged
@@ -9294,3 +9361,24 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7907870471541674269}
   m_Mesh: {fileID: 0}
+--- !u!65 &2561757016893422004
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7907870471541674269}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.56, y: 0.08, z: 0.3}
+  m_Center: {x: 0, y: 0, z: 0}

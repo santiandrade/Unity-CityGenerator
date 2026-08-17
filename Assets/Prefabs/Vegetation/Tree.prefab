@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 466210537634003691}
   - component: {fileID: 4985865814899328329}
   - component: {fileID: 2191615127109468124}
+  - component: {fileID: 8993959787019931102}
   m_Layer: 0
   m_Name: Crown_Top
   m_TagString: Untagged
@@ -2248,6 +2249,28 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 91746219137248730}
   m_Mesh: {fileID: 0}
+--- !u!64 &8993959787019931102
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 91746219137248730}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 0}
 --- !u!1 &1561217355247131044
 GameObject:
   m_ObjectHideFlags: 0
@@ -2260,6 +2283,7 @@ GameObject:
   - component: {fileID: 3026810495700450246}
   - component: {fileID: 5203199459797378652}
   - component: {fileID: 7618598449388047382}
+  - component: {fileID: 950464026251963671}
   m_Layer: 0
   m_Name: Trunk
   m_TagString: Untagged
@@ -3280,6 +3304,29 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1561217355247131044}
   m_Mesh: {fileID: 0}
+--- !u!136 &950464026251963671
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1561217355247131044}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.18383299
+  m_Height: 2.9413278
+  m_Direction: 1
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2099202089797513416
 GameObject:
   m_ObjectHideFlags: 0
@@ -3326,6 +3373,7 @@ GameObject:
   - component: {fileID: 3622524778081938901}
   - component: {fileID: 95244154488054706}
   - component: {fileID: 6318573023666744022}
+  - component: {fileID: 1142716962768901868}
   m_Layer: 0
   m_Name: Crown
   m_TagString: Untagged
@@ -5561,4 +5609,26 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6168241816287619945}
+  m_Mesh: {fileID: 0}
+--- !u!64 &1142716962768901868
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6168241816287619945}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
   m_Mesh: {fileID: 0}
