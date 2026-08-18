@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// The city's traffic network. From the grid layout (the street axes) it

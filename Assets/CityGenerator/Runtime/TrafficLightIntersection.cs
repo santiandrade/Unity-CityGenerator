@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// Coordinates an intersection's cycle: alternates right of way between the
