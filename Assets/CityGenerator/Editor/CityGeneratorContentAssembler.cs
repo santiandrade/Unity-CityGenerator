@@ -41,7 +41,9 @@ namespace CityGenerator.Editor
     {
         public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
         {
-            var random = new System.Random();
+            var random = settings.general.useCustomSeed
+                ? new System.Random(settings.general.seed)
+                : new System.Random();
             int gridWidth = settings.general.gridWidth;
             int gridHeight = settings.general.gridHeight;
 

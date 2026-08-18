@@ -25,6 +25,8 @@ namespace CityGenerator.Editor
         public int buildingsPerBlock = 4; // clamped 0-4
         public bool includeTraffic = true;
         public int vehicleCount = 18;
+        public bool useCustomSeed = false;
+        public int seed = 0;
         public GameObject playerPrefab; // optional
     }
 

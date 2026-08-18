@@ -11,6 +11,7 @@ namespace CityGenerator.Editor
         private const string ThumbnailPath = "Assets/CityGenerator/Editor/ToolThumbnail.png";
 
         [SerializeField] private CityGeneratorSettings settings = new();
+        [SerializeField] private bool defaultsInitialized;
 
         private SerializedObject serializedWindow;
         private Vector2 scrollPosition;
@@ -23,6 +24,18 @@ namespace CityGenerator.Editor
             window.titleContent = new GUIContent("City Generator");
             window.minSize = new Vector2(360f, 480f);
             window.Show();
+        }
+
+        // Runs once per window instance (not on every domain reload's OnEnable, since
+        // defaultsInitialized is itself serialized): AssetDatabase can't be touched from a field
+        // initializer, so the tool's own reference-city prefabs are assigned here instead.
+        private void OnEnable()
+        {
+            if (defaultsInitialized)
+                return;
+
+            CityGeneratorDefaultAssets.ApplyTo(settings);
+            defaultsInitialized = true;
         }
 
         private void OnGUI()
@@ -83,18 +96,22 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Draws <paramref name="property"/> with its normal label, plus a real (non-rich-text)
-        /// red asterisk right after the label. PropertyField's own label style does not render
+        /// red asterisk right after the label whenever <paramref name="isRequired"/> is true —
+        /// callers whose "required" status depends on another field's value (e.g. the Lawn
+        /// Prefab only when Plaza Count > 0) pass that condition in so the asterisk only shows
+        /// while it actually applies. PropertyField's own label style does not render
         /// `&lt;color&gt;` tags, and a trailing GUILayout control after a flexible-width field
         /// gets pushed past the visible area on a narrow window (e.g. once the scrollbar eats
         /// into the width) — drawn as a Rect overlay inside the field's own reserved space
         /// instead, it always stays inside the label column regardless of window width.
         /// </summary>
-        private static void DrawRequiredField(SerializedProperty property, string label, bool includeChildren = false)
+        private static void DrawRequiredField(SerializedProperty property, string label, bool includeChildren = false, bool isRequired = true)
         {
             float height = EditorGUI.GetPropertyHeight(property, includeChildren);
             Rect rect = EditorGUILayout.GetControlRect(true, height);
             EditorGUI.PropertyField(rect, property, new GUIContent(label), includeChildren);
-            DrawRedAsterisk(new Rect(rect.x + EditorGUIUtility.labelWidth - 10f, rect.y, 10f, EditorGUIUtility.singleLineHeight));
+            if (isRequired)
+                DrawRedAsterisk(new Rect(rect.x + EditorGUIUtility.labelWidth - 10f, rect.y, 10f, EditorGUIUtility.singleLineHeight));
         }
 
         private static void DrawRedAsterisk(Rect rect)
@@ -147,6 +164,13 @@ namespace CityGenerator.Editor
             EditorGUILayout.PropertyField(FindProperty("general.includeTraffic"));
             EditorGUILayout.PropertyField(FindProperty("general.vehicleCount"));
             EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
+            EditorGUILayout.PropertyField(FindProperty("general.useCustomSeed"), new GUIContent("Custom Seed"));
+            if (FindProperty("general.useCustomSeed").boolValue)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(FindProperty("general.seed"), new GUIContent("Seed"));
+                EditorGUI.indentLevel--;
+            }
             EditorGUILayout.Space(8f);
         }
 
@@ -164,7 +188,7 @@ namespace CityGenerator.Editor
         {
             EditorGUILayout.LabelField("Plazas", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(FindProperty("plaza.centerpiecePrefab"));
-            DrawRequiredField(FindProperty("plaza.lawnPrefab"), "Lawn Prefab (if Plaza Count > 0)");
+            DrawRequiredField(FindProperty("plaza.lawnPrefab"), "Lawn Prefab (if Plaza Count > 0)", isRequired: FindProperty("general.plazaCount").intValue > 0);
             EditorGUILayout.PropertyField(FindProperty("plaza.benchPrefab"));
             EditorGUILayout.Space(8f);
         }
@@ -179,7 +203,7 @@ namespace CityGenerator.Editor
         private void DrawVegetationSection()
         {
             EditorGUILayout.LabelField("Vegetation", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("vegetation.prefabs"), "Prefabs (if Density > 0)", includeChildren: true);
+            DrawRequiredField(FindProperty("vegetation.prefabs"), "Prefabs (if Density > 0)", includeChildren: true, isRequired: FindProperty("vegetation.density").floatValue > 0f);
             EditorGUILayout.PropertyField(FindProperty("vegetation.density"));
             EditorGUILayout.Space(8f);
         }
@@ -187,14 +211,14 @@ namespace CityGenerator.Editor
         private void DrawVehiclesSection()
         {
             EditorGUILayout.LabelField("Vehicles", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("vehicles"), "Vehicles (if Vehicle Count > 0, percentages must sum to 100)", includeChildren: true);
+            DrawRequiredField(FindProperty("vehicles"), "Vehicles (if Vehicle Count > 0, percentages must sum to 100)", includeChildren: true, isRequired: FindProperty("general.vehicleCount").intValue > 0);
             EditorGUILayout.Space(8f);
         }
 
         private void DrawPropsSection()
         {
             EditorGUILayout.LabelField("Props", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("props.trafficLightPrefab"), "Traffic Light Prefab (if Include Traffic)");
+            DrawRequiredField(FindProperty("props.trafficLightPrefab"), "Traffic Light Prefab (if Include Traffic)", isRequired: FindProperty("general.includeTraffic").boolValue);
             EditorGUILayout.PropertyField(FindProperty("props.lampPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.busStopPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.busStopDensity"));
@@ -217,6 +241,7 @@ namespace CityGenerator.Editor
         private void ResetToDefaults()
         {
             settings = new CityGeneratorSettings();
+            CityGeneratorDefaultAssets.ApplyTo(settings);
             serializedWindow = null;
             GUI.FocusControl(null);
         }

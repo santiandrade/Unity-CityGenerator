@@ -91,9 +91,10 @@ namespace CityGenerator.Editor
         {
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
             SceneManager.MoveGameObjectToScene(cameraGO, scene);
-            cameraGO.transform.position = new Vector3(0f, 150f, -100f);
-            cameraGO.transform.rotation = Quaternion.Euler(-300f, 0f, 0f);
-            cameraGO.AddComponent<Camera>();
+            cameraGO.transform.position = new Vector3(36f, 28f, -36f);
+            cameraGO.transform.rotation = Quaternion.Euler(27f, -45f, 0f);
+            var camera = cameraGO.AddComponent<Camera>();
+            camera.fieldOfView = 45f;
             cameraGO.AddComponent<AudioListener>();
             var thirdPersonCamera = cameraGO.AddComponent<ThirdPersonCamera>();
 

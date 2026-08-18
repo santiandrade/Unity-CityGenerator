@@ -36,8 +36,14 @@ namespace CityGenerator.Editor
                 if (block.isPlaza)
                     continue;
 
+                // Which corners get filled is randomised per block: with fewer than 4
+                // buildings, always picking corners 0..buildingsPerBlock-1 made every partially
+                // filled block look identical (same corners occupied, same corners empty).
+                List<int> cornerOrder = Enumerable.Range(0, CityGeneratorConstants.MaxBuildingSlotsPerBlock).ToList();
+                CityGeneratorRandomUtility.Shuffle(cornerOrder, random);
+
                 for (int s = 0; s < buildingsPerBlock; s++)
-                    slots.Add((block, SlotOffsets[s]));
+                    slots.Add((block, SlotOffsets[cornerOrder[s]]));
             }
 
             if (slots.Count == 0)
