@@ -20,14 +20,15 @@ namespace CityGenerator.Editor
             new(CityGeneratorConstants.BuildingSlotPitch / 2f, CityGeneratorConstants.BuildingSlotPitch / 2f),
         };
 
-        public static void BuildBuildings(List<GameObject> buildingPrefabs, Transform buildingsGroup, IReadOnlyList<BlockCell> blocks, int buildingsPerBlock, System.Random random)
+        public static List<GameObject> BuildBuildings(List<GameObject> buildingPrefabs, Transform buildingsGroup, IReadOnlyList<BlockCell> blocks, int buildingsPerBlock, System.Random random)
         {
+            var placed = new List<GameObject>();
             if (buildingPrefabs.Count == 0)
-                return;
+                return placed;
 
             buildingsPerBlock = Mathf.Clamp(buildingsPerBlock, 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock);
             if (buildingsPerBlock == 0)
-                return;
+                return placed;
 
             var slots = new List<(BlockCell block, Vector2 offset)>();
             foreach (BlockCell block in blocks)
@@ -40,7 +41,7 @@ namespace CityGenerator.Editor
             }
 
             if (slots.Count == 0)
-                return;
+                return placed;
 
             GameObject[] assignment = AssignPrefabs(buildingPrefabs, slots.Count, random);
 
@@ -59,7 +60,10 @@ namespace CityGenerator.Editor
                 instance.name = $"Building_{block.gridX}_{block.gridY}_{slotIndex}";
                 instance.transform.localPosition = new Vector3(block.center.x + offset.x, CityGeneratorConstants.GroundDatumY, block.center.z + offset.y);
                 instance.transform.localRotation = Quaternion.Euler(0f, 90f * random.Next(4), 0f);
+                placed.Add(instance);
             }
+
+            return placed;
         }
 
         // Every prefab is placed into one random slot first (guaranteeing at least one use when

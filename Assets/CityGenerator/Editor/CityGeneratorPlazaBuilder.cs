@@ -27,7 +27,8 @@ namespace CityGenerator.Editor
             new(-CityGeneratorConstants.PlazaBenchOffset, 0f),
         };
 
-        public static void BuildPlazas(
+        /// <summary>Returns the solid instances (centerpiece, benches, vegetation — not the lawns, which are ground cover) so callers can chain them as obstacles for other categories.</summary>
+        public static List<GameObject> BuildPlazas(
             PlazaSettings plazaSettings,
             VegetationSettings vegetationSettings,
             Transform plazaGroup,
@@ -35,6 +36,7 @@ namespace CityGenerator.Editor
             IReadOnlyList<BlockCell> blocks,
             System.Random random)
         {
+            var solidInstances = new List<GameObject>();
             int plazaIndex = 0;
             foreach (BlockCell block in blocks)
             {
@@ -55,10 +57,14 @@ namespace CityGenerator.Editor
                 if (plazaSettings.benchPrefab != null)
                     obstacles.AddRange(BuildBenches(plazaSettings.benchPrefab, blockGroup, block.center));
 
-                BuildVegetation(vegetationSettings, treesGroup, block.center, obstacles, random, plazaIndex);
+                List<GameObject> vegetation = BuildVegetation(vegetationSettings, treesGroup, block.center, obstacles, random, plazaIndex);
 
+                solidInstances.AddRange(obstacles);
+                solidInstances.AddRange(vegetation);
                 plazaIndex++;
             }
+
+            return solidInstances;
         }
 
         private static void BuildLawns(GameObject lawnPrefab, Transform group, Vector3 blockCenter)
@@ -92,10 +98,10 @@ namespace CityGenerator.Editor
             return benches;
         }
 
-        private static void BuildVegetation(VegetationSettings vegetationSettings, Transform treesGroup, Vector3 blockCenter, List<GameObject> obstacles, System.Random random, int plazaIndex)
+        private static List<GameObject> BuildVegetation(VegetationSettings vegetationSettings, Transform treesGroup, Vector3 blockCenter, List<GameObject> obstacles, System.Random random, int plazaIndex)
         {
             if (vegetationSettings.prefabs.Count == 0 || vegetationSettings.density <= 0f)
-                return;
+                return new List<GameObject>();
 
             var candidates = new List<PlacementCandidate>();
             float extent = CityGeneratorConstants.PlazaVegetationGridExtent;
@@ -110,7 +116,7 @@ namespace CityGenerator.Editor
                 }
             }
 
-            CityGeneratorPlacementEngine.PlaceByDensity(
+            return CityGeneratorPlacementEngine.PlaceByDensity(
                 candidates, vegetationSettings.prefabs, vegetationSettings.density, random,
                 treesGroup, $"Tree_Plaza_{plazaIndex}", obstacles);
         }
