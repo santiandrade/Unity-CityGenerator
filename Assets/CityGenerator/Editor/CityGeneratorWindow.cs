@@ -134,7 +134,35 @@ namespace CityGenerator.Editor
                 return;
             }
 
-            Debug.Log("City Generator: validation passed. Generation is not implemented yet.");
+            try
+            {
+                (string scenePath, CityBuildSummary _) = GenerateCity();
+                EditorUtility.DisplayDialog("City Generator", $"City generated successfully at:\n{scenePath}", "OK");
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogError("[City Generator] Generation failed: " + exception);
+                EditorUtility.DisplayDialog("City Generator - Generation Failed", exception.Message + "\n\nSee the Console for details.", "OK");
+            }
+        }
+
+        /// <summary>Validated settings -> generated, saved scene. No dialogs: kept separate from <see cref="BuildCity"/> so it can be exercised directly (e.g. from tests) without a modal blocking the Editor.</summary>
+        internal (string scenePath, CityBuildSummary summary) GenerateCity()
+        {
+            (string scenePath, CityBuildSummary summary) = CityGeneratorSceneBuilder.BuildAndSaveScene(settings);
+            LogSummary(scenePath, summary);
+            return (scenePath, summary);
+        }
+
+        private static void LogSummary(string scenePath, CityBuildSummary summary)
+        {
+            int propsTotal = summary.lampCount + summary.busStopCount + summary.binCount;
+            int vegetationTotal = summary.plazaSolidCount + summary.streetTreeCount;
+
+            Debug.Log(
+                $"[City Generator] Built '{scenePath}': {summary.blockCount} blocks, {summary.buildingCount} buildings, " +
+                $"{propsTotal} props (lamps {summary.lampCount}, bus stops {summary.busStopCount}, bins {summary.binCount}), " +
+                $"{vegetationTotal} vegetation instances, {summary.trafficLightCount} traffic lights, {summary.vehicleCount} vehicles.");
         }
     }
 }
