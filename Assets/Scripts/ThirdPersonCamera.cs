@@ -43,6 +43,13 @@ namespace TestAI
         private Vector3 smoothedTargetPos;
         private Vector3 followVelocity;
 
+        // Collision hits are filtered by identity (anything under the target's
+        // hierarchy is skipped), never by distance: while jumping backwards the
+        // player's own collider sits between the pivot and the camera, and letting
+        // it through snapped the camera onto the character's face.
+        private readonly RaycastHit[] collisionHits = new RaycastHit[8];
+        private Transform targetRoot;
+
         private void Awake()
         {
             if (inputActions != null)
@@ -62,6 +69,7 @@ namespace TestAI
             {
                 yaw = target.eulerAngles.y;
                 smoothedTargetPos = target.position;
+                targetRoot = target.root;
             }
         }
 
@@ -105,10 +113,17 @@ namespace TestAI
             Vector3 desiredPosition = pivot - orbitRotation * Vector3.forward * distance;
 
             float finalDistance = distance;
-            if (Physics.SphereCast(pivot, collisionRadius, (desiredPosition - pivot).normalized, out RaycastHit hit, distance, collisionMask, QueryTriggerInteraction.Ignore))
+            Vector3 castDirection = (desiredPosition - pivot).normalized;
+            int hitCount = Physics.SphereCastNonAlloc(pivot, collisionRadius, castDirection, collisionHits, distance, collisionMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hitCount; i++)
             {
-                finalDistance = Mathf.Clamp(hit.distance, minDistance, distance);
+                Transform hitTransform = collisionHits[i].transform;
+                if (targetRoot != null && hitTransform.IsChildOf(targetRoot))
+                    continue;
+
+                finalDistance = Mathf.Min(finalDistance, collisionHits[i].distance);
             }
+            finalDistance = Mathf.Clamp(finalDistance, minDistance, distance);
 
             transform.position = pivot - orbitRotation * Vector3.forward * finalDistance;
             transform.rotation = Quaternion.LookRotation((pivot - transform.position).normalized, Vector3.up);
