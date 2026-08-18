@@ -36,5 +36,12 @@ namespace CityGenerator.Editor
         public const int StreetEdgePointsPerSide = 3;
         public const int StreetVegetationPointsPerSide = 4;
         public const float BinCornerInset = 2f;
+
+        // Traffic lights sit on the far side of each intersection arm (within the < 14 m search
+        // radius TrafficNetwork uses to match them by facing), offset sideways like a lane.
+        public const float TrafficLightOffset = 10f;
+        public const float TrafficLightLateralOffset = 3f;
+        public const float TrafficLightStartOffsetMax = 4f;
+        public const string VehicleLayerName = "Vehicle";
     }
 }
