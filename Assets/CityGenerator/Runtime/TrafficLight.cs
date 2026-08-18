@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// States of a three-light traffic light.

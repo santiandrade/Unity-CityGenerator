@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// The city's traffic network. From the grid layout (the street axes) it
@@ -36,8 +36,11 @@ namespace TestAI
         }
 
         [Header("Layout")]
-        [Tooltip("Street axis coordinates, in ascending order. Used for both X and Z.")]
-        [SerializeField] private float[] axes = { -84f, -28f, 28f, 84f };
+        [Tooltip("Street axis coordinates along X, in ascending order.")]
+        [SerializeField] private float[] axesX = { -84f, -28f, 28f, 84f };
+
+        [Tooltip("Street axis coordinates along Z, in ascending order.")]
+        [SerializeField] private float[] axesZ = { -84f, -28f, 28f, 84f };
 
         [Tooltip("Lane offset from the street axis. Must fit within the roadway.")]
         [SerializeField] private float laneOffset = 2.6f;
@@ -93,6 +96,17 @@ namespace TestAI
             Build();
         }
 
+        /// <summary>
+        /// Sets the street axes without rebuilding the graph. Used by the city generator, which
+        /// must place all traffic lights before calling <see cref="Build"/> so
+        /// <see cref="AssignTrafficLights"/> can find them.
+        /// </summary>
+        public void SetAxes(float[] newAxesX, float[] newAxesZ)
+        {
+            axesX = newAxesX;
+            axesZ = newAxesZ;
+        }
+
         private void EnsureBuilt()
         {
             if (nodes == null)
@@ -104,12 +118,13 @@ namespace TestAI
         /// <summary>Rebuilds the graph and re-matches the traffic lights in the scene.</summary>
         public void Build()
         {
-            int n = axes.Length;
-            nodes = new Node[n * n * 4 * 2];
+            int nx = axesX.Length;
+            int nz = axesZ.Length;
+            nodes = new Node[nx * nz * 4 * 2];
 
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < nx; i++)
             {
-                for (int j = 0; j < n; j++)
+                for (int j = 0; j < nz; j++)
                 {
                     for (int k = 0; k < 4; k++)
                     {
@@ -118,22 +133,22 @@ namespace TestAI
                             Position = EntryPosition(i, j, k),
                             Direction = Dirs[k],
                             IsEntry = true,
-                            Intersection = i * n + j
+                            Intersection = i * nz + j
                         };
                         nodes[NodeIndex(i, j, k, false)] = new Node
                         {
                             Position = ExitPosition(i, j, k),
                             Direction = Dirs[k],
                             IsEntry = false,
-                            Intersection = i * n + j
+                            Intersection = i * nz + j
                         };
                     }
                 }
             }
 
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < nx; i++)
             {
-                for (int j = 0; j < n; j++)
+                for (int j = 0; j < nz; j++)
                 {
                     for (int k = 0; k < 4; k++)
                     {
@@ -178,8 +193,8 @@ namespace TestAI
 
             AssignTrafficLights();
 
-            reservationOwner = new int[n * n];
-            reservationTime = new float[n * n];
+            reservationOwner = new int[nx * nz];
+            reservationTime = new float[nx * nz];
             for (int i = 0; i < reservationOwner.Length; i++)
             {
                 reservationOwner[i] = 0;
@@ -192,13 +207,14 @@ namespace TestAI
         /// </summary>
         private void AssignTrafficLights()
         {
-            int n = axes.Length;
+            int nx = axesX.Length;
+            int nz = axesZ.Length;
             TrafficLight[] lights = FindObjectsByType<TrafficLight>(FindObjectsSortMode.None);
-            hasSignals = new bool[n * n];
+            hasSignals = new bool[nx * nz];
 
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < nx; i++)
             {
-                for (int j = 0; j < n; j++)
+                for (int j = 0; j < nz; j++)
                 {
                     Vector3 centre = IntersectionPosition(i, j);
                     for (int k = 0; k < 4; k++)
@@ -225,7 +241,7 @@ namespace TestAI
                         nodes[NodeIndex(i, j, k, true)].Light = best;
                         if (best != null)
                         {
-                            hasSignals[i * n + j] = true;
+                            hasSignals[i * nz + j] = true;
                         }
                     }
                 }
@@ -238,8 +254,9 @@ namespace TestAI
         /// </summary>
         private float Ring(int i, int j)
         {
-            float centre = (axes.Length - 1) * 0.5f;
-            return Mathf.Max(Mathf.Abs(i - centre), Mathf.Abs(j - centre));
+            float centreX = (axesX.Length - 1) * 0.5f;
+            float centreZ = (axesZ.Length - 1) * 0.5f;
+            return Mathf.Max(Mathf.Abs(i - centreX), Mathf.Abs(j - centreZ));
         }
 
         /// <summary>
@@ -353,8 +370,8 @@ namespace TestAI
         public Vector3 IntersectionCentre(int intersection)
         {
             EnsureBuilt();
-            int n = axes.Length;
-            return IntersectionPosition(intersection / n, intersection % n);
+            int nz = axesZ.Length;
+            return IntersectionPosition(intersection / nz, intersection % nz);
         }
 
         /// <summary>
@@ -403,11 +420,11 @@ namespace TestAI
 
         private int NodeIndex(int i, int j, int direction, bool entry)
         {
-            int n = axes.Length;
-            return (((i * n + j) * 4 + direction) * 2) + (entry ? 0 : 1);
+            int nz = axesZ.Length;
+            return (((i * nz + j) * 4 + direction) * 2) + (entry ? 0 : 1);
         }
 
-        private Vector3 IntersectionPosition(int i, int j) => new Vector3(axes[i], 0f, axes[j]);
+        private Vector3 IntersectionPosition(int i, int j) => new Vector3(axesX[i], 0f, axesZ[j]);
 
         // Unit vector to the right of the direction of travel (cross(up, dir)).
         private static Vector3 RightOfDir(int k) => new Vector3(Dirs[k].z, 0f, -Dirs[k].x);
@@ -430,8 +447,7 @@ namespace TestAI
                 default: nj = j - 1; break;
             }
 
-            int n = axes.Length;
-            return ni >= 0 && ni < n && nj >= 0 && nj < n;
+            return ni >= 0 && ni < axesX.Length && nj >= 0 && nj < axesZ.Length;
         }
 
         /// <summary>Point where a vehicle arriving at this crossing entry stops.</summary>

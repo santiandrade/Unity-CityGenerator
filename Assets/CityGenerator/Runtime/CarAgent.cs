@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// Vehicle that travels along the <see cref="TrafficNetwork"/>: follows the lane graph,

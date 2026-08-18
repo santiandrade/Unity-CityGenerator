@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// Third-person player movement: walk, run and jump,

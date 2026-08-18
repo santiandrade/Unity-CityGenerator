@@ -1,7 +1,7 @@
     using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace TestAI
+namespace CityGenerator.Runtime
 {
     /// <summary>
     /// Mario-64-style third-person orbit camera: orbits around a
