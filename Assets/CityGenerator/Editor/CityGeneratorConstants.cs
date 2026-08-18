@@ -18,7 +18,10 @@ namespace CityGenerator.Editor
 
         public const int DashesPerSegment = 4;
         public const int ZebraStripesPerArm = 5;
-        public const float ZebraStripeSpacing = StreetWidth / (ZebraStripesPerArm + 1);
+        public const float ZebraStripeSpacing = 2f;
+        // Distance from the intersection centre to the crosswalk, along the arm: half the
+        // street width plus the lane offset (TrafficNetwork.laneOffset), i.e. right at the stop line.
+        public const float ZebraArmOffset = StreetWidth / 2f + 2.6f;
 
         public const float GroundDatumY = 0.18f; // top of sidewalks: where buildings/plaza/props/vegetation sit
         public const int MaxBuildingSlotsPerBlock = 4;
@@ -26,9 +29,13 @@ namespace CityGenerator.Editor
 
         public const float PlazaLawnPitch = 22f;
         public const float PlazaLawnFootprint = 20f;
-        public const float PlazaBenchOffset = 16f;
-        public const float PlazaVegetationGridExtent = 18f;
-        public const float PlazaVegetationGridStep = 9f;
+        // 7.5 m from the plaza centre along each diagonal (7.5 / sqrt(2)) — reproduces the
+        // reference plaza's four benches sitting between the lawn quadrants.
+        public const float PlazaBenchRadius = 5.3033009f;
+        // Candidate grid for a lawn quadrant's own vegetation: kept inset from the lawn's
+        // footprint edge so trees never spill onto the sidewalk ring around it.
+        public const float PlazaLawnVegetationExtent = 8f;
+        public const float PlazaLawnVegetationStep = 4f;
 
         // Sidewalk/corner candidates stay outside the building slot area (max radius ~18 m),
         // in the peripheral ring of every 46 m block.
@@ -37,10 +44,16 @@ namespace CityGenerator.Editor
         public const int StreetVegetationPointsPerSide = 4;
         public const float BinCornerInset = 2f;
 
-        // Traffic lights sit on the far side of each intersection arm (within the < 14 m search
-        // radius TrafficNetwork uses to match them by facing), offset sideways like a lane.
-        public const float TrafficLightOffset = 10f;
-        public const float TrafficLightLateralOffset = 3f;
+        // Lamps sit right at the true block edge (closer to the curb than other street
+        // furniture) so that, on a plaza block, they clear the lawn footprint (which reaches to
+        // BlockSize/2 - 2, i.e. 21 m) instead of overlapping it.
+        public const float LampEdgeInset = 1f;
+        public const int LampPointsPerSide = 3;
+
+        // Traffic lights stand on the near corner of the sidewalk across the crossing (the far
+        // side of the arm, offset sideways like a lane), verified against the reference city:
+        // both offsets equal, just past the road's half-width so they never stand on the asphalt.
+        public const float TrafficLightCornerOffset = 6.2f;
         public const float TrafficLightStartOffsetMax = 4f;
         public const string VehicleLayerName = "Vehicle";
     }

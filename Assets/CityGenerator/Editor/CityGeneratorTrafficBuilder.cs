@@ -58,8 +58,8 @@ namespace CityGenerator.Editor
 
                     for (int k = 0; k < 4; k++)
                     {
-                        Vector3 lateral = RightOfDir(Dirs[k]) * CityGeneratorConstants.TrafficLightLateralOffset;
-                        Vector3 position = centre - Dirs[k] * CityGeneratorConstants.TrafficLightOffset + lateral;
+                        Vector3 corner = (Dirs[k] + RightOfDir(Dirs[k])) * CityGeneratorConstants.TrafficLightCornerOffset;
+                        Vector3 position = centre + corner;
                         position.y = CityGeneratorConstants.GroundDatumY;
                         Quaternion rotation = Quaternion.LookRotation(-Dirs[k], Vector3.up);
 
@@ -117,7 +117,17 @@ namespace CityGenerator.Editor
             if (nodeCount == 0)
                 return placed;
 
-            List<int> nodeOrder = Enumerable.Range(0, nodeCount).ToList();
+            // Exit nodes at the outer edge of the grid (facing off the map, no street segment
+            // beyond them) have no outgoing exits and nothing ahead of them: a vehicle spawned
+            // there fails CarAgent's initial FindNodeAhead and disables itself. Entries are
+            // always safe (their own intersection's exit is always ahead of them).
+            List<int> nodeOrder = Enumerable.Range(0, nodeCount)
+                .Where(i =>
+                {
+                    TrafficNetwork.Node node = network.GetNode(i);
+                    return node.IsEntry || node.Exits.Count > 0;
+                })
+                .ToList();
             CityGeneratorRandomUtility.Shuffle(nodeOrder, random);
 
             int[] counts = DistributePercentages(vehicles, vehicleCount);

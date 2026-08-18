@@ -12,8 +12,23 @@ namespace CityGenerator.Editor
     {
         public static List<PlacementCandidate> EdgeCandidates(Vector3 blockCenter, int pointsPerSide)
         {
-            float edgeDistance = CityGeneratorConstants.BlockSize / 2f - CityGeneratorConstants.StreetEdgeInset;
-            float sideSpan = CityGeneratorConstants.BlockSize / 2f - CityGeneratorConstants.StreetEdgeInset * 2f;
+            return EdgeCandidates(blockCenter, pointsPerSide, CityGeneratorConstants.StreetEdgeInset);
+        }
+
+        /// <summary>
+        /// Lamp positions: 3 per side, evenly spaced, right at the true block edge (a smaller
+        /// inset than other street furniture) so that on a plaza block they clear the lawn
+        /// footprint instead of standing on the grass.
+        /// </summary>
+        public static List<PlacementCandidate> LampCandidates(Vector3 blockCenter)
+        {
+            return EdgeCandidates(blockCenter, CityGeneratorConstants.LampPointsPerSide, CityGeneratorConstants.LampEdgeInset);
+        }
+
+        private static List<PlacementCandidate> EdgeCandidates(Vector3 blockCenter, int pointsPerSide, float edgeInset)
+        {
+            float edgeDistance = CityGeneratorConstants.BlockSize / 2f - edgeInset;
+            float sideSpan = CityGeneratorConstants.BlockSize / 2f - edgeInset * 2f;
 
             var candidates = new List<PlacementCandidate>();
             AddSide(candidates, blockCenter, pointsPerSide, edgeDistance, sideSpan, Vector3.forward);

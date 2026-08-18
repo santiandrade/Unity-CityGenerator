@@ -26,7 +26,6 @@ namespace CityGenerator.Editor
         public int buildingsPerBlock = 4; // clamped 0-4
         public bool includeTraffic = true;
         public int vehicleCount = 18;
-        public int seed = 0;
         public GameObject playerPrefab; // optional
         public VolumeProfile globalVolumeProfile; // optional
     }
@@ -52,7 +51,7 @@ namespace CityGenerator.Editor
     internal class VegetationSettings
     {
         public List<GameObject> prefabs = new(); // 1+ required if density > 0
-        [Range(0f, 1f)] public float density = 0.5f;
+        [Range(0f, 1f)] public float density = 0.3f;
     }
 
     [Serializable]
@@ -66,8 +65,7 @@ namespace CityGenerator.Editor
     internal class PropsSettings
     {
         public GameObject trafficLightPrefab; // required if includeTraffic
-        public GameObject lampPrefab;
-        [Range(0f, 1f)] public float lampDensity = 0.5f;
+        public GameObject lampPrefab; // optional — placed 3 per sidewalk side when assigned
         public GameObject busStopPrefab;
         [Range(0f, 1f)] public float busStopDensity = 0.3f;
         public GameObject binPrefab;

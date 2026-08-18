@@ -5,6 +5,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace CityGenerator.Editor
@@ -52,6 +53,33 @@ namespace CityGenerator.Editor
             }
         }
 
+        /// <summary>
+        /// Deletes the "City" root object in the currently active scene (if any) and regenerates
+        /// it from <paramref name="settings"/>. Everything else in the scene (light, volume,
+        /// camera, player) is left untouched. Does not save the scene: the caller leaves that to
+        /// the usual Editor "unsaved changes" flow.
+        /// </summary>
+        public static CityBuildSummary RebuildInActiveScene(CityGeneratorSettings settings)
+        {
+            Scene scene = EditorSceneManager.GetActiveScene();
+
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                if (root.name == "City")
+                {
+                    Object.DestroyImmediate(root);
+                    break;
+                }
+            }
+
+            var cityRootGO = new GameObject("City");
+            SceneManager.MoveGameObjectToScene(cityRootGO, scene);
+            CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform);
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            return summary;
+        }
+
         private static void CreateDirectionalLight(Scene scene)
         {
             var lightGO = new GameObject("Directional Light");
@@ -59,6 +87,7 @@ namespace CityGenerator.Editor
             lightGO.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
             var light = lightGO.AddComponent<Light>();
             light.type = LightType.Directional;
+            light.shadows = LightShadows.Soft;
         }
 
         private static void CreateGlobalVolume(Scene scene, VolumeProfile profile)
@@ -74,8 +103,12 @@ namespace CityGenerator.Editor
         {
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
             SceneManager.MoveGameObjectToScene(cameraGO, scene);
+            cameraGO.transform.position = new Vector3(0f, 150f, -100f);
+            cameraGO.transform.rotation = Quaternion.Euler(-300f, 0f, 0f);
             cameraGO.AddComponent<Camera>();
             cameraGO.AddComponent<AudioListener>();
+            var cameraData = cameraGO.AddComponent<UniversalAdditionalCameraData>();
+            cameraData.renderPostProcessing = true;
             var thirdPersonCamera = cameraGO.AddComponent<ThirdPersonCamera>();
 
             var cameraSerialized = new SerializedObject(thirdPersonCamera);

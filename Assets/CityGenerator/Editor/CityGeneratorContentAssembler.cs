@@ -41,7 +41,7 @@ namespace CityGenerator.Editor
     {
         public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
         {
-            var random = new System.Random(settings.general.seed);
+            var random = new System.Random();
             int gridWidth = settings.general.gridWidth;
             int gridHeight = settings.general.gridHeight;
 
@@ -64,14 +64,15 @@ namespace CityGenerator.Editor
             CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
 
             List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random);
-            List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random);
+            List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, out List<GameObject> plazaLawns);
 
-            // Street furniture avoids buildings/plaza content (and each other) via one shared,
-            // growing obstacle list threaded through every category in turn.
+            // Street furniture avoids buildings/plaza content, the plaza lawns, and each other
+            // via one shared, growing obstacle list threaded through every category in turn.
             var obstacles = new List<GameObject>(builtBuildings);
             obstacles.AddRange(plazaSolids);
+            obstacles.AddRange(plazaLawns);
 
-            List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, settings.props.lampDensity, streetLights, blocks, random, obstacles);
+            List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, streetLights, blocks, obstacles);
             obstacles.AddRange(lamps);
             List<GameObject> busStops = CityGeneratorStreetPropsBuilder.BuildBusStops(settings.props.busStopPrefab, settings.props.busStopDensity, props, blocks, random, obstacles);
             obstacles.AddRange(busStops);

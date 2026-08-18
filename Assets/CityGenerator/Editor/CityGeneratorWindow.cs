@@ -38,9 +38,14 @@ namespace CityGenerator.Editor
             EditorGUILayout.EndScrollView();
 
             EditorGUILayout.Space(12f);
-            if (GUILayout.Button("Build City", GUILayout.Height(32f)))
+            if (GUILayout.Button("Build City in New Scene", GUILayout.Height(32f)))
             {
-                BuildCity();
+                BuildCityInNewScene();
+            }
+
+            if (GUILayout.Button("Re-Build City in Current Scene", GUILayout.Height(32f)))
+            {
+                RebuildCityInCurrentScene();
             }
 
             serializedWindow.ApplyModifiedProperties();
@@ -55,7 +60,6 @@ namespace CityGenerator.Editor
             EditorGUILayout.PropertyField(FindProperty("general.buildingsPerBlock"));
             EditorGUILayout.PropertyField(FindProperty("general.includeTraffic"));
             EditorGUILayout.PropertyField(FindProperty("general.vehicleCount"));
-            EditorGUILayout.PropertyField(FindProperty("general.seed"));
             EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
             EditorGUILayout.PropertyField(FindProperty("general.globalVolumeProfile"));
             EditorGUILayout.Space(8f);
@@ -107,7 +111,6 @@ namespace CityGenerator.Editor
             EditorGUILayout.LabelField("Props", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(FindProperty("props.trafficLightPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.lampPrefab"));
-            EditorGUILayout.PropertyField(FindProperty("props.lampDensity"));
             EditorGUILayout.PropertyField(FindProperty("props.busStopPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.busStopDensity"));
             EditorGUILayout.PropertyField(FindProperty("props.binPrefab"));
@@ -120,19 +123,25 @@ namespace CityGenerator.Editor
             return serializedWindow.FindProperty("settings." + relativePath);
         }
 
-        private void BuildCity()
+        private bool ValidateOrReport()
         {
-            if (!CityGeneratorValidator.Validate(settings, out List<string> errors))
-            {
-                foreach (string error in errors)
-                    Debug.LogError("[City Generator] " + error);
+            if (CityGeneratorValidator.Validate(settings, out List<string> errors))
+                return true;
 
-                EditorUtility.DisplayDialog(
-                    "City Generator - Validation Errors",
-                    $"Found {errors.Count} error(s):\n\n{string.Join("\n", errors)}\n\nSee the Console for details.",
-                    "OK");
+            foreach (string error in errors)
+                Debug.LogError("[City Generator] " + error);
+
+            EditorUtility.DisplayDialog(
+                "City Generator - Validation Errors",
+                $"Found {errors.Count} error(s):\n\n{string.Join("\n", errors)}\n\nSee the Console for details.",
+                "OK");
+            return false;
+        }
+
+        private void BuildCityInNewScene()
+        {
+            if (!ValidateOrReport())
                 return;
-            }
 
             try
             {
@@ -146,7 +155,33 @@ namespace CityGenerator.Editor
             }
         }
 
-        /// <summary>Validated settings -> generated, saved scene. No dialogs: kept separate from <see cref="BuildCity"/> so it can be exercised directly (e.g. from tests) without a modal blocking the Editor.</summary>
+        private void RebuildCityInCurrentScene()
+        {
+            if (!ValidateOrReport())
+                return;
+
+            bool confirmed = EditorUtility.DisplayDialog(
+                "City Generator - Re-Build City",
+                "This will delete the \"City\" object in the current scene and regenerate it with the current configuration. The light, volume, camera and player are left untouched.",
+                "Confirm",
+                "Cancel");
+            if (!confirmed)
+                return;
+
+            try
+            {
+                CityBuildSummary summary = CityGeneratorSceneBuilder.RebuildInActiveScene(settings);
+                LogSummary(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path, summary);
+                EditorUtility.DisplayDialog("City Generator", "City regenerated in the current scene.", "OK");
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogError("[City Generator] Generation failed: " + exception);
+                EditorUtility.DisplayDialog("City Generator - Generation Failed", exception.Message + "\n\nSee the Console for details.", "OK");
+            }
+        }
+
+        /// <summary>Validated settings -> generated, saved scene. No dialogs: kept separate from <see cref="BuildCityInNewScene"/> so it can be exercised directly (e.g. from tests) without a modal blocking the Editor.</summary>
         internal (string scenePath, CityBuildSummary summary) GenerateCity()
         {
             (string scenePath, CityBuildSummary summary) = CityGeneratorSceneBuilder.BuildAndSaveScene(settings);

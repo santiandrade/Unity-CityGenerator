@@ -108,13 +108,19 @@ namespace CityGenerator.Editor
 
         private static void PlaceZebraArm(GameObject zebraPrefab, Transform group, Vector3 intersection, Vector3 direction, ref int zebraIndex)
         {
+            // The arm sits at a single fixed offset from the intersection centre (the stop
+            // line), and its stripes are spread sideways across the crossing — perpendicular
+            // to the arm direction, not strung out along it.
             bool isEastWestArm = Mathf.Abs(direction.x) > 0f;
-            Quaternion rotation = isEastWestArm ? Quaternion.Euler(0f, 90f, 0f) : Quaternion.identity;
+            Quaternion rotation = isEastWestArm ? Quaternion.identity : Quaternion.Euler(0f, 90f, 0f);
+            Vector3 spreadAxis = isEastWestArm ? Vector3.forward : Vector3.right;
+            Vector3 armCentre = intersection + direction * CityGeneratorConstants.ZebraArmOffset;
 
+            float half = (CityGeneratorConstants.ZebraStripesPerArm - 1) / 2f;
             for (int s = 0; s < CityGeneratorConstants.ZebraStripesPerArm; s++)
             {
-                float distance = CityGeneratorConstants.ZebraStripeSpacing * (s + 1);
-                Vector3 position = intersection + direction * distance;
+                float offset = (s - half) * CityGeneratorConstants.ZebraStripeSpacing;
+                Vector3 position = armCentre + spreadAxis * offset;
                 position.y = CityGeneratorConstants.MarkingY;
 
                 string name = "Zebra_" + zebraIndex;

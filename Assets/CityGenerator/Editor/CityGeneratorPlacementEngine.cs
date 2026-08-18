@@ -70,6 +70,44 @@ namespace CityGenerator.Editor
             return placed;
         }
 
+        /// <summary>
+        /// Instantiates the prefab at every candidate (skipping any that would overlap an
+        /// already-placed object), with no density-based sub-sampling. Used where the count and
+        /// spacing are meant to be fixed rather than randomly thinned out — e.g. lamps.
+        /// </summary>
+        public static List<GameObject> PlaceAll(
+            IReadOnlyList<PlacementCandidate> candidates,
+            GameObject prefab,
+            Transform parent,
+            string namePrefix,
+            List<GameObject> obstacles)
+        {
+            var placed = new List<GameObject>();
+            if (prefab == null)
+                return placed;
+
+            var allObstacles = new List<GameObject>(obstacles);
+
+            foreach (PlacementCandidate candidate in candidates)
+            {
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+                instance.name = $"{namePrefix}_{placed.Count}";
+                instance.transform.position = candidate.position;
+                instance.transform.rotation = candidate.rotation;
+
+                if (OverlapsAny(instance, allObstacles))
+                {
+                    Object.DestroyImmediate(instance);
+                    continue;
+                }
+
+                allObstacles.Add(instance);
+                placed.Add(instance);
+            }
+
+            return placed;
+        }
+
         private static bool OverlapsAny(GameObject instance, List<GameObject> others)
         {
             Bounds a = CityGeneratorBoundsUtility.GetWorldBounds(instance);

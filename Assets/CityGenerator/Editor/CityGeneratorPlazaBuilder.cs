@@ -19,24 +19,33 @@ namespace CityGenerator.Editor
             new(CityGeneratorConstants.PlazaLawnPitch / 2f, CityGeneratorConstants.PlazaLawnPitch / 2f),
         };
 
+        // Diagonal, between the four lawn quadrants (not axis-aligned), matching the reference plaza.
         private static readonly Vector2[] BenchOffsets =
         {
-            new(0f, CityGeneratorConstants.PlazaBenchOffset),
-            new(0f, -CityGeneratorConstants.PlazaBenchOffset),
-            new(CityGeneratorConstants.PlazaBenchOffset, 0f),
-            new(-CityGeneratorConstants.PlazaBenchOffset, 0f),
+            new(CityGeneratorConstants.PlazaBenchRadius, CityGeneratorConstants.PlazaBenchRadius),
+            new(CityGeneratorConstants.PlazaBenchRadius, -CityGeneratorConstants.PlazaBenchRadius),
+            new(-CityGeneratorConstants.PlazaBenchRadius, -CityGeneratorConstants.PlazaBenchRadius),
+            new(-CityGeneratorConstants.PlazaBenchRadius, CityGeneratorConstants.PlazaBenchRadius),
         };
 
-        /// <summary>Returns the solid instances (centerpiece, benches, vegetation — not the lawns, which are ground cover) so callers can chain them as obstacles for other categories.</summary>
+        /// <summary>
+        /// Returns the solid instances (centerpiece, benches, vegetation — not the lawns, which
+        /// are ground cover) so callers can chain them as obstacles for other categories, plus
+        /// the lawn instances themselves separately in <paramref name="lawnInstances"/> (street
+        /// furniture must still avoid stepping on the grass, even though the plaza's own
+        /// vegetation is allowed to sit on it).
+        /// </summary>
         public static List<GameObject> BuildPlazas(
             PlazaSettings plazaSettings,
             VegetationSettings vegetationSettings,
             Transform plazaGroup,
             Transform treesGroup,
             IReadOnlyList<BlockCell> blocks,
-            System.Random random)
+            System.Random random,
+            out List<GameObject> lawnInstances)
         {
             var solidInstances = new List<GameObject>();
+            lawnInstances = new List<GameObject>();
             int plazaIndex = 0;
             foreach (BlockCell block in blocks)
             {
@@ -46,7 +55,8 @@ namespace CityGenerator.Editor
                 Transform blockGroup = GetOrCreateGroup(plazaGroup, $"Plaza_{block.gridX}_{block.gridY}");
                 var obstacles = new List<GameObject>();
 
-                BuildLawns(plazaSettings.lawnPrefab, blockGroup, block.center);
+                List<GameObject> lawns = BuildLawns(plazaSettings.lawnPrefab, blockGroup, block.center);
+                lawnInstances.AddRange(lawns);
 
                 if (plazaSettings.centerpiecePrefab != null)
                 {
@@ -67,8 +77,9 @@ namespace CityGenerator.Editor
             return solidInstances;
         }
 
-        private static void BuildLawns(GameObject lawnPrefab, Transform group, Vector3 blockCenter)
+        private static List<GameObject> BuildLawns(GameObject lawnPrefab, Transform group, Vector3 blockCenter)
         {
+            var lawns = new List<GameObject>();
             for (int i = 0; i < LawnOffsets.Length; i++)
             {
                 Vector2 offset = LawnOffsets[i];
@@ -76,7 +87,10 @@ namespace CityGenerator.Editor
                 instance.name = "Lawn_" + i;
                 instance.transform.position = blockCenter + new Vector3(offset.x, CityGeneratorConstants.GroundDatumY, offset.y);
                 CityGeneratorBoundsUtility.ScaleToFootprint(instance, CityGeneratorConstants.PlazaLawnFootprint, CityGeneratorConstants.PlazaLawnFootprint);
+                lawns.Add(instance);
             }
+
+            return lawns;
         }
 
         private static List<GameObject> BuildBenches(GameObject benchPrefab, Transform group, Vector3 blockCenter)
@@ -98,27 +112,46 @@ namespace CityGenerator.Editor
             return benches;
         }
 
+        /// <summary>
+        /// Scatters vegetation across the plaza, confined to the lawn quadrants (never past
+        /// their footprint, so it never spills onto the sidewalk) and placed independently on
+        /// each of the 4 lawns at the same density — which is what spreads it evenly across all
+        /// four rather than letting randomness cluster it on just one or two.
+        /// </summary>
         private static List<GameObject> BuildVegetation(VegetationSettings vegetationSettings, Transform treesGroup, Vector3 blockCenter, List<GameObject> obstacles, System.Random random, int plazaIndex)
         {
             if (vegetationSettings.prefabs.Count == 0 || vegetationSettings.density <= 0f)
                 return new List<GameObject>();
 
-            var candidates = new List<PlacementCandidate>();
-            float extent = CityGeneratorConstants.PlazaVegetationGridExtent;
-            float step = CityGeneratorConstants.PlazaVegetationGridStep;
-            for (float x = -extent; x <= extent + 0.01f; x += step)
+            var placed = new List<GameObject>();
+            var allObstacles = new List<GameObject>(obstacles);
+
+            for (int i = 0; i < LawnOffsets.Length; i++)
             {
-                for (float z = -extent; z <= extent + 0.01f; z += step)
+                Vector2 lawnOffset = LawnOffsets[i];
+                Vector3 lawnCenter = blockCenter + new Vector3(lawnOffset.x, 0f, lawnOffset.y);
+
+                var candidates = new List<PlacementCandidate>();
+                float extent = CityGeneratorConstants.PlazaLawnVegetationExtent;
+                float step = CityGeneratorConstants.PlazaLawnVegetationStep;
+                for (float x = -extent; x <= extent + 0.01f; x += step)
                 {
-                    Vector3 position = blockCenter + new Vector3(x, CityGeneratorConstants.GroundDatumY, z);
-                    Quaternion rotation = Quaternion.Euler(0f, random.Next(4) * 90f, 0f);
-                    candidates.Add(new PlacementCandidate(position, rotation));
+                    for (float z = -extent; z <= extent + 0.01f; z += step)
+                    {
+                        Vector3 position = lawnCenter + new Vector3(x, CityGeneratorConstants.GroundDatumY, z);
+                        Quaternion rotation = Quaternion.Euler(0f, random.Next(4) * 90f, 0f);
+                        candidates.Add(new PlacementCandidate(position, rotation));
+                    }
                 }
+
+                List<GameObject> lawnPlaced = CityGeneratorPlacementEngine.PlaceByDensity(
+                    candidates, vegetationSettings.prefabs, vegetationSettings.density, random,
+                    treesGroup, $"Tree_Plaza_{plazaIndex}_{i}", allObstacles);
+                allObstacles.AddRange(lawnPlaced);
+                placed.AddRange(lawnPlaced);
             }
 
-            return CityGeneratorPlacementEngine.PlaceByDensity(
-                candidates, vegetationSettings.prefabs, vegetationSettings.density, random,
-                treesGroup, $"Tree_Plaza_{plazaIndex}", obstacles);
+            return placed;
         }
 
         private static GameObject InstantiateAt(GameObject prefab, Transform parent, Vector3 position, Quaternion rotation, string name)

@@ -119646,7 +119646,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dfc777ff10cd5fe49bfdb497de2f1ada, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TestAI.TrafficNetwork
-  axes:
+  axesX:
+  - -84
+  - -28
+  - 28
+  - 84
+  axesZ:
   - -84
   - -28
   - 28

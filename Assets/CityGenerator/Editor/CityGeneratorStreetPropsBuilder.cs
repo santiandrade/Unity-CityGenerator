@@ -12,10 +12,26 @@ namespace CityGenerator.Editor
     /// </summary>
     internal static class CityGeneratorStreetPropsBuilder
     {
-        public static List<GameObject> BuildLamps(GameObject lampPrefab, float density, Transform group, IReadOnlyList<BlockCell> blocks, System.Random random, List<GameObject> obstacles)
+        /// <summary>Places lamps on every block's sidewalk: 3 per side, evenly spaced, always (no density) — clear of the plaza lawn on plaza blocks.</summary>
+        public static List<GameObject> BuildLamps(GameObject lampPrefab, Transform group, IReadOnlyList<BlockCell> blocks, List<GameObject> obstacles)
         {
-            return PlacePerBlock(lampPrefab, density, group, blocks, random, obstacles, "Lamp",
-                block => CityGeneratorStreetCandidates.EdgeCandidates(block.center, CityGeneratorConstants.StreetEdgePointsPerSide));
+            if (lampPrefab == null)
+                return new List<GameObject>();
+
+            var placed = new List<GameObject>();
+            var allObstacles = new List<GameObject>(obstacles);
+            int blockIndex = 0;
+
+            foreach (BlockCell block in blocks)
+            {
+                List<PlacementCandidate> candidates = CityGeneratorStreetCandidates.LampCandidates(block.center);
+                List<GameObject> blockPlaced = CityGeneratorPlacementEngine.PlaceAll(candidates, lampPrefab, group, $"Lamp_{blockIndex}", allObstacles);
+                allObstacles.AddRange(blockPlaced);
+                placed.AddRange(blockPlaced);
+                blockIndex++;
+            }
+
+            return placed;
         }
 
         public static List<GameObject> BuildBusStops(GameObject busStopPrefab, float density, Transform group, IReadOnlyList<BlockCell> blocks, System.Random random, List<GameObject> obstacles)
