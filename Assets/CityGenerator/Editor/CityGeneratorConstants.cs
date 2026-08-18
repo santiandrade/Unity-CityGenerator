@@ -29,5 +29,12 @@ namespace CityGenerator.Editor
         public const float PlazaBenchOffset = 16f;
         public const float PlazaVegetationGridExtent = 18f;
         public const float PlazaVegetationGridStep = 9f;
+
+        // Sidewalk/corner candidates stay outside the building slot area (max radius ~18 m),
+        // in the peripheral ring of every 46 m block.
+        public const float StreetEdgeInset = 2f;
+        public const int StreetEdgePointsPerSide = 3;
+        public const int StreetVegetationPointsPerSide = 4;
+        public const float BinCornerInset = 2f;
     }
 }
