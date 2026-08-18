@@ -23,5 +23,11 @@ namespace CityGenerator.Editor
         public const float GroundDatumY = 0.18f; // top of sidewalks: where buildings/plaza/props/vegetation sit
         public const int MaxBuildingSlotsPerBlock = 4;
         public const float BuildingSlotPitch = 22f;
+
+        public const float PlazaLawnPitch = 22f;
+        public const float PlazaLawnFootprint = 20f;
+        public const float PlazaBenchOffset = 16f;
+        public const float PlazaVegetationGridExtent = 18f;
+        public const float PlazaVegetationGridStep = 9f;
     }
 }

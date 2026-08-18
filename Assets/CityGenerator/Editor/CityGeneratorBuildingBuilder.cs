@@ -68,7 +68,7 @@ namespace CityGenerator.Editor
         {
             var assignment = new GameObject[slotCount];
             List<int> slotOrder = Enumerable.Range(0, slotCount).ToList();
-            Shuffle(slotOrder, random);
+            CityGeneratorRandomUtility.Shuffle(slotOrder, random);
 
             int guaranteedCount = Mathf.Min(buildingPrefabs.Count, slotCount);
             for (int i = 0; i < guaranteedCount; i++)
@@ -90,15 +90,6 @@ namespace CityGenerator.Editor
             var group = new GameObject(name).transform;
             group.SetParent(parent);
             return group;
-        }
-
-        private static void Shuffle<T>(IList<T> list, System.Random random)
-        {
-            for (int i = list.Count - 1; i > 0; i--)
-            {
-                int j = random.Next(i + 1);
-                (list[i], list[j]) = (list[j], list[i]);
-            }
         }
     }
 }
