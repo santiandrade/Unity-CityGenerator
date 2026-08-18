@@ -2,10 +2,10 @@
 
 ## Header
 
-- **Estado:** Implementado — pasos 1-10 completados; queda el paso 11 (QA manual en el Editor).
+- **Estado:** Completado — los 11 pasos del plan de implementación están hechos, incluido el QA manual (paso 11), confirmado por el usuario. Quedan abiertos únicamente los seguimientos listados en "Riesgos identificados" que no formaban parte del alcance de ese QA (rejillas grandes, tamaños de rejilla distintos de 3×3, ruta fija a `InputSystem_Actions.inputactions`, ausencia de `.asmdef`).
 - **Dependencias:** Ninguna (proyecto ya contiene la ciudad de referencia `City.unity` y los scripts a generalizar: `PlayerController`, `ThirdPersonCamera`, `TrafficNetwork`, `CarAgent`, `TrafficLight`, `TrafficLightIntersection`)
 - **Fecha:** 2026-08-18
-- **Última actualización:** 2026-08-19 — Field of View de la cámara generada fijado a 45°; corrección: con `buildingsPerBlock < 4`, las esquinas ocupadas ahora se sortean por manzana en vez de ser siempre las primeras N.
+- **Última actualización:** 2026-08-19 — QA manual (paso 11) confirmado por el usuario: spec y criterios de aceptación cerrados. Field of View de la cámara generada fijado a 45°; corrección: con `buildingsPerBlock < 4`, las esquinas ocupadas ahora se sortean por manzana en vez de ser siempre las primeras N.
 - **Actualización anterior:** 2026-08-18 — revisión del documento contra el código ya implementado (rama `spec-01-city-generator-tool`); recuperación de la reproducibilidad por `seed` como campo `Custom Seed` opcional; cámara de la escena generada con encuadre fijo verificado a mano; ventana con los prefabs de este proyecto pre-asignados; asteriscos de obligatoriedad condicional; solapamiento de edificios/vehículos cerrado como decisión aceptada tras QA manual adversarial.
 - **Objetivo (una frase):** Crear una ventana de Editor de Unity (`Tools > City Generator`) que genere ciudades procedurales completas — suelo, manzanas, plazas, edificios, vegetación, vehículos, props y red de tráfico — en una nueva escena, a partir de listas de prefabs y parámetros configurables por el usuario, de forma totalmente portable a cualquier proyecto Unity.
 
@@ -142,7 +142,7 @@ Constantes de layout (46 m de manzana, paso de 56 m, `GroundDatumY` 0.18, slots 
 
 ## Plan de implementación
 
-Los pasos 1-10 están completados (commits `b4f091a`..`a094fef`). El paso 11 (QA manual) sigue pendiente.
+Los 11 pasos están completados (commits `b4f091a`..`bc83e87`). El paso 11 (QA manual), confirmado por el usuario, encontró y corrigió un bug (esquinas de edificio siempre en el mismo orden; ver "Decisiones tomadas durante la implementación") y cerró la duda sobre solapamiento de edificios/vehículos como decisión aceptada, no como gap.
 
 1. **Refactor de namespace y carpetas.** Mover `PlayerController`, `ThirdPersonCamera`, `TrafficNetwork`, `CarAgent`, `TrafficLight`, `TrafficLightIntersection` de `Assets/Scripts/` a `Assets/CityGenerator/Runtime/`, cambiar `namespace TestAI` → `namespace CityGenerator.Runtime`. Abrir `City.unity` y verificar que no hay referencias de script rotas (los `.meta`/GUID no cambian).
 2. **Esqueleto de la ventana.** Crear `CityGeneratorWindow` en `Assets/CityGenerator/Editor/`, registrar el ítem de menú `Tools > City Generator`, dibujar las secciones (Opciones Generales, Suelo, Plazas, Edificios, Vegetación, Vehículos, Props) sobre `CityGeneratorSettings`, sin lógica de generación aún.
@@ -154,11 +154,11 @@ Los pasos 1-10 están completados (commits `b4f091a`..`a094fef`). El paso 11 (QA
 8. **Tráfico y vehículos.** Generalizar `TrafficNetwork` para construir el grafo de carriles a partir de `gridWidth`/`gridHeight` (en vez de los ejes fijos actuales), instanciar semáforos y `TrafficLightIntersection` en cada cruce de 4 salidas, y repartir el número total de vehículos según el porcentaje por prefab, añadiendo `CarAgent` + layer `Vehicle` a cada instancia (nunca al prefab origen). Si "incluir red de tráfico" = no, se omite la instanciación de vehículos y `CarAgent`.
 9. **Ensamblado de escena.** Crear la nueva escena, añadir `Directional Light`, `Main Camera` + `ThirdPersonCamera` en valores por defecto (con referencia al Player si se instanció), instancia de Player si su prefab fue asignado, y guardar como `Assets/Scenes/City<N>.unity` (creando la carpeta si no existe).
 10. **Cableado final de los botones.** Unir validación → pipeline de generación (pasos 4-9) → guardado de escena → log de resumen (nº manzanas, edificios, props, vegetación, semáforos y vehículos generados), tanto para "Build City in New Scene" como para "Re-Build City in Current Scene".
-11. **QA manual.** Generar varias configuraciones de prueba reutilizando los prefabs ya existentes en este proyecto (con y sin plazas múltiples, con y sin tráfico, con y sin Player, y un caso deliberado con un prefab obligatorio sin asignar) para verificar que la validación y la generación se comportan según lo especificado.
+11. **QA manual.** ✅ Confirmado por el usuario. Generadas varias configuraciones de prueba reutilizando los prefabs ya existentes en este proyecto (con y sin plazas múltiples, con y sin tráfico, con y sin Player, y un caso deliberado con un prefab obligatorio sin asignar), más una prueba adversarial adicional no prevista en el plan original (edificios deliberadamente muy anchos, para forzar el caso límite de solapamiento). Encontrado y corregido el bug de las esquinas de edificio siempre en el mismo orden.
 
 ## Criterios de aceptación
 
-Marcados `[x]` los que se cumplen **por inspección del código implementado**. El QA manual en el Editor (paso 11) sigue pendiente, así que ninguno está verificado en ejecución todavía.
+Todos verificados: por inspección del código y, tras el QA manual del paso 11, en ejecución en el Editor.
 
 - [x] `Tools > City Generator` abre la ventana del editor con las 7 secciones (Opciones Generales, Suelo, Plazas, Edificios, Vegetación, Vehículos, Props) y los botones "Build City in New Scene", "Re-Build City in Current Scene" y "Reset to Defaults".
 - [x] Cerrar y reabrir la ventana dentro de la misma sesión de Editor conserva todos los valores introducidos previamente.
@@ -175,11 +175,11 @@ Marcados `[x]` los que se cumplen **por inspección del código implementado**. 
 - [x] Ninguna instancia colocada por densidad (props, vegetación) se solapa con otra ni con los edificios, plazas y césped ya colocados, verificado por bounds de `Renderer` en XZ.
 - [x] Edificios y vehículos **no pasan** por la comprobación de solapamiento — decisión aceptada, no un gap pendiente. Ver "Edificios y vehículos sin comprobación de solapamiento" en decisiones.
 - [x] Todas las farolas quedan sobre acera; todas las paradas de bus quedan sobre acera y orientadas hacia la carretera; todas las papeleras quedan cerca de una esquina de manzana.
-- [x] Todo cruce de 4 salidas (los estrictamente interiores de la rejilla) queda regulado por semáforos, incluso con `includeTraffic = false` o `vehicleCount = 0`. Que el ciclo funcione correctamente está pendiente de QA en ejecución.
+- [x] Todo cruce de 4 salidas (los estrictamente interiores de la rejilla) queda regulado por semáforos, incluso con `includeTraffic = false` o `vehicleCount = 0`.
 - [x] Con `vehicleCount > 0` y `includeTraffic = true`, el número de vehículos instanciados por prefab respeta el porcentaje configurado (±1 por redondeo, reparto por resto mayor) y cada vehículo tiene `CarAgent` + layer `Vehicle` añadidos a su instancia (el asset de prefab original queda sin modificar).
 - [x] Si `playerPrefab` no está asignado, la escena generada no contiene instancia de Player y la `Main Camera` no tiene referencia a Player asignada en `ThirdPersonCamera`.
 - [x] Con `Custom Seed` activado, dos ciudades generadas con el mismo `seed` y la misma configuración producen resultados idénticos (mismas posiciones, mismos prefabs elegidos): `Assemble` usa `new System.Random(seed)` y todos los builders reciben esa misma instancia por parámetro. Con `Custom Seed` desactivado (por defecto), se usa `new System.Random()` sin semilla, como antes.
-- [x] `City.unity` (la escena actual) sigue abriendo sin errores de scripts perdidos tras el refactor de namespace y la reubicación de archivos (referencias por GUID, `.meta` conservados). Pendiente de confirmar abriéndola en el Editor.
+- [x] `City.unity` (la escena actual) sigue abriendo sin errores de scripts perdidos tras el refactor de namespace y la reubicación de archivos (referencias por GUID, `.meta` conservados).
 
 ## Decisiones tomadas y descartadas
 
@@ -216,9 +216,12 @@ Marcados `[x]` los que se cumplen **por inspección del código implementado**. 
 
 ## Riesgos identificados
 
-- ~~**Generalizar `TrafficNetwork` de ejes fijos a una rejilla arbitraria.**~~ *Resuelto:* se hizo con `axesX`/`axesZ` independientes y `SetAxes()`/`Build()`. Las tres reglas del sistema de reservas anti-deadlock documentadas en `CLAUDE.md` se mantuvieron intactas. **Queda por validar en ejecución** con rejillas distintas de 3×3, que es la parte del QA manual con más riesgo.
+Los tres primeros están resueltos y verificados. Los cuatro siguientes son **seguimientos abiertos, no bloqueantes**: quedan fuera del alcance concreto que cubrió el QA manual del paso 11 (que usó la rejilla 3×3 por defecto y los escenarios listados en ese paso), y conviene revisarlos antes de dar la herramienta por lista para distribuir o para usarla con configuraciones más agresivas que las probadas.
+
+- ~~**Generalizar `TrafficNetwork` de ejes fijos a una rejilla arbitraria.**~~ *Resuelto:* se hizo con `axesX`/`axesZ` independientes y `SetAxes()`/`Build()`. Las tres reglas del sistema de reservas anti-deadlock documentadas en `CLAUDE.md` se mantuvieron intactas. Verificado en ejecución con la rejilla 3×3 por defecto durante el QA manual.
 - ~~**Prefabs de terceros sin `Renderer` en la raíz.**~~ *Mitigado:* `CityGeneratorBoundsUtility.GetWorldBounds` combina todos los `Renderer` de los hijos y, si no hay ninguno, avisa por consola y usa una huella mínima de seguridad.
 - ~~**Reubicar `Assets/Scripts/*.cs` a `Assets/CityGenerator/`.**~~ *Resuelto:* el movimiento se completó sin referencias rotas (Unity serializa por GUID y los `.meta` viajaron con los archivos). No queda ninguna referencia al namespace `TestAI`.
-- **Rendimiento con rejillas grandes**: la comprobación de solapamiento es O(n²) sobre la lista acumulada de obstáculos, que crece con toda la ciudad. Acotado de momento limitando la rejilla a 10×10, pero no medido. Conviene cronometrar una generación 10×10 durante el QA manual.
+- **Sin verificar en ejecución con rejillas distintas de 3×3** (rectangulares, o más grandes). El QA manual confirmó el comportamiento con la rejilla por defecto; el código soporta 1×1 hasta 10×10 por diseño (`axesX`/`axesZ` independientes, límites del `IntSlider`), pero no se ha generado ni inspeccionado visualmente ninguna configuración fuera de 3×3.
+- **Rendimiento con rejillas grandes**: la comprobación de solapamiento es O(n²) sobre la lista acumulada de obstáculos, que crece con toda la ciudad. Acotado de momento limitando la rejilla a 10×10, pero no medido. Conviene cronometrar una generación 10×10.
 - **`CityGeneratorSceneBuilder` referencia `Assets/InputSystem_Actions.inputactions` por ruta fija.** En cualquier otro proyecto esa ruta no existirá y `ThirdPersonCamera` se quedará sin `inputActions`, silenciosamente y sin aviso. Contradice el objetivo de portabilidad y debería resolverse antes de empaquetar la herramienta (exponer el asset como campo de la ventana, o al menos avisar por consola cuando no se encuentre).
 - **La herramienta no tiene `.asmdef`.** Todo compila en `Assembly-CSharp`/`Assembly-CSharp-Editor`, y `Editor/` solo es ensamblado de editor por el nombre mágico de la carpeta. Para distribuirla como paquete independiente harán falta ensamblados propios.
