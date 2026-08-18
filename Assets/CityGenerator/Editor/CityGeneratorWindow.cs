@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -121,7 +122,19 @@ namespace CityGenerator.Editor
 
         private void BuildCity()
         {
-            Debug.Log("City Generator: Build City clicked (validation and generation not implemented yet).");
+            if (!CityGeneratorValidator.Validate(settings, out List<string> errors))
+            {
+                foreach (string error in errors)
+                    Debug.LogError("[City Generator] " + error);
+
+                EditorUtility.DisplayDialog(
+                    "City Generator - Validation Errors",
+                    $"Found {errors.Count} error(s):\n\n{string.Join("\n", errors)}\n\nSee the Console for details.",
+                    "OK");
+                return;
+            }
+
+            Debug.Log("City Generator: validation passed. Generation is not implemented yet.");
         }
     }
 }
