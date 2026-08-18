@@ -19,5 +19,9 @@ namespace CityGenerator.Editor
         public const int DashesPerSegment = 4;
         public const int ZebraStripesPerArm = 5;
         public const float ZebraStripeSpacing = StreetWidth / (ZebraStripesPerArm + 1);
+
+        public const float GroundDatumY = 0.18f; // top of sidewalks: where buildings/plaza/props/vegetation sit
+        public const int MaxBuildingSlotsPerBlock = 4;
+        public const float BuildingSlotPitch = 22f;
     }
 }
