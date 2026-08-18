@@ -116,11 +116,15 @@ namespace CityGenerator.Editor
         /// Scatters vegetation across the plaza, confined to the lawn quadrants (never past
         /// their footprint, so it never spills onto the sidewalk) and placed independently on
         /// each of the 4 lawns at the same density — which is what spreads it evenly across all
-        /// four rather than letting randomness cluster it on just one or two.
+        /// four rather than letting randomness cluster it on just one or two. Uses a fraction of
+        /// the configured density: the lawn candidate grid is much denser than the street one, so
+        /// using the same density outright would pack visibly more trees inside the plaza than
+        /// along the streets.
         /// </summary>
         private static List<GameObject> BuildVegetation(VegetationSettings vegetationSettings, Transform treesGroup, Vector3 blockCenter, List<GameObject> obstacles, System.Random random, int plazaIndex)
         {
-            if (vegetationSettings.prefabs.Count == 0 || vegetationSettings.density <= 0f)
+            float density = vegetationSettings.density * CityGeneratorConstants.PlazaVegetationDensityFactor;
+            if (vegetationSettings.prefabs.Count == 0 || density <= 0f)
                 return new List<GameObject>();
 
             var placed = new List<GameObject>();
@@ -145,7 +149,7 @@ namespace CityGenerator.Editor
                 }
 
                 List<GameObject> lawnPlaced = CityGeneratorPlacementEngine.PlaceByDensity(
-                    candidates, vegetationSettings.prefabs, vegetationSettings.density, random,
+                    candidates, vegetationSettings.prefabs, density, random,
                     treesGroup, $"Tree_Plaza_{plazaIndex}_{i}", allObstacles);
                 allObstacles.AddRange(lawnPlaced);
                 placed.AddRange(lawnPlaced);

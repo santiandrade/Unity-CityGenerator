@@ -22,6 +22,9 @@ namespace CityGenerator.Editor
         // Distance from the intersection centre to the crosswalk, along the arm: half the
         // street width plus the lane offset (TrafficNetwork.laneOffset), i.e. right at the stop line.
         public const float ZebraArmOffset = StreetWidth / 2f + 2.6f;
+        // Radius, along the street, within which a dash is skipped near a signalled
+        // intersection: covers the crosswalk stripe spread (arm offset ± half the stripe span).
+        public const float DashZebraExclusionRadius = ZebraArmOffset + (ZebraStripesPerArm - 1) / 2f * ZebraStripeSpacing;
 
         public const float GroundDatumY = 0.18f; // top of sidewalks: where buildings/plaza/props/vegetation sit
         public const int MaxBuildingSlotsPerBlock = 4;
@@ -36,6 +39,10 @@ namespace CityGenerator.Editor
         // footprint edge so trees never spill onto the sidewalk ring around it.
         public const float PlazaLawnVegetationExtent = 8f;
         public const float PlazaLawnVegetationStep = 4f;
+        // Plazas use a fraction of the configured vegetation density: their lawn candidate grid
+        // is much denser than the street candidates, so the same density value would otherwise
+        // pack noticeably more trees inside plazas than along the streets.
+        public const float PlazaVegetationDensityFactor = 0.5f;
 
         // Sidewalk/corner candidates stay outside the building slot area (max radius ~18 m),
         // in the peripheral ring of every 46 m block.

@@ -46,26 +46,41 @@ namespace CityGenerator.Editor
 
             for (int j = 0; j <= gridHeight; j++)
             {
+                bool rowHasCrossings = j >= 1 && j <= gridHeight - 1;
                 float z = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, j);
                 for (int k = 0; k < gridWidth; k++)
                 {
                     float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, k);
-                    PlaceDashSegment(dashPrefab, group, segmentStart, z, isVertical: false, ref dashIndex);
+                    float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, k + 1);
+                    bool excludeStart = rowHasCrossings && k >= 1;
+                    bool excludeEnd = rowHasCrossings && k <= gridWidth - 2;
+                    PlaceDashSegment(dashPrefab, group, segmentStart, z, isVertical: false,
+                        excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
                 }
             }
 
             for (int i = 0; i <= gridWidth; i++)
             {
+                bool columnHasCrossings = i >= 1 && i <= gridWidth - 1;
                 float x = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, i);
                 for (int k = 0; k < gridHeight; k++)
                 {
                     float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, k);
-                    PlaceDashSegment(dashPrefab, group, segmentStart, x, isVertical: true, ref dashIndex);
+                    float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, k + 1);
+                    bool excludeStart = columnHasCrossings && k >= 1;
+                    bool excludeEnd = columnHasCrossings && k <= gridHeight - 2;
+                    PlaceDashSegment(dashPrefab, group, segmentStart, x, isVertical: true,
+                        excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
                 }
             }
         }
 
-        private static void PlaceDashSegment(GameObject dashPrefab, Transform group, float segmentStart, float crossAxisPosition, bool isVertical, ref int dashIndex)
+        // A dash is skipped if it falls within a crosswalk's exclusion radius of an intersection
+        // that has zebra crossings on it — otherwise the dashed centreline runs straight through
+        // the crosswalk stripes.
+        private static void PlaceDashSegment(
+            GameObject dashPrefab, Transform group, float segmentStart, float crossAxisPosition, bool isVertical,
+            bool excludeNearStart, float startAxisPosition, bool excludeNearEnd, float endAxisPosition, ref int dashIndex)
         {
             float spacing = CityGeneratorConstants.CellPitch / CityGeneratorConstants.DashesPerSegment;
             Quaternion rotation = isVertical ? Quaternion.Euler(0f, 90f, 0f) : Quaternion.identity;
@@ -73,6 +88,12 @@ namespace CityGenerator.Editor
             for (int d = 0; d < CityGeneratorConstants.DashesPerSegment; d++)
             {
                 float alongAxis = segmentStart + spacing * (d + 0.5f);
+
+                if (excludeNearStart && Mathf.Abs(alongAxis - startAxisPosition) < CityGeneratorConstants.DashZebraExclusionRadius)
+                    continue;
+                if (excludeNearEnd && Mathf.Abs(alongAxis - endAxisPosition) < CityGeneratorConstants.DashZebraExclusionRadius)
+                    continue;
+
                 Vector3 position = isVertical
                     ? new Vector3(crossAxisPosition, CityGeneratorConstants.MarkingY, alongAxis)
                     : new Vector3(alongAxis, CityGeneratorConstants.MarkingY, crossAxisPosition);
