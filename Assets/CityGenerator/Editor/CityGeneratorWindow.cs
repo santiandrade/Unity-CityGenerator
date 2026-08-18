@@ -147,7 +147,6 @@ namespace CityGenerator.Editor
             EditorGUILayout.PropertyField(FindProperty("general.includeTraffic"));
             EditorGUILayout.PropertyField(FindProperty("general.vehicleCount"));
             EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
-            EditorGUILayout.PropertyField(FindProperty("general.globalVolumeProfile"));
             EditorGUILayout.Space(8f);
         }
 

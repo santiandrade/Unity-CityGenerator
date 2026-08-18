@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace CityGenerator.Editor
 {
@@ -27,7 +26,6 @@ namespace CityGenerator.Editor
         public bool includeTraffic = true;
         public int vehicleCount = 18;
         public GameObject playerPrefab; // optional
-        public VolumeProfile globalVolumeProfile; // optional
     }
 
     [Serializable]

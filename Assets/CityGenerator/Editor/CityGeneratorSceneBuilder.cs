@@ -4,14 +4,12 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace CityGenerator.Editor
 {
     /// <summary>
-    /// Assembles a brand new scene around the generated city: Directional Light, Global Volume,
+    /// Assembles a brand new scene around the generated city: Directional Light,
     /// Main Camera (with <see cref="ThirdPersonCamera"/>) and, if assigned, a Player instance —
     /// then saves it as the next free <c>Assets/Scenes/City&lt;N&gt;.unity</c>.
     /// </summary>
@@ -31,7 +29,6 @@ namespace CityGenerator.Editor
                 CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform);
 
                 CreateDirectionalLight(scene);
-                CreateGlobalVolume(scene, settings.general.globalVolumeProfile);
 
                 GameObject player = null;
                 if (settings.general.playerPrefab != null)
@@ -90,15 +87,6 @@ namespace CityGenerator.Editor
             light.shadows = LightShadows.Soft;
         }
 
-        private static void CreateGlobalVolume(Scene scene, VolumeProfile profile)
-        {
-            var volumeGO = new GameObject("Global Volume");
-            SceneManager.MoveGameObjectToScene(volumeGO, scene);
-            var volume = volumeGO.AddComponent<Volume>();
-            volume.isGlobal = true;
-            volume.sharedProfile = profile;
-        }
-
         private static void CreateMainCamera(Scene scene, GameObject player)
         {
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
@@ -107,8 +95,6 @@ namespace CityGenerator.Editor
             cameraGO.transform.rotation = Quaternion.Euler(-300f, 0f, 0f);
             cameraGO.AddComponent<Camera>();
             cameraGO.AddComponent<AudioListener>();
-            var cameraData = cameraGO.AddComponent<UniversalAdditionalCameraData>();
-            cameraData.renderPostProcessing = true;
             var thirdPersonCamera = cameraGO.AddComponent<ThirdPersonCamera>();
 
             var cameraSerialized = new SerializedObject(thirdPersonCamera);
