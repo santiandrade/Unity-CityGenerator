@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CityGenerator.Runtime;
 using UnityEditor;
 using UnityEngine;
 
@@ -160,9 +161,12 @@ namespace CityGenerator.Editor
             DrawGridSizeSlider("general.gridWidth", "Grid Width");
             DrawGridSizeSlider("general.gridHeight", "Grid Height");
             EditorGUILayout.PropertyField(FindProperty("general.plazaCount"));
-            EditorGUILayout.PropertyField(FindProperty("general.buildingsPerBlock"));
+            DrawIntSlider("general.buildingsPerBlock", "Buildings Per Block", 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock);
             EditorGUILayout.PropertyField(FindProperty("general.includeTraffic"));
             EditorGUILayout.PropertyField(FindProperty("general.vehicleCount"));
+            string densityWarning = GetVehicleDensityWarning();
+            if (densityWarning != null)
+                EditorGUILayout.HelpBox(densityWarning, MessageType.Warning);
             EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
             EditorGUILayout.PropertyField(FindProperty("general.useCustomSeed"), new GUIContent("Custom Seed"));
             if (FindProperty("general.useCustomSeed").boolValue)
@@ -172,6 +176,31 @@ namespace CityGenerator.Editor
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.Space(8f);
+        }
+
+        /// <summary>
+        /// Non-blocking density warning: CarAgent has no route planning or congestion avoidance,
+        /// so traffic gridlocks once vehicles fill too large a fraction of the grid's spawn nodes
+        /// (see <see cref="CityGeneratorConstants.VehicleDensityWarningThreshold"/>). Returns null
+        /// when there's nothing to warn about.
+        /// </summary>
+        private string GetVehicleDensityWarning()
+        {
+            int gridWidth = FindProperty("general.gridWidth").intValue;
+            int gridHeight = FindProperty("general.gridHeight").intValue;
+            int vehicleCount = FindProperty("general.vehicleCount").intValue;
+            if (vehicleCount <= 0)
+                return null;
+
+            int validNodes = TrafficNetwork.EstimateValidSpawnNodeCount(gridWidth + 1, gridHeight + 1);
+            float occupancy = (float)vehicleCount / validNodes;
+            if (occupancy <= CityGeneratorConstants.VehicleDensityWarningThreshold)
+                return null;
+
+            int recommendedMax = Mathf.FloorToInt(validNodes * CityGeneratorConstants.VehicleDensityWarningThreshold);
+            return $"{vehicleCount} vehicles is {occupancy:P0} of this grid's {validNodes} spawn points. " +
+                   $"Traffic has no route planning, so it tends to gridlock above ~{CityGeneratorConstants.VehicleDensityWarningThreshold:P0} " +
+                   $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
         }
 
         private void DrawGroundSection()
@@ -229,8 +258,13 @@ namespace CityGenerator.Editor
 
         private void DrawGridSizeSlider(string relativePath, string label)
         {
+            DrawIntSlider(relativePath, label, MinGridSize, MaxGridSize);
+        }
+
+        private void DrawIntSlider(string relativePath, string label, int min, int max)
+        {
             SerializedProperty property = FindProperty(relativePath);
-            property.intValue = EditorGUILayout.IntSlider(label, property.intValue, MinGridSize, MaxGridSize);
+            property.intValue = EditorGUILayout.IntSlider(label, property.intValue, min, max);
         }
 
         private SerializedProperty FindProperty(string relativePath)

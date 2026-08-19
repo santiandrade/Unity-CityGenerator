@@ -91,6 +91,18 @@ namespace CityGenerator.Runtime
             return nodes[index];
         }
 
+        /// <summary>
+        /// Number of nodes valid as vehicle spawn points for a network with the given axis
+        /// counts, without building the graph. Mirrors the node-validity rule used when spawning
+        /// vehicles (every entry qualifies; an exit only if it isn't the outer edge of the grid,
+        /// i.e. it has an outgoing street segment): every intersection contributes 4 entries, plus
+        /// 4 exits minus the ones that fall on the grid's outer boundary in that direction.
+        /// </summary>
+        public static int EstimateValidSpawnNodeCount(int axesXCount, int axesZCount)
+        {
+            return 8 * axesXCount * axesZCount - 2 * axesXCount - 2 * axesZCount;
+        }
+
         private void Awake()
         {
             Build();

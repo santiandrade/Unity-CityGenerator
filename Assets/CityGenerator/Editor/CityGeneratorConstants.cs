@@ -63,5 +63,11 @@ namespace CityGenerator.Editor
         public const float TrafficLightCornerOffset = 6.2f;
         public const float TrafficLightStartOffsetMax = 4f;
         public const string VehicleLayerName = "Vehicle";
+
+        // CarAgent has no route planning or congestion avoidance, so once a stretch of road
+        // fills up it stays gridlocked. Measured on a 5x5 grid (264 valid spawn nodes): 100
+        // vehicles (38%) flowed with the occasional self-resolving crossing conflict, 200 (76%)
+        // gridlocked from the first frame. 0.4 keeps a margin below the observed good case.
+        public const float VehicleDensityWarningThreshold = 0.4f;
     }
 }

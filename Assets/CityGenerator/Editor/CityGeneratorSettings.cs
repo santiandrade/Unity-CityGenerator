@@ -51,7 +51,7 @@ namespace CityGenerator.Editor
     internal class VegetationSettings
     {
         public List<GameObject> prefabs = new(); // 1+ required if density > 0
-        [Range(0f, 1f)] public float density = 0.3f;
+        [Range(0f, 1f)] public float density = 0.2f;
     }
 
     [Serializable]

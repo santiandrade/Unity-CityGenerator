@@ -130,6 +130,13 @@ namespace CityGenerator.Editor
                 .ToList();
             CityGeneratorRandomUtility.Shuffle(nodeOrder, random);
 
+            float occupancy = (float)vehicleCount / nodeOrder.Count;
+            if (occupancy > CityGeneratorConstants.VehicleDensityWarningThreshold)
+            {
+                int recommendedMax = Mathf.FloorToInt(nodeOrder.Count * CityGeneratorConstants.VehicleDensityWarningThreshold);
+                Debug.LogWarning($"[City Generator] {vehicleCount} vehicles fill {occupancy:P0} of this grid's {nodeOrder.Count} spawn points. CarAgent has no route planning or congestion avoidance, so traffic tends to gridlock above ~{CityGeneratorConstants.VehicleDensityWarningThreshold:P0} (recommended max ~{recommendedMax} for this grid size).");
+            }
+
             int[] counts = DistributePercentages(vehicles, vehicleCount);
             int vehicleLayer = LayerMask.NameToLayer(CityGeneratorConstants.VehicleLayerName);
             if (vehicleLayer < 0)
