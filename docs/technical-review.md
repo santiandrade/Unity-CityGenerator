@@ -29,9 +29,10 @@ Revisado: los 23 scripts de `Assets/CityGenerator/`, `ProjectSettings/*`,
 `Packages/manifest.json`.
 
 **Conclusión de una línea**: la mayor parte de lo detectado en la revisión inicial ya está
-corregido en el código de la tool; lo que queda pendiente es una decisión de autoría
-(ProBuilder en los prefabs de demo) y trabajo que solo se justifica si el tráfico crece un
-orden de magnitud. ECS no resolvería nada de lo que hoy limita al proyecto.
+corregido en el código de la tool y en el contenido de demo (incluida la migración fuera de
+ProBuilder, B.2); lo que queda pendiente es documentación (README) y trabajo que solo se
+justifica si el tráfico crece un orden de magnitud. ECS no resolvería nada de lo que hoy
+limita al proyecto.
 
 ## Cómo está organizado este informe
 
@@ -78,6 +79,7 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | A.16 | `DestroyImmediate` por candidato rechazado | `ObstacleCache.BorrowProbe`: una instancia "sonda" reutilizable por prefab, reposicionada en cada candidato, más `DestroyRemainingProbes` al final del run |
 | A.17 | `File.Exists` con ruta relativa | `GetNextFreeScenePath` usa `AssetDatabase`; se documenta por qué **no** se usa `GenerateUniqueAssetPath` (rompería el nombrado `City<N>` con un sufijo con espacio) |
 | A.19 | Paradas de autobús — bug encontrado y luego la categoría entera retirada (2026-08-20) | Primero se detectó y corrigió que nunca se colocaba ninguna: `CityGeneratorStreetCandidates.AddSide`, con `pointsPerSide == 1` (solo lo usaba `BuildBusStops`), ponía el candidato en `t=0`, la misma coordenada que el punto central de las 3 farolas por lado, siempre ocupado con `lampDensity=1`, así que el solape lo descartaba siempre en los 8 bloques no-plaza. Verificado en el Editor tras desplazarlo a `t=0.35`: 8 instancias, una por bloque. Poco después, **decisión del usuario** (sin más motivo dado): retirar la categoría entera en vez de mantenerla arreglada — `busStopPrefab`/`busStopDensity`, `BuildBusStops`, el prefab `Props/BusStop.prefab` y sus 4 mallas extraídas, todo fuera. Detalle en `specs/01-city-generator-tool.md` |
+| B.2 | Mallas ProBuilder embebidas en cada instancia (2026-08-20) | Resuelto para los 11 prefabs con `ProBuilderMesh`. La revisión inicial solo había listado `Floors/Lawn\|RoadBase\|RoadDash\|RoadSidewalk\|RoadZebra` y `Props/Bench\|Bin\|Lamp` — ya estaban resueltos de antes (mallas extraídas a `Assets/Meshes/`, sin `ProBuilderMesh`, `m_IsReadable: 0`). El usuario detectó que el alcance original se había dejado corto: `Props/Fountain.prefab` (los 3 objetos `Water`, geometría procedural sobre el modelo `.glb` importado), `Props/TrafficLight.prefab` (8 partes: `Pole`, `PoleBase`, `Arm`, `Housing`, `Visor`, `Lamp_Red`\|`Amber`\|`Green`) y `Vegetation/Tree.prefab` (`Trunk`, `Crown`, `Crown_Top`) seguían con `ProBuilderMesh`. Convertidos con un script de Editor: `ToMesh()` + `Refresh()` + `EditorMeshUtility.Optimize(pb)`, copia de la malla resultante a un asset nuevo en `Assets/Meshes/` (14 activos: `Fountain_Water[_1][_2]`, `TrafficLight_*`, `Tree_*`), `MeshFilter`/`MeshCollider` reapuntados al asset, componente `ProBuilderMesh` eliminado. `m_IsReadable` en `false` requirió `Mesh.UploadMeshData(true)` **antes** de `AssetDatabase.CreateAsset` (llamarlo después, o editar el flag ya serializado vía `SerializedObject`, no persiste — comportamiento verificado empíricamente en este proyecto). Los `sharedMaterial` de los tres lamps del semáforo no se tocaron, así que el swap de estado en `TrafficLight.cs` sigue intacto. `City.unity` regenerada con "Re-Build City in Current Scene": `grep -c pb_Mesh` pasó de 227 a **0**, verificado visualmente sin regresiones |
 | B.1 | Sombras `TwoSided` en los 6 prefabs de edificio | `m_CastShadows: 1` (On) en los seis |
 | B.3 | FBX de edificios importando rig y animación | `animationType: 0`, `importAnimation: 0` en los 41 FBX de `Models/Buildings` |
 | B.4 | 32 clips importados en `character-male-d.fbx` | `clipAnimations` reducido a los 5 que usa el `PlayerAnimator` |
@@ -91,7 +93,6 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 
 | Alcance | # | Hallazgo | Ganancia | Coste | ¿Merece la pena? |
 |---|---|---|---|---|---|
-| **B** | B.2 | Mallas ProBuilder embebidas en cada instancia | **Muy alta** | Media | Sí, pero **requiere tu decisión** |
 | **A** | A.2 | Combinar las marcas viales en una malla por material | Media | Media | Opcional, medir antes |
 | **A** | A.7 | Tick centralizado de `CarAgent` (`TrafficManager`) | Media | Media | Solo si se sube de ~100 coches |
 | **A** | A.13 | `ScriptableObject` de tuning de vehículos | Baja | Media | **No recomendado** |
@@ -170,28 +171,6 @@ qué esperar. Debería cubrir, como mínimo:
 ---
 
 ## B. Contenido de demo — no viaja con el paquete
-
-### B.2 Mallas ProBuilder embebidas en cada instancia — requiere decisión
-
-Los prefabs de suelo y props (`Floors/*`, `Props/Bench|Bin|Lamp`) conservan su
-componente `ProBuilderMesh`. Consecuencia: **cada instancia regenera su malla y la guarda
-como override local de la escena** en vez de compartir la del prefab. La `City.unity` actual
-(3×3, 398 instancias) pesa ~5 MB con **227 mallas `pb_Mesh*` embebidas**; la anterior 5×5
-llegaba a 9,74 MB con 833. Además esas mallas se marcan `m_IsReadable: 1`, así que mantienen
-una copia permanente en RAM de CPU además de la de GPU.
-
-No es un problema de una escena concreta: **cada ciudad generada reproduce el patrón**,
-porque el origen es cómo están autorados los prefabs, no la escena. Y afecta a la primera
-impresión de cualquiera que pruebe la tool con los assets de demo.
-
-**Propuesta**: cerrada la autoría de esa geometría, convertir los prefabs a mallas normales
-— extraer la malla a un asset en `Assets/Meshes/` (donde ya viven las 17 mallas extraídas),
-quitar el componente `ProBuilderMesh` y dejar `isReadable` a 0.
-
-**Ganancia**: muy alta en memoria y tiempo de carga, multiplicada por cada ciudad generada.
-**Coste**: medio (script de Editor). **Contrapartida real**: se pierde la edición con
-ProBuilder de esa geometría, y con ella la forma en que se autoró originalmente. **Requiere
-tu decisión explícita** antes de ejecutarse.
 
 ### B.6 Modelos no referenciados — sin acción
 
@@ -345,17 +324,13 @@ Con esos pasos el proyecto soportaría del orden de 500–1 000 coches por ciuda
 Queda poco, y lo que queda no es urgente. Por orden:
 
 **1 — A.18: README del paquete.** Coste bajo, y es lo único que hoy separa a
-`Assets/CityGenerator/` de ser distribuible. Hazlo primero aunque no sea el de mayor
-ganancia técnica.
+`Assets/CityGenerator/` de ser distribuible. Es ahora mismo el hallazgo pendiente de mayor
+prioridad.
 
-**2 — B.2: decidir sobre ProBuilder.** Es la única mejora grande que queda y depende de una
-decisión tuya, no de escribir código. Si la respuesta es sí, es un script de Editor de una
-tarde.
-
-**3 — A.2: medir antes de decidir.** Cuenta objetos y tiempo de carga en una ciudad 5×5 con
+**2 — A.2: medir antes de decidir.** Cuenta objetos y tiempo de carga en una ciudad 5×5 con
 A.1 ya aplicado. Solo si el recuento molesta, implementar la combinación de mallas.
 
-**4 — A.7 y F.4: solo si el plan es subir el tráfico.** Y en ese caso, empezar por la
+**3 — A.7 y F.4: solo si el plan es subir el tráfico.** Y en ese caso, empezar por la
 planificación de rutas (F.4.1), no por el rendimiento.
 
 **No hacer**: F (ECS/DOTS), `LODGroup` dentro de la tool (documentarlo como responsabilidad
@@ -370,9 +345,10 @@ Para cualquiera de los cambios pendientes, la comprobación mínima:
 - **Línea base con el Profiler**: capturar 300 frames en una ciudad generada antes y después.
   Mirar ms de CPU/GPU, `SetPass calls`, `Batches`, `GC Alloc`/frame, y memoria de mallas.
   Con `targetFrameRate` ya fijado a 60 por `PerformanceBootstrap`, la comparación es estable.
-- **B.2 en concreto**: el indicador directo es el tamaño de `City.unity` y el recuento de
-  `pb_Mesh` embebidos (`grep -c pb_Mesh Assets/Scenes/City.unity`, hoy 227). Debería caer a
-  cero. Verificar además que la geometría se ve idéntica y que los colliders siguen ahí.
+- **B.2 (resuelta, 2026-08-20)**: se verificó con el mismo indicador — `grep -c pb_Mesh
+  Assets/Scenes/City.unity` bajó de 227 a 0 tras regenerar la escena con "Re-Build City in
+  Current Scene". Comprobado visualmente que la geometría no cambió y que los colliders
+  siguen ahí.
 - **Cualquier cambio en la tool**: generar una ciudad nueva con `useCustomSeed` activado y la
   misma semilla antes y después. Si el cambio no pretendía alterar la colocación, la
   jerarquía resultante debe ser idéntica. Es la prueba de regresión más barata que tiene el
