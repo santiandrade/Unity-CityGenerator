@@ -26,8 +26,16 @@ namespace CityGenerator.Runtime
         [Tooltip("If enabled, the cycle starts by giving way to the north-south axis.")]
         [SerializeField] private bool startWithNorthSouth;
 
+        // Cached once instead of allocating a new WaitForSeconds every cycle, per intersection.
+        private WaitForSeconds greenWait;
+        private WaitForSeconds amberWait;
+        private WaitForSeconds allRedWait;
+
         private void Start()
         {
+            greenWait = new WaitForSeconds(greenDuration);
+            amberWait = new WaitForSeconds(amberDuration);
+            allRedWait = new WaitForSeconds(allRedDuration);
             StartCoroutine(RunCycle());
         }
 
@@ -50,13 +58,13 @@ namespace CityGenerator.Runtime
 
                 SetGroup(waiting, TrafficLightState.Red);
                 SetGroup(active, TrafficLightState.Green);
-                yield return new WaitForSeconds(greenDuration);
+                yield return greenWait;
 
                 SetGroup(active, TrafficLightState.Amber);
-                yield return new WaitForSeconds(amberDuration);
+                yield return amberWait;
 
                 SetGroup(active, TrafficLightState.Red);
-                yield return new WaitForSeconds(allRedDuration);
+                yield return allRedWait;
 
                 northSouthTurn = !northSouthTurn;
             }

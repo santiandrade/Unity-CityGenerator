@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
@@ -50,11 +51,18 @@ namespace CityGenerator.Runtime
         [Tooltip("Seconds a car keeps pushing through once it starts breaking a deadlock.")]
         [SerializeField] private float deadlockBreakDuration = 4f;
 
-        private readonly RaycastHit[] hits = new RaycastHit[8];
+        private readonly RaycastHit[] hits = new RaycastHit[16];
 
         // Own identifier for crossing reservations; 0 means "crossing free".
         private static int nextCarId = 1;
 
+        // Every vehicle prefab carries a single BoxCollider on its root, so looking up the
+        // CarAgent for a sensor hit by GetComponentInParent every frame, for every hit, for every
+        // car is needless hierarchy walking: register/deregister against the collider's instance
+        // ID instead. Reset on domain-reload-disabled Play sessions too (see ResetCarIdCounter).
+        private static readonly Dictionary<EntityId, CarAgent> ColliderRegistry = new();
+
+        private Collider ownCollider;
         private int targetNode = -1;
         private int reservedIntersection = -1;
         private int carId;
@@ -89,6 +97,28 @@ namespace CityGenerator.Runtime
         /// <summary>Seconds it has been continuously stopped for.</summary>
         public float StoppedTime => stoppedTime;
         public StopReason CurrentStopReason => stopReason;
+
+        // Counter reset for Play sessions with Domain Reload disabled, where a static field
+        // otherwise keeps growing across sessions and breaks the carId tie-break in IsDeadlockedWith.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetCarIdCounter()
+        {
+            nextCarId = 1;
+            ColliderRegistry.Clear();
+        }
+
+        private void OnEnable()
+        {
+            ownCollider = GetComponent<Collider>();
+            if (ownCollider != null)
+                ColliderRegistry[ownCollider.GetEntityId()] = this;
+        }
+
+        private void OnDisable()
+        {
+            if (ownCollider != null)
+                ColliderRegistry.Remove(ownCollider.GetEntityId());
+        }
 
         private void Start()
         {
@@ -156,6 +186,7 @@ namespace CityGenerator.Runtime
             // Steering runs even while stopped, on purpose: a car waiting at a crossing lines
             // itself up with the exit it picked, so when it pulls away it tracks its own lane
             // instead of swinging wide through the middle of the crossing and into oncoming traffic.
+            Quaternion rotation = transform.rotation;
             if (distance > 0.05f)
             {
                 Vector3 desired = toTarget / distance;
@@ -165,7 +196,7 @@ namespace CityGenerator.Runtime
                     targetSpeed = Mathf.Min(targetSpeed, maxSpeed * cornerSpeedFactor);
                 }
 
-                transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                rotation = Quaternion.RotateTowards(transform.rotation,
                     Quaternion.LookRotation(desired, Vector3.up), turnSpeed * Time.deltaTime);
             }
 
@@ -181,9 +212,11 @@ namespace CityGenerator.Runtime
             distanceTravelled += step;
             stoppedTime = speed < 0.3f ? stoppedTime + Time.deltaTime : 0f;
 
-            Vector3 position = transform.position + transform.forward * step;
+            // Uses the just-computed rotation's forward, not transform.forward: matches the
+            // original behaviour where rotation was applied before this was read.
+            Vector3 position = transform.position + (rotation * Vector3.forward) * step;
             position.y = 0f;
-            transform.position = position;
+            transform.SetPositionAndRotation(position, rotation);
 
             if (distance < arriveRadius)
             {
@@ -247,14 +280,18 @@ namespace CityGenerator.Runtime
             int count = Physics.SphereCastNonAlloc(origin, sensorRadius, transform.forward, hits,
                 sensorRange, vehicleMask, QueryTriggerInteraction.Ignore);
 
+            if (count == hits.Length)
+            {
+                Debug.LogWarning($"{name}: forward sensor hit its {hits.Length}-collider limit; the closest vehicle may be missing from this frame's results.", this);
+            }
+
             float clearance = float.MaxValue;
             for (int i = 0; i < count; i++)
             {
                 // Discarded by identity, never by distance: a zero-distance hit is
                 // the car's own collider, but also the car already bumper-to-bumper ahead, and
                 // filtering by distance made it invisible and drove into it.
-                CarAgent other = hits[i].collider.GetComponentInParent<CarAgent>();
-                if (other == null || other == this)
+                if (!ColliderRegistry.TryGetValue(hits[i].collider.GetEntityId(), out CarAgent other) || other == this)
                 {
                     continue;
                 }

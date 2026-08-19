@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CityGenerator.Runtime;
+using UnityEditor;
 using UnityEngine;
 
 namespace CityGenerator.Editor
@@ -39,6 +40,12 @@ namespace CityGenerator.Editor
     /// </summary>
     internal static class CityGeneratorContentAssembler
     {
+        // Batching Static lets Unity combine every instance in a group into a handful of draw
+        // calls; Occluder/Occludee Static are what an occlusion culling bake needs. Vehicles are
+        // the only group excluded — CarAgent moves them by transform every frame.
+        private static readonly StaticEditorFlags MarkedStaticFlags =
+            StaticEditorFlags.BatchingStatic | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic;
+
         public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
         {
             var random = settings.general.useCustomSeed
@@ -66,22 +73,24 @@ namespace CityGenerator.Editor
             CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
 
             List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random);
-            List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, out List<GameObject> plazaLawns);
 
-            // Street furniture avoids buildings/plaza content, the plaza lawns, and each other
-            // via one shared, growing obstacle list threaded through every category in turn.
+            // Street furniture avoids buildings/plaza content, the plaza lawns, and each other via
+            // one shared, growing obstacle list threaded through every category in turn; the cache
+            // measures each object's overlap rect once (instead of on every future comparison) and
+            // reuses one probe instance per prefab to test rejected candidates without an
+            // Instantiate/DestroyImmediate pair each time.
+            var cache = new ObstacleCache();
             var obstacles = new List<GameObject>(builtBuildings);
+
+            List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, cache, out List<GameObject> plazaLawns);
             obstacles.AddRange(plazaSolids);
             obstacles.AddRange(plazaLawns);
 
-            List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, streetLights, blocks, obstacles);
-            obstacles.AddRange(lamps);
-            List<GameObject> busStops = CityGeneratorStreetPropsBuilder.BuildBusStops(settings.props.busStopPrefab, settings.props.busStopDensity, props, blocks, random, obstacles);
-            obstacles.AddRange(busStops);
-            List<GameObject> bins = CityGeneratorStreetPropsBuilder.BuildBins(settings.props.binPrefab, settings.props.binDensity, props, blocks, random, obstacles);
-            obstacles.AddRange(bins);
-            List<GameObject> streetTrees = CityGeneratorStreetPropsBuilder.BuildStreetVegetation(settings.vegetation, trees, blocks, random, obstacles);
-            obstacles.AddRange(streetTrees);
+            List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, settings.props.lampDensity, streetLights, blocks, random, obstacles, cache);
+            List<GameObject> busStops = CityGeneratorStreetPropsBuilder.BuildBusStops(settings.props.busStopPrefab, settings.props.busStopDensity, props, blocks, random, obstacles, cache);
+            List<GameObject> bins = CityGeneratorStreetPropsBuilder.BuildBins(settings.props.binPrefab, settings.props.binDensity, props, blocks, random, obstacles, cache);
+            List<GameObject> streetTrees = CityGeneratorStreetPropsBuilder.BuildStreetVegetation(settings.vegetation, trees, blocks, random, obstacles, cache);
+            cache.DestroyRemainingProbes();
 
             // The traffic network and its lights are always generated (every 4-way intersection
             // stays regulated), even when traffic itself is switched off.
@@ -92,6 +101,19 @@ namespace CityGenerator.Editor
             List<GameObject> vehicleInstances = new();
             if (settings.general.includeTraffic)
                 vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random);
+
+            // Every group except Vehicles is 100% static geometry once generated: marking it
+            // unlocks static batching and is a prerequisite for baking occlusion culling / the GPU
+            // Resident Drawer (see the technical review, A.1/C.3).
+            MarkStatic(roads);
+            MarkStatic(sidewalks);
+            MarkStatic(roadMarkings);
+            MarkStatic(buildings);
+            MarkStatic(plaza);
+            MarkStatic(trees);
+            MarkStatic(streetLights);
+            MarkStatic(props);
+            MarkStatic(trafficLights);
 
             return new CityBuildSummary(
                 blocks.Count, builtBuildings.Count, plazaSolids.Count,
@@ -108,6 +130,12 @@ namespace CityGenerator.Editor
             var group = new GameObject(name).transform;
             group.SetParent(parent);
             return group;
+        }
+
+        private static void MarkStatic(Transform group)
+        {
+            foreach (Transform child in group.GetComponentsInChildren<Transform>(true))
+                GameObjectUtility.SetStaticEditorFlags(child.gameObject, MarkedStaticFlags);
         }
     }
 }

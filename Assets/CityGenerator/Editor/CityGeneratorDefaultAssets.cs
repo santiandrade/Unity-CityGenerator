@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace CityGenerator.Editor
 {
@@ -17,6 +18,7 @@ namespace CityGenerator.Editor
         public static void ApplyTo(CityGeneratorSettings settings)
         {
             settings.general.playerPrefab = Load("Assets/Prefabs/Characters/Player.prefab");
+            settings.general.inputActions = AssetDatabase.LoadAssetAtPath<InputActionAsset>("Assets/InputSystem_Actions.inputactions");
 
             settings.ground.roadBasePrefab = Load("Assets/Prefabs/Floors/RoadBase.prefab");
             settings.ground.sidewalkPrefab = Load("Assets/Prefabs/Floors/RoadSidewalk.prefab");

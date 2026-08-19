@@ -1,9 +1,7 @@
-using System.IO;
 using CityGenerator.Runtime;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 namespace CityGenerator.Editor
@@ -16,7 +14,6 @@ namespace CityGenerator.Editor
     internal static class CityGeneratorSceneBuilder
     {
         private const string ScenesFolder = "Assets/Scenes";
-        private const string InputActionsAssetPath = "Assets/InputSystem_Actions.inputactions";
 
         public static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings)
         {
@@ -37,7 +34,7 @@ namespace CityGenerator.Editor
                     player.name = "Player";
                 }
 
-                CreateMainCamera(scene, player);
+                CreateMainCamera(scene, player, settings.general.inputActions);
 
                 string scenePath = GetNextFreeScenePath();
                 EditorSceneManager.SaveScene(scene, scenePath);
@@ -87,7 +84,7 @@ namespace CityGenerator.Editor
             light.shadows = LightShadows.Soft;
         }
 
-        private static void CreateMainCamera(Scene scene, GameObject player)
+        private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions)
         {
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
             SceneManager.MoveGameObjectToScene(cameraGO, scene);
@@ -99,7 +96,7 @@ namespace CityGenerator.Editor
             var thirdPersonCamera = cameraGO.AddComponent<ThirdPersonCamera>();
 
             var cameraSerialized = new SerializedObject(thirdPersonCamera);
-            cameraSerialized.FindProperty("inputActions").objectReferenceValue = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsAssetPath);
+            cameraSerialized.FindProperty("inputActions").objectReferenceValue = inputActions;
             if (player != null)
                 cameraSerialized.FindProperty("target").objectReferenceValue = player.transform;
             cameraSerialized.ApplyModifiedPropertiesWithoutUndo();
@@ -116,6 +113,10 @@ namespace CityGenerator.Editor
             playerSerialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        // AssetDatabase.GenerateUniqueAssetPath would suffix collisions as "City 1.unity" (with a
+        // space), breaking the documented City<N> naming convention — so the free slot is still
+        // found by trying City1.unity, City2.unity, ... in order, just via the AssetDatabase
+        // (aware of pending imports) instead of a raw File.Exists on a relative path.
         private static string GetNextFreeScenePath()
         {
             if (!AssetDatabase.IsValidFolder(ScenesFolder))
@@ -127,7 +128,7 @@ namespace CityGenerator.Editor
             {
                 path = $"{ScenesFolder}/City{n}.unity";
                 n++;
-            } while (File.Exists(path));
+            } while (AssetDatabase.LoadAssetAtPath<SceneAsset>(path) != null);
 
             return path;
         }
