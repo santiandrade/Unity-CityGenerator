@@ -529,6 +529,27 @@ sin el ahorro de shadow pass que si tuvieran lightmap. Arreglarlo de raíz exigi
 UV2 de esos 6 FBX (`ModelImporter.generateSecondaryUV` o re-exportar el modelo), fuera del
 alcance de esta sesión.
 
+**Revertido (2026-08-19)**: el usuario tiene planeado un ciclo día/noche con el sol moviéndose
+en tiempo real. `Mixed` + `Shadowmask` asume una posición de sol fija en el momento del bake:
+las sombras directas seguirían siendo en tiempo real, pero la luz indirecta horneada (los
+lightmaps) quedaría congelada con el ángulo/color del sol del bake — al mover el sol, el
+ambiente general dejaría de coincidir con la dirección de la luz directa, error visual notorio
+sobre todo a amanecer/atardecer/noche. Revertido antes de que nadie construya sobre esta base:
+`Directional Light.lightmapBakeType` vuelto a `Realtime` (`Lightmapping.ClearLightingDataAsset()`
++ `Lightmapping.Clear()`, que al guardar la escena limpió también los ficheros de
+`Assets/Scenes/City/` — `LightingData.asset` y los `Lightmap-*.exr/png`). El flag
+`Contribute GI` se quitó de los 948 objetos marcados (ya no hace nada sin bake), dejando
+`Batching Static | Occluder Static | Occludee Static` intactos — A.1, C.3 y D.2 no dependen de
+la posición del sol y siguen aplicando sin cambios. `OcclusionCullingData.asset` se conservó.
+
+Si más adelante se quiere GI horneada compatible con un sol dinámico, las opciones son (a)
+varios bakes por franja horaria intercambiados según la hora, más simple pero multiplica el
+peso en disco por franja, o (b) Adaptive Probe Volumes con Scenario Blending (URP 17, ya
+instalado), pensado justo para interpolar entre escenarios de iluminación horneados en tiempo
+real — más trabajo de configuración pero es la solución "correcta" si la luz en tiempo real se
+queda corta visualmente. Verificado: suelo con iluminación en tiempo real correcta (sin negros),
+sin errores en consola, Play mode limpio.
+
 ### D.2 Sin datos de occlusion culling horneados
 
 `m_OcclusionCullingData: {fileID: 0}` — no hay bake, pese a que la cámara tiene
