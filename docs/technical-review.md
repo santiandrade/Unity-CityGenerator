@@ -677,6 +677,33 @@ matriz de colisiones), A.13 (`ScriptableObject` de tuning), E (object pooling).
    `Batches`, `SetPass calls` y tiempo de GPU. Comprobar visualmente que las sombras no se
    cortan desde la cámara del jugador a ras de suelo, y que la ciudad se ve igual tras
    apagar `_CameraOpaqueTexture`.
+
+   **Hecho (2026-08-19)** — C.1 y C.2 aplicados en `Assets/Settings/PC_RPAsset.asset` vía
+   `SerializedObject` (no a mano): `m_MainLightShadowmapResolution` 8192→2048,
+   `m_ShadowCascadeCount` 4→2, `m_ShadowDistance` 150→70, `m_SoftShadowQuality` 3→1,
+   `m_RequireOpaqueTexture` 1→0 (`m_RequireDepthTexture` se deja en 1, sigue siendo
+   necesario para SSAO). `QualitySettings.asset` (nivel `PC`) alineado: `shadowDistance`
+   40→70 (`shadowCascades` ya estaba en 2). Unity reserializó de paso ambos niveles de
+   calidad a `serializedVersion: 5` y añadió campos nuevos por defecto (`meshLodThreshold`,
+   plataforma `Nintendo Switch 2`) — efecto secundario inocuo de la versión del Editor, sin
+   relación con estos cambios.
+
+   Recaptura del Profiler (mismo procedimiento que la línea base, ~270 frames en Play mode):
+
+   | Métrica | Antes (línea base) | Después de C.1/C.2 |
+   |---|---|---|
+   | Frames por encima de 16,67 ms | 46,8–50,9 % | 49,8 % |
+   | CPU máx. / GPU en ese frame | 71,77–77,12 ms / 37,21–40,37 ms | 64,95 ms / **33,82 ms** |
+   | CPU mediana / GPU en ese frame | 16,61–16,68 ms / 8,61–13,62 ms | 16,67 ms / 13,95 ms |
+   | `SetPass Calls Count` | mediana 54 | mediana 54 (sin cambio, esperado — batching es A.1/C.3) |
+   | `Triangles Count` | mediana ~180k–217k | mediana ~200k |
+
+   Coherente con lo previsto: el pico de GPU baja (menos trabajo por objeto en el shadow
+   pass y en la copia de color eliminada), pero `SetPass Calls` no se mueve porque el cuello
+   de botella de recuento de draw calls solo lo resuelve el static batching de A.1 /
+   GPU Resident Drawer de C.3, pendientes en la Fase 2. Verificación visual con
+   `Unity_SceneView_CaptureMultiAngleSceneView`: la ciudad se ve igual que antes, sin
+   geometría ni sombras rotas.
 3. **Tras la Fase 2 (grupo A)** — dejar el tráfico 5 minutos y comprobar con
    `CarAgent.CurrentStopReason` / `StoppedTime` / `DistanceTravelled` que no aparecen
    atascos permanentes. `GC Alloc` por frame debe quedar en 0 en régimen estacionario.
