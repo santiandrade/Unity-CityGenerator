@@ -5,7 +5,7 @@ using UnityEngine;
 namespace CityGenerator.Editor
 {
     /// <summary>
-    /// Places street-level furniture (lamps, bus stops, bins) and street vegetation on every
+    /// Places street-level furniture (lamps, bins) and street vegetation on every
     /// block's sidewalk via the shared density placement engine. Callers thread the same
     /// obstacles list and <see cref="ObstacleCache"/> through each category so later categories
     /// avoid overlapping earlier ones.
@@ -16,12 +16,6 @@ namespace CityGenerator.Editor
         {
             return PlacePerBlock(lampPrefab, density, group, blocks, random, obstacles, cache, "Lamp",
                 block => CityGeneratorStreetCandidates.LampCandidates(block.center));
-        }
-
-        public static List<GameObject> BuildBusStops(GameObject busStopPrefab, float density, Transform group, IReadOnlyList<BlockCell> blocks, System.Random random, List<GameObject> obstacles, ObstacleCache cache)
-        {
-            return PlacePerBlock(busStopPrefab, density, group, blocks, random, obstacles, cache, "BusStop",
-                block => CityGeneratorStreetCandidates.EdgeCandidates(block.center, 1));
         }
 
         public static List<GameObject> BuildBins(GameObject binPrefab, float density, Transform group, IReadOnlyList<BlockCell> blocks, System.Random random, List<GameObject> obstacles, ObstacleCache cache)

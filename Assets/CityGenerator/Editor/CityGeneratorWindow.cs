@@ -252,8 +252,6 @@ namespace CityGenerator.Editor
             DrawRequiredField(FindProperty("props.trafficLightPrefab"), "Traffic Light Prefab (if Include Traffic)", isRequired: FindProperty("general.includeTraffic").boolValue);
             EditorGUILayout.PropertyField(FindProperty("props.lampPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.lampDensity"));
-            EditorGUILayout.PropertyField(FindProperty("props.busStopPrefab"));
-            EditorGUILayout.PropertyField(FindProperty("props.busStopDensity"));
             EditorGUILayout.PropertyField(FindProperty("props.binPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.binDensity"));
             EditorGUILayout.Space(8f);
@@ -351,12 +349,12 @@ namespace CityGenerator.Editor
 
         private static void LogSummary(string scenePath, CityBuildSummary summary)
         {
-            int propsTotal = summary.lampCount + summary.busStopCount + summary.binCount;
+            int propsTotal = summary.lampCount + summary.binCount;
             int vegetationTotal = summary.plazaSolidCount + summary.streetTreeCount;
 
             Debug.Log(
                 $"[City Generator] Built '{scenePath}': {summary.blockCount} blocks, {summary.buildingCount} buildings, " +
-                $"{propsTotal} props (lamps {summary.lampCount}, bus stops {summary.busStopCount}, bins {summary.binCount}), " +
+                $"{propsTotal} props (lamps {summary.lampCount}, bins {summary.binCount}), " +
                 $"{vegetationTotal} vegetation instances, {summary.trafficLightCount} traffic lights, {summary.vehicleCount} vehicles.");
         }
     }

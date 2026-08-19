@@ -12,19 +12,17 @@ namespace CityGenerator.Editor
         public readonly int buildingCount;
         public readonly int plazaSolidCount;
         public readonly int lampCount;
-        public readonly int busStopCount;
         public readonly int binCount;
         public readonly int streetTreeCount;
         public readonly int trafficLightCount;
         public readonly int vehicleCount;
 
-        public CityBuildSummary(int blockCount, int buildingCount, int plazaSolidCount, int lampCount, int busStopCount, int binCount, int streetTreeCount, int trafficLightCount, int vehicleCount)
+        public CityBuildSummary(int blockCount, int buildingCount, int plazaSolidCount, int lampCount, int binCount, int streetTreeCount, int trafficLightCount, int vehicleCount)
         {
             this.blockCount = blockCount;
             this.buildingCount = buildingCount;
             this.plazaSolidCount = plazaSolidCount;
             this.lampCount = lampCount;
-            this.busStopCount = busStopCount;
             this.binCount = binCount;
             this.streetTreeCount = streetTreeCount;
             this.trafficLightCount = trafficLightCount;
@@ -87,7 +85,6 @@ namespace CityGenerator.Editor
             obstacles.AddRange(plazaLawns);
 
             List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, settings.props.lampDensity, streetLights, blocks, random, obstacles, cache);
-            List<GameObject> busStops = CityGeneratorStreetPropsBuilder.BuildBusStops(settings.props.busStopPrefab, settings.props.busStopDensity, props, blocks, random, obstacles, cache);
             List<GameObject> bins = CityGeneratorStreetPropsBuilder.BuildBins(settings.props.binPrefab, settings.props.binDensity, props, blocks, random, obstacles, cache);
             List<GameObject> streetTrees = CityGeneratorStreetPropsBuilder.BuildStreetVegetation(settings.vegetation, trees, blocks, random, obstacles, cache);
             cache.DestroyRemainingProbes();
@@ -117,7 +114,7 @@ namespace CityGenerator.Editor
 
             return new CityBuildSummary(
                 blocks.Count, builtBuildings.Count, plazaSolids.Count,
-                lamps.Count, busStops.Count, bins.Count, streetTrees.Count,
+                lamps.Count, bins.Count, streetTrees.Count,
                 trafficLightInstances.Count, vehicleInstances.Count);
         }
 

@@ -5,7 +5,7 @@ namespace CityGenerator.Editor
 {
     /// <summary>
     /// Generates candidate placement points on a block's sidewalk: along its 4 edges (facing
-    /// outward toward the street, for lamps/bus stops/street vegetation) and near its 4
+    /// outward toward the street, for lamps/street vegetation) and near its 4
     /// corners (for bins). All points stay in the peripheral ring outside the building slot area.
     /// </summary>
     internal static class CityGeneratorStreetCandidates

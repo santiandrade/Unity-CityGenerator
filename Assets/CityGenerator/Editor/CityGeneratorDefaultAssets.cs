@@ -54,7 +54,6 @@ namespace CityGenerator.Editor
 
             settings.props.trafficLightPrefab = Load("Assets/Prefabs/Props/TrafficLight.prefab");
             settings.props.lampPrefab = Load("Assets/Prefabs/Props/Lamp.prefab");
-            settings.props.busStopPrefab = Load("Assets/Prefabs/Props/BusStop.prefab");
             settings.props.binPrefab = Load("Assets/Prefabs/Props/Bin.prefab");
         }
 

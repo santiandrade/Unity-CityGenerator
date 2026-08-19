@@ -25,7 +25,7 @@ de este informe tenía un grupo D dedicado a ese trabajo por escena; se ha elimi
 notas correspondientes pertenecen ahora al README del paquete, no aquí.
 
 Revisado: los 23 scripts de `Assets/CityGenerator/`, `ProjectSettings/*`,
-`Assets/Settings/*` (URP), los 23 prefabs de demo, los 14 materiales, `City.unity` y
+`Assets/Settings/*` (URP), los 22 prefabs de demo, los 14 materiales, `City.unity` y
 `Packages/manifest.json`.
 
 **Conclusión de una línea**: la mayor parte de lo detectado en la revisión inicial ya está
@@ -64,7 +64,7 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | # | Hallazgo | Cómo quedó |
 |---|---|---|
 | A.1 | Sin static flags: cero batching, occlusion imposible | `CityGeneratorContentAssembler.MarkStatic` aplica `Batching\|Occluder\|Occludee Static` a todos los grupos **menos `Vehicles`** (los mueve `CarAgent` por transform). Automático en cada generación |
-| A.3 | Farolas con densidad fija de 3 por lado | `props.lampDensity` en `CityGeneratorSettings`, mismo patrón que `busStopDensity`/`binDensity` |
+| A.3 | Farolas con densidad fija de 3 por lado | `props.lampDensity` en `CityGeneratorSettings`, mismo patrón que `binDensity` |
 | A.4 | `SphereCast` leyendo posiciones de física obsoletas | `TrafficNetwork` llama a `Physics.SyncTransforms()` una vez por frame tras mover los agentes, con el porqué comentado en el sitio |
 | A.5 | `GetComponentInParent` por impacto y por frame | Registro estático `ColliderRegistry` indexado por `GetEntityId()` del collider |
 | A.6 | Array de 8 impactos sin ordenar | Subido a 16 en `CarAgent.hits` y en `ThirdPersonCamera.collisionHits` |
@@ -77,6 +77,7 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | A.15 | Copias de la lista de obstáculos por llamada | La lista compartida se pasa y se amplía in situ; el motor añade directamente |
 | A.16 | `DestroyImmediate` por candidato rechazado | `ObstacleCache.BorrowProbe`: una instancia "sonda" reutilizable por prefab, reposicionada en cada candidato, más `DestroyRemainingProbes` al final del run |
 | A.17 | `File.Exists` con ruta relativa | `GetNextFreeScenePath` usa `AssetDatabase`; se documenta por qué **no** se usa `GenerateUniqueAssetPath` (rompería el nombrado `City<N>` con un sufijo con espacio) |
+| A.19 | Paradas de autobús — bug encontrado y luego la categoría entera retirada (2026-08-20) | Primero se detectó y corrigió que nunca se colocaba ninguna: `CityGeneratorStreetCandidates.AddSide`, con `pointsPerSide == 1` (solo lo usaba `BuildBusStops`), ponía el candidato en `t=0`, la misma coordenada que el punto central de las 3 farolas por lado, siempre ocupado con `lampDensity=1`, así que el solape lo descartaba siempre en los 8 bloques no-plaza. Verificado en el Editor tras desplazarlo a `t=0.35`: 8 instancias, una por bloque. Poco después, **decisión del usuario** (sin más motivo dado): retirar la categoría entera en vez de mantenerla arreglada — `busStopPrefab`/`busStopDensity`, `BuildBusStops`, el prefab `Props/BusStop.prefab` y sus 4 mallas extraídas, todo fuera. Detalle en `specs/01-city-generator-tool.md` |
 | B.1 | Sombras `TwoSided` en los 6 prefabs de edificio | `m_CastShadows: 1` (On) en los seis |
 | B.3 | FBX de edificios importando rig y animación | `animationType: 0`, `importAnimation: 0` en los 41 FBX de `Models/Buildings` |
 | B.4 | 32 clips importados en `character-male-d.fbx` | `clipAnimations` reducido a los 5 que usa el `PlayerAnimator` |
@@ -172,7 +173,7 @@ qué esperar. Debería cubrir, como mínimo:
 
 ### B.2 Mallas ProBuilder embebidas en cada instancia — requiere decisión
 
-Los prefabs de suelo y props (`Floors/*`, `Props/Bench|Bin|BusStop|Lamp`) conservan su
+Los prefabs de suelo y props (`Floors/*`, `Props/Bench|Bin|Lamp`) conservan su
 componente `ProBuilderMesh`. Consecuencia: **cada instancia regenera su malla y la guarda
 como override local de la escena** en vez de compartir la del prefab. La `City.unity` actual
 (3×3, 398 instancias) pesa ~5 MB con **227 mallas `pb_Mesh*` embebidas**; la anterior 5×5

@@ -69,8 +69,6 @@ namespace CityGenerator.Editor
         public GameObject trafficLightPrefab; // required if includeTraffic
         public GameObject lampPrefab; // optional
         [Range(0f, 1f)] public float lampDensity = 1f; // 1 = every candidate point along the sidewalk (3 per side)
-        public GameObject busStopPrefab;
-        [Range(0f, 1f)] public float busStopDensity = 0.3f;
         public GameObject binPrefab;
         [Range(0f, 1f)] public float binDensity = 0.3f;
     }
