@@ -493,6 +493,42 @@ la que quieras esta mejora.
 generador **no debe** hornear nada automáticamente — solo dejar la geometría marcada como
 static (A.1) para que tú decidas cuándo hornear cada ciudad.
 
+**Hecho (2026-08-19)**, aplicado directamente sobre `City.unity`. Como esta escena nunca se
+generó con la tool, A.1 no la había tocado (`City.unity` es la ciudad de referencia hecha a
+mano, no una salida del generador) — así que antes de hornear marqué los mismos 9 grupos que
+usa `CityGeneratorContentAssembler.MarkStatic` (`Roads`, `Sidewalks`, `RoadMarkings`,
+`Buildings`, `Plaza`, `Trees`, `StreetLights`, `Props`, `TrafficLights`; excluido `Vehicles`),
+948 objetos, añadiendo también `Contribute GI` (necesario para el bake de lightmaps, y
+deliberadamente fuera de A.1 — ver la nota de esa sección: static batching/occlusion es
+responsabilidad de la tool, lightmapping es una decisión por escena). Luz a `Mixed`,
+`Lightmapping.BakeAsync()` con GPU Progressive (512 samples, 2 bounces, ya configurado):
+19 lightmaps con shadowmask.
+
+**Bug real encontrado y corregido durante el bake**: la primera pasada dejó **todo el suelo
+en negro** (calzada, aceras, marcas viales, mobiliario urbano — cualquier malla ProBuilder
+migrada en B.2/B.5). Causa: esas mallas se generan a partir de `ProBuilderMesh` y nunca han
+tenido un segundo canal UV (de lightmap); al marcarlas `Contribute GI` sin UV2 válido, el
+lightmapper las incluye en el bake con un UV2 degenerado en vez de excluirlas con fallback a
+iluminación en tiempo real (la propia consola avisaba: *"227 ProBuilder meshes included in
+lightmap bake with missing UV2"*). Arreglo: como las mallas horneadas de B.2/B.5 ya estaban
+`isReadable: 0` (no se pueden reprocesar), descarté esos 9 prefabs con `git checkout` —
+cambios sin commitear de esta misma sesión, confirmado con el usuario antes de descartarlos —
+y repetí la migración añadiendo `UnityEditor.Unwrapping.GenerateSecondaryUVSet(mesh)` antes de
+`CreateAsset`/`UploadMeshData(true)`. Repetidos también los `RevertPropertyOverride` sobre
+`City.unity` (las mallas nuevas tienen GUID distinto) y el bake completo. Resultado: aviso de
+UV2 desaparecido, suelo con sombreado e iluminación indirecta correctos.
+
+**Limitación conocida, no arreglada**: los 6 FBX de edificio (`building-a`, `-f`, `-i`, `-m`,
+`-skyscraper-c`, `-skyscraper-e`) tienen su propio problema de UV2 —
+*"Invalid Mesh was removed from light baking input: Every triangle in the Mesh UV layout has
+zero area"* — un fallo real de sus UV importados, anterior a esta sesión y sin relación con
+B.2/B.5 (son mallas FBX, no ProBuilder). Sus 32 instancias en `City.unity` quedaron excluidas
+del bake: siguen recibiendo luz/sombra en tiempo real de la `Directional Light`, simplemente
+no contribuyen a ni reciben GI horneada — visualmente correcto (se ven iguales que antes), solo
+sin el ahorro de shadow pass que si tuvieran lightmap. Arreglarlo de raíz exigiría regenerar el
+UV2 de esos 6 FBX (`ModelImporter.generateSecondaryUV` o re-exportar el modelo), fuera del
+alcance de esta sesión.
+
 ### D.2 Sin datos de occlusion culling horneados
 
 `m_OcclusionCullingData: {fileID: 0}` — no hay bake, pese a que la cámara tiene
@@ -503,6 +539,13 @@ A.1.
 
 **Ganancia**: alta en ciudades con edificios que se ocluyen entre sí. **Coste**: bajo — un
 botón, pero por escena.
+
+**Hecho (2026-08-19)** — `StaticOcclusionCulling.GenerateInBackground()` sobre `City.unity`
+(mismos 948 objetos ya marcados `Occluder Static`/`Occludee Static` para D.1). Generó
+`Assets/Scenes/City/OcclusionCullingData.asset`; `m_OcclusionCullingData` en la escena ya no
+es `{fileID: 0}`. Repetido tras el arreglo del bug de D.1 (la geometría cambió al regenerar
+las mallas). Sin errores en consola. Verificación visual (Scene View, detectó el suelo negro en el
+primer intento) y un pase de Play mode tras el arreglo, sin errores ni warnings.
 
 ---
 
@@ -704,6 +747,39 @@ matriz de colisiones), A.13 (`ScriptableObject` de tuning), E (object pooling).
    GPU Resident Drawer de C.3, pendientes en la Fase 2. Verificación visual con
    `Unity_SceneView_CaptureMultiAngleSceneView`: la ciudad se ve igual que antes, sin
    geometría ni sombras rotas.
+
+   **C.3, hecho (2026-08-19), después de A.1** — con la Fase 2 ya completada (A.1 marca
+   9 grupos como static), se activó `m_GPUResidentDrawerMode` = `InstancedDrawing` (valor 1)
+   en **ambos** `Assets/Settings/PC_RPAsset.asset` y `Mobile_RPAsset.asset` vía
+   `SerializedObject`, tal como pedía el hallazgo ("en ambos URP Assets"). Al activarlo, la
+   consola avisó de un requisito adicional no mencionado explícitamente en el informe:
+   `GraphicsSettings.m_BrgStripping` (Edit > Project Settings > Graphics > "BatchRendererGroup
+   Variants") debía pasar de `Strip if Entities Graphics Package is not installed` a
+   `Keep All`, si no los shaders de instancing GPU se eliminarían en una build real aunque
+   funcionen bien en el Editor — corregido también, en `ProjectSettings/GraphicsSettings.asset`.
+
+   Medido generando una ciudad 3×3 de prueba con seed fijo (mismo procedimiento que la
+   verificación de la Fase 2) y perfilando en Play mode:
+
+   | Métrica | Antes (línea base, sin A.1/C.3) | Después de A.1 + C.3 |
+   |---|---|---|
+   | Frames por encima de 16,67 ms | 46,8–50,9 % | 48,6 % |
+   | CPU máx. / GPU en ese frame | 71,77–77,12 ms / 37,21–40,37 ms | **18,04 ms** / **14,49 ms** |
+   | CPU mediana / GPU en ese frame | 16,61–16,68 ms / 8,61–13,62 ms | 16,66 ms / 13,75 ms |
+   | `SetPass Calls Count` | mediana 54 | **mediana 22** |
+   | `Triangles Count` | mediana ~180k–217k | mediana ~157k |
+
+   El pico de CPU/GPU cae drásticamente (de ~75/38 ms a ~18/14 ms) y `SetPass Calls` baja a
+   menos de la mitad, confirmando que el cuello de botella de draw calls sí lo resuelve el
+   batching (A.1 + C.3 juntos), no las sombras por sí solas. La comparación no es
+   perfectamente controlada (la línea base se midió sobre `City.unity`, la ciudad de
+   referencia hecha a mano; esta captura es sobre una ciudad 3×3 generada por la tool con la
+   misma posición de cámara hardcodeada), pero la cámara y el tamaño de rejilla son
+   equivalentes y la magnitud del cambio es demasiado grande para explicarse por esa
+   diferencia. Aún queda un ~49 % de frames por encima de 16,67 ms — coherente con que el
+   frame más lento capturado (18 ms) está justo por encima del objetivo, no con un problema
+   nuevo. Verificación visual: sin glitches de geometría ni de sombreado tras activar el
+   batching.
 3. **Tras la Fase 2 (grupo A)** — dejar el tráfico 5 minutos y comprobar con
    `CarAgent.CurrentStopReason` / `StoppedTime` / `DistanceTravelled` que no aparecen
    atascos permanentes. `GC Alloc` por frame debe quedar en 0 en régimen estacionario.
@@ -798,5 +874,78 @@ matriz de colisiones), A.13 (`ScriptableObject` de tuning), E (object pooling).
 4. **Tras la Fase 3 (grupo B)** — comparar tamaño de `City.unity` en disco, tiempo de carga
    de escena y memoria de mallas en el Memory Profiler tras B.2; verificar que ninguna
    instancia perdió su malla.
+
+   **Hecho (2026-08-19)** — Grupo B completo: B.1, B.2, B.3, B.4 y B.5.
+
+   - **B.1** — `m_CastShadows` 2 (TwoSided) → 1 (On) en el único `MeshRenderer` de cada uno de
+     los 6 prefabs de `Assets/Prefabs/Buildings/`, vía `PrefabUtility.LoadPrefabContents` /
+     `SaveAsPrefabAsset`. Cada edificio es en realidad una variante sobre una instancia del
+     modelo FBX importado (el override vive sobre el `target` del propio modelo), no un
+     prefab plano — el patrón de carga/guardado funciona igual.
+   - **B.3** — `animationType: None`, `importAnimation: false` en los 41 FBX de
+     `Assets/Models/Buildings/` (no solo los 6 usados por los prefabs actuales: toda la
+     carpeta es geometría estática sin huesos). Sin errores tras reimportar; ciudad
+     verificada visualmente sin cambios.
+   - **B.4** — Antes de tocar `character-male-d.fbx` rastreé las transiciones reales de
+     `PlayerAnimator.controller` (no me fié del "6" del hallazgo): el `Base Layer` tiene 30
+     `AnimatorState` — uno por cada clip salvo el blend tree —, pero **solo 5 son alcanzables**
+     desde `Entry`: `Locomotion` (blend de `idle`/`walk`/`sprint`) con transiciones a `Jump`
+     (clip `jump`) y `Fall` (clip `fall`). Los otros 25 (incluidos `crouch` y `static`, que
+     `CLAUDE.md` documentaba como parte de un grupo de "6 con loop activado") son estados sin
+     transición de entrada — huérfanos, nunca alcanzables en juego. `clipAnimations` se
+     recortó a esos 5 (`idle`, `walk`, `sprint`, `jump`, `fall`), no 6; los ~25 `AnimatorState`
+     huérfanos quedan con `m_Motion` apuntando a un clip que ya no existe, inofensivo porque
+     nunca se entra en ellos. Verificado en Play mode: el personaje anda, esprinta y salta sin
+     errores en consola.
+   - **B.2** — Migrados a mallas compartidas los prefabs ProBuilder-autorados de suelo/props
+     donde es seguro (sin romper lógica de runtime): `RoadBase`, `RoadSidewalk`, `RoadDash`,
+     `RoadZebra`, `Lawn`, `Bench`, `Bin`, `BusStop` — 15 mallas nuevas en `Assets/Meshes/`,
+     componente `ProBuilderMesh` eliminado, `Mesh.UploadMeshData(true)` para `isReadable: 0`.
+     **Excluidos deliberadamente**: `TrafficLight` (el runtime cambia `sharedMaterial` de
+     renderers concretos por bombilla — combinar/rebautizar esas mallas rompería esa
+     referencia) y `Fountain` (malla importada de glTF + solo 3 discos ProBuilder de agua,
+     instancia única en la escena, bajo valor/mayor riesgo). `BusStop` anida una instancia de
+     `Bench`, migrada primero para que la instancia anidada ya heredase el cambio sin
+     duplicar trabajo.
+
+     Con los prefabs arreglados, las **398 instancias ya colocadas en `City.unity`** seguían
+     con su malla embebida (override `m_Mesh` de la instancia, que Unity no revierte solo
+     porque el prefab base cambie). Reverting explícito con
+     `PrefabUtility.RevertPropertyOverride` sobre la propiedad `m_Mesh` de cada `MeshFilter`
+     bajo `City` — sin tocar posición/rotación/escala — afectó a **833 instancias**, la misma
+     cifra que documentaba el hallazgo.
+
+     **Hallazgo no anticipado por el informe**: revertir el override no basta para que
+     `City.unity` baje de tamaño en disco. Unity no poda las mallas embebidas huérfanas de un
+     `.unity` al guardar — quedan como bytes muertos en el fichero aunque ya no las referencie
+     nadie. Comprobado: `m_Name: pb_Mesh` sigue devolviendo 833 coincidencias tras el revert,
+     tras `AssetDatabase.ForceReserializeAssets`, e incluso tras cerrar y reabrir la escena
+     desde disco y regrabar (mismo tamaño exacto, confirmando que no es un artefacto de la
+     sesión de Editor en memoria). El tamaño de `City.unity` en disco pasó de 9 740 784 B a
+     9 780 907 B (prácticamente igual, ligera subida neta por los propios overrides
+     actualizados). **La ganancia real y perdurable de B.2 es para las ciudades que genere la
+     tool de aquí en adelante** (`PrefabUtility.InstantiatePrefab` desde un prefab sin
+     `ProBuilderMesh` no crea ningún override de malla, así que no hay nada que purgar) — para
+     `City.unity` en concreto, purgar de verdad esas mallas muertas exigiría reconstruir la
+     escena desde cero, lo que destruiría su disposición hecha a mano; no se ha hecho.
+     Corrijo aquí la expectativa de la sección H.4 de este mismo documento: la comparación de
+     tamaño de `City.unity` tras B.2 no debe esperar una caída significativa por esta razón.
+
+   - **B.5** — Prefab `Lamp`: `Pole` + `PoleBase` + `Arm` (mismo material `MetalDark`)
+     combinados con `Mesh.CombineMeshes` en un único `MeshRenderer` sobre `Pole` (mismo
+     collider); `PoleBase` (sin collider) se eliminó por completo; `Arm` conserva su
+     `GameObject`/`BoxCollider` pero pierde su renderer propio. `Head` (material `LampWarm`,
+     distinto) se dejó como renderer independiente. Resultado: **4 → 2 `MeshRenderer`**, los 3
+     `BoxCollider` intactos. Mismo problema de overrides que B.2: las ~108 instancias de
+     `Lamp` ya colocadas en `City.unity` (no las ~100 que documentaba `CLAUDE.md`, cifra que
+     debería corregirse allí) tenían sus propios overrides de malla para `Pole`/`Head` — 216
+     reversiones (2 por lámpara) para que usen la malla combinada nueva.
+
+   Verificación: compilación limpia en todo el proceso (0 errores/warnings salvo un aviso
+   benigno y no relacionado de "Releasing render texture..." típico de las capturas de Scene
+   View). Verificación visual con `Unity_SceneView_CaptureMultiAngleSceneView` tras cada paso
+   (edificios, farolas, mobiliario urbano, sin geometría rota). Dos pases de Play mode de ~6 s
+   cada uno (tras B.4 y al final de toda la Fase 3) sin errores ni warnings en consola,
+   confirmando que el personaje anima y que el tráfico/colliders siguen funcionando.
 5. **Cada vez que se aplique D** — comprobar visualmente el resultado del bake en esa
    ciudad concreta antes de darla por terminada.
