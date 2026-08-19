@@ -108,6 +108,19 @@ namespace CityGenerator.Runtime
             Build();
         }
 
+        // CarAgent moves every car by writing transform.position directly (no Rigidbody), and its
+        // forward sensor queries the physics scene in the same frame. With
+        // DynamicsManager.m_AutoSyncTransforms off (the project default), the physics scene only
+        // sees those moves at the next FixedUpdate, so at 60+ FPS the sensor reads positions up to
+        // one frame stale — enough error for cars to miss each other on corners. One sync here,
+        // after every CarAgent's Update has run, is cheaper than turning auto-sync back on (which
+        // would sync on every single query instead of once per frame) and, being in the tool's own
+        // code rather than a project setting, travels with the package if it's copied elsewhere.
+        private void LateUpdate()
+        {
+            Physics.SyncTransforms();
+        }
+
         /// <summary>
         /// Sets the street axes without rebuilding the graph. Used by the city generator, which
         /// must place all traffic lights before calling <see cref="Build"/> so
@@ -472,12 +485,14 @@ namespace CityGenerator.Runtime
 
         private void OnDrawGizmosSelected()
         {
-            if (!drawGraph)
+            // Deliberately does not EnsureBuilt(): selecting the object in the Editor before
+            // Play (or before the generator has built anything) would otherwise construct the
+            // whole graph just to draw gizmos. Nothing to draw yet in that case.
+            if (!drawGraph || nodes == null)
             {
                 return;
             }
 
-            EnsureBuilt();
             for (int i = 0; i < nodes.Length; i++)
             {
                 Node node = nodes[i];

@@ -18,10 +18,77 @@ namespace CityGenerator.Editor
     }
 
     /// <summary>
+    /// Caches shared across one whole generation run: the XZ overlap rect of every already-placed
+    /// obstacle (measured once, not on every comparison — see <see cref="GetRect"/>) and, per
+    /// prefab, a single reusable "probe" instance that gets repositioned to each rejected
+    /// candidate instead of instantiating and destroying one throwaway object per candidate (see
+    /// <see cref="BorrowProbe"/>). Call <see cref="DestroyRemainingProbes"/> once at the end of
+    /// the run: a probe left over from a prefab's last candidate being rejected is a stray
+    /// instance that never got consumed and must not survive into the generated scene.
+    /// </summary>
+    internal sealed class ObstacleCache
+    {
+        private readonly Dictionary<GameObject, Rect> rects = new();
+        private readonly Dictionary<GameObject, GameObject> availableProbes = new();
+
+        public Rect GetRect(GameObject instance)
+        {
+            if (rects.TryGetValue(instance, out Rect cached))
+                return cached;
+
+            Bounds bounds = CityGeneratorBoundsUtility.GetWorldBounds(instance);
+            var rect = new Rect(bounds.min.x, bounds.min.z, bounds.size.x, bounds.size.z);
+            rects[instance] = rect;
+            return rect;
+        }
+
+        public GameObject BorrowProbe(GameObject prefab, Transform parent, PlacementCandidate candidate)
+        {
+            if (!availableProbes.TryGetValue(prefab, out GameObject probe) || probe == null)
+            {
+                probe = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            }
+            else
+            {
+                if (probe.transform.parent != parent)
+                    probe.transform.SetParent(parent);
+
+                // The cached rect (if any) reflects the previous candidate's transform, not this one.
+                rects.Remove(probe);
+            }
+
+            probe.transform.SetPositionAndRotation(candidate.position, candidate.rotation);
+            availableProbes[prefab] = probe;
+            return probe;
+        }
+
+        /// <summary>Marks a prefab's current probe as kept for real: the next borrow for that prefab instantiates a fresh one.</summary>
+        public void Consume(GameObject prefab)
+        {
+            availableProbes.Remove(prefab);
+        }
+
+        public void DestroyRemainingProbes()
+        {
+            foreach (GameObject probe in availableProbes.Values)
+            {
+                if (probe != null)
+                    Object.DestroyImmediate(probe);
+            }
+
+            availableProbes.Clear();
+        }
+    }
+
+    /// <summary>
     /// Generic density-driven placement: shuffles a set of candidate points, instantiates a
     /// random prefab from the pool at as many as the density fraction dictates, skipping any
     /// candidate whose instance would overlap an already-placed object (checked via combined
-    /// Renderer bounds in the XZ plane). Shared by plaza vegetation and, later, street props.
+    /// Renderer bounds in the XZ plane). Shared by plaza vegetation and street props.
+    ///
+    /// <paramref name="obstacles"/> is the shared, growing obstacle list for the whole
+    /// generation run: accepted instances are appended to it directly rather than the caller
+    /// copying it before or after every call.
     /// </summary>
     internal static class CityGeneratorPlacementEngine
     {
@@ -32,7 +99,8 @@ namespace CityGenerator.Editor
             System.Random random,
             Transform parent,
             string namePrefix,
-            List<GameObject> obstacles)
+            List<GameObject> obstacles,
+            ObstacleCache cache)
         {
             var placed = new List<GameObject>();
             if (prefabPool.Count == 0 || density <= 0f || candidates.Count == 0)
@@ -42,8 +110,6 @@ namespace CityGenerator.Editor
             List<int> order = Enumerable.Range(0, candidates.Count).ToList();
             CityGeneratorRandomUtility.Shuffle(order, random);
 
-            var allObstacles = new List<GameObject>(obstacles);
-
             foreach (int candidateIndex in order)
             {
                 if (placed.Count >= targetCount)
@@ -52,75 +118,29 @@ namespace CityGenerator.Editor
                 PlacementCandidate candidate = candidates[candidateIndex];
                 GameObject prefab = prefabPool[random.Next(prefabPool.Count)];
 
-                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+                GameObject instance = cache.BorrowProbe(prefab, parent, candidate);
+                if (OverlapsAny(instance, obstacles, cache))
+                    continue; // the probe stays alive, reused by the next candidate that tries this prefab
+
                 instance.name = $"{namePrefix}_{placed.Count}";
-                instance.transform.position = candidate.position;
-                instance.transform.rotation = candidate.rotation;
-
-                if (OverlapsAny(instance, allObstacles))
-                {
-                    Object.DestroyImmediate(instance);
-                    continue;
-                }
-
-                allObstacles.Add(instance);
+                cache.Consume(prefab);
+                obstacles.Add(instance);
                 placed.Add(instance);
             }
 
             return placed;
         }
 
-        /// <summary>
-        /// Instantiates the prefab at every candidate (skipping any that would overlap an
-        /// already-placed object), with no density-based sub-sampling. Used where the count and
-        /// spacing are meant to be fixed rather than randomly thinned out — e.g. lamps.
-        /// </summary>
-        public static List<GameObject> PlaceAll(
-            IReadOnlyList<PlacementCandidate> candidates,
-            GameObject prefab,
-            Transform parent,
-            string namePrefix,
-            List<GameObject> obstacles)
+        private static bool OverlapsAny(GameObject instance, List<GameObject> others, ObstacleCache cache)
         {
-            var placed = new List<GameObject>();
-            if (prefab == null)
-                return placed;
-
-            var allObstacles = new List<GameObject>(obstacles);
-
-            foreach (PlacementCandidate candidate in candidates)
-            {
-                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
-                instance.name = $"{namePrefix}_{placed.Count}";
-                instance.transform.position = candidate.position;
-                instance.transform.rotation = candidate.rotation;
-
-                if (OverlapsAny(instance, allObstacles))
-                {
-                    Object.DestroyImmediate(instance);
-                    continue;
-                }
-
-                allObstacles.Add(instance);
-                placed.Add(instance);
-            }
-
-            return placed;
-        }
-
-        private static bool OverlapsAny(GameObject instance, List<GameObject> others)
-        {
-            Bounds a = CityGeneratorBoundsUtility.GetWorldBounds(instance);
-            var rectA = new Rect(a.min.x, a.min.z, a.size.x, a.size.z);
+            Rect rectA = cache.GetRect(instance);
 
             foreach (GameObject other in others)
             {
                 if (other == instance)
                     continue;
 
-                Bounds b = CityGeneratorBoundsUtility.GetWorldBounds(other);
-                var rectB = new Rect(b.min.x, b.min.z, b.size.x, b.size.z);
-                if (rectA.Overlaps(rectB))
+                if (rectA.Overlaps(cache.GetRect(other)))
                     return true;
             }
 

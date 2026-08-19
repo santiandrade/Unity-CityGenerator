@@ -26,6 +26,9 @@ namespace CityGenerator.Editor
             if (settings.general.plazaCount > 0 && settings.plaza.lawnPrefab == null)
                 errors.Add("Plaza: Lawn prefab is required when Plaza Count > 0.");
 
+            if (settings.general.playerPrefab != null && settings.general.inputActions == null)
+                errors.Add("General: Input Actions asset is required when Player Prefab is set (otherwise the generated camera silently gets no input).");
+
             if (settings.general.includeTraffic)
             {
                 if (settings.props.trafficLightPrefab == null)

@@ -47,7 +47,7 @@ namespace CityGenerator.Runtime
         // hierarchy is skipped), never by distance: while jumping backwards the
         // player's own collider sits between the pivot and the camera, and letting
         // it through snapped the camera onto the character's face.
-        private readonly RaycastHit[] collisionHits = new RaycastHit[8];
+        private readonly RaycastHit[] collisionHits = new RaycastHit[16];
         private Transform targetRoot;
 
         private void Awake()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace CityGenerator.Editor
 {
@@ -28,6 +29,7 @@ namespace CityGenerator.Editor
         public bool useCustomSeed = false;
         public int seed = 0;
         public GameObject playerPrefab; // optional
+        public InputActionAsset inputActions; // required if playerPrefab is set (drives the generated camera's Look input)
     }
 
     [Serializable]
@@ -65,7 +67,8 @@ namespace CityGenerator.Editor
     internal class PropsSettings
     {
         public GameObject trafficLightPrefab; // required if includeTraffic
-        public GameObject lampPrefab; // optional — placed 3 per sidewalk side when assigned
+        public GameObject lampPrefab; // optional
+        [Range(0f, 1f)] public float lampDensity = 1f; // 1 = every candidate point along the sidewalk (3 per side)
         public GameObject busStopPrefab;
         [Range(0f, 1f)] public float busStopDensity = 0.3f;
         public GameObject binPrefab;

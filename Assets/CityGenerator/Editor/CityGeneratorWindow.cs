@@ -168,6 +168,8 @@ namespace CityGenerator.Editor
             if (densityWarning != null)
                 EditorGUILayout.HelpBox(densityWarning, MessageType.Warning);
             EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
+            DrawRequiredField(FindProperty("general.inputActions"), "Input Actions (if Player Prefab is set)",
+                isRequired: FindProperty("general.playerPrefab").objectReferenceValue != null);
             EditorGUILayout.PropertyField(FindProperty("general.useCustomSeed"), new GUIContent("Custom Seed"));
             if (FindProperty("general.useCustomSeed").boolValue)
             {
@@ -249,6 +251,7 @@ namespace CityGenerator.Editor
             EditorGUILayout.LabelField("Props", EditorStyles.boldLabel);
             DrawRequiredField(FindProperty("props.trafficLightPrefab"), "Traffic Light Prefab (if Include Traffic)", isRequired: FindProperty("general.includeTraffic").boolValue);
             EditorGUILayout.PropertyField(FindProperty("props.lampPrefab"));
+            EditorGUILayout.PropertyField(FindProperty("props.lampDensity"));
             EditorGUILayout.PropertyField(FindProperty("props.busStopPrefab"));
             EditorGUILayout.PropertyField(FindProperty("props.busStopDensity"));
             EditorGUILayout.PropertyField(FindProperty("props.binPrefab"));

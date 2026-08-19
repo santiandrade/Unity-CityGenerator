@@ -42,6 +42,7 @@ namespace CityGenerator.Editor
             Transform treesGroup,
             IReadOnlyList<BlockCell> blocks,
             System.Random random,
+            ObstacleCache cache,
             out List<GameObject> lawnInstances)
         {
             var solidInstances = new List<GameObject>();
@@ -67,7 +68,7 @@ namespace CityGenerator.Editor
                 if (plazaSettings.benchPrefab != null)
                     obstacles.AddRange(BuildBenches(plazaSettings.benchPrefab, blockGroup, block.center));
 
-                List<GameObject> vegetation = BuildVegetation(vegetationSettings, treesGroup, block.center, obstacles, random, plazaIndex);
+                List<GameObject> vegetation = BuildVegetation(vegetationSettings, treesGroup, block.center, obstacles, random, plazaIndex, cache);
 
                 solidInstances.AddRange(obstacles);
                 solidInstances.AddRange(vegetation);
@@ -121,14 +122,13 @@ namespace CityGenerator.Editor
         /// using the same density outright would pack visibly more trees inside the plaza than
         /// along the streets.
         /// </summary>
-        private static List<GameObject> BuildVegetation(VegetationSettings vegetationSettings, Transform treesGroup, Vector3 blockCenter, List<GameObject> obstacles, System.Random random, int plazaIndex)
+        private static List<GameObject> BuildVegetation(VegetationSettings vegetationSettings, Transform treesGroup, Vector3 blockCenter, List<GameObject> obstacles, System.Random random, int plazaIndex, ObstacleCache cache)
         {
             float density = vegetationSettings.density * CityGeneratorConstants.PlazaVegetationDensityFactor;
             if (vegetationSettings.prefabs.Count == 0 || density <= 0f)
                 return new List<GameObject>();
 
             var placed = new List<GameObject>();
-            var allObstacles = new List<GameObject>(obstacles);
 
             for (int i = 0; i < LawnOffsets.Length; i++)
             {
@@ -150,8 +150,7 @@ namespace CityGenerator.Editor
 
                 List<GameObject> lawnPlaced = CityGeneratorPlacementEngine.PlaceByDensity(
                     candidates, vegetationSettings.prefabs, density, random,
-                    treesGroup, $"Tree_Plaza_{plazaIndex}_{i}", allObstacles);
-                allObstacles.AddRange(lawnPlaced);
+                    treesGroup, $"Tree_Plaza_{plazaIndex}_{i}", obstacles, cache);
                 placed.AddRange(lawnPlaced);
             }
 

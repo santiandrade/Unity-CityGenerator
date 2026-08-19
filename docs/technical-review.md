@@ -712,6 +712,89 @@ matriz de colisiones), A.13 (`ScriptableObject` de tuning), E (object pooling).
    jugador y respondiendo la cámara (valida que el `.inputactions` se resuelve). Generar una
    rejilla 10×10 con seed fijo antes y después de A.14–A.17 y comprobar que el resultado es
    **idéntico** y que el tiempo de generación baja.
+
+   **Hecho (2026-08-19)** — Grupo A completo salvo A.2 (opcional, no aplicado) y A.13 (no
+   recomendado, no aplicado). A.7 tampoco se aplicó: su propio veredicto en este informe es
+   "no prioritario con 30 coches", y no forma parte de la Fase 2 según la sección G.
+
+   - **A.1** — `CityGeneratorContentAssembler.MarkStatic` aplica `Batching Static | Occluder
+     Static | Occludee Static` a los 9 grupos indicados (todos salvo `Vehicles`), recorriendo
+     `GetComponentsInChildren<Transform>` de cada uno tras generar. Verificado generando una
+     ciudad 3×3 de prueba: 1053 objetos con `m_StaticEditorFlags: 22` (= la combinación de los
+     tres flags) en el `.unity` resultante, 0 en `Vehicles`.
+   - **A.3** — `PropsSettings.lampDensity` (0–1, por defecto 1) sustituye la colocación fija de
+     farolas: `BuildLamps` pasó de `PlaceAll` a `PlaceByDensity`, igual que bus stops/bins.
+     `PlaceAll` quedó sin ningún otro caller y se eliminó de `CityGeneratorPlacementEngine`.
+     Con densidad 1 (comportamiento por defecto, equivalente al fijo anterior) la ciudad 3×3
+     de prueba generó 100 farolas, coincidiendo con la cifra ya documentada para la ciudad de
+     referencia.
+   - **A.4** — `TrafficNetwork.LateUpdate` llama a `Physics.SyncTransforms()` una vez por
+     frame, después de que todos los `CarAgent.Update` (que corren en `Update`, no
+     `LateUpdate`) hayan movido su transform. Corregido en el código de la tool, no en
+     `DynamicsManager.asset`, tal como recomienda el hallazgo.
+   - **A.5** — `CarAgent` mantiene un `Dictionary<EntityId, CarAgent>` estático
+     (`ColliderRegistry`) poblado/limpiado en `OnEnable`/`OnDisable`, en vez de
+     `GetComponentInParent` por cada impacto del sensor.
+   - **A.6** — `hits` (`CarAgent`) y `collisionHits` (`ThirdPersonCamera`) subieron de 8 a 16;
+     `CarAgent` avisa por consola si el barrido llena el array (`count == hits.Length`).
+   - **A.8** — `CarAgent.ResetCarIdCounter`, con
+     `[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]`, resetea `nextCarId` a 1 (y
+     limpia `ColliderRegistry`) en cada entrada a Play, incluso con Domain Reload desactivado.
+   - **A.9** — `TrafficLightIntersection` cachea `greenWait`/`amberWait`/`allRedWait` como
+     campos creados una vez en `Start`, en vez de un `new WaitForSeconds(...)` por fase y ciclo.
+   - **A.10** — `PlayerController` cachea `controller.isGrounded` una vez por `Update` en el
+     campo `grounded`, leído también por `OnJumpPerformed`. `CarAgent.Update` calcula la
+     rotación en una variable local y hace un único `transform.SetPositionAndRotation`
+     (cuidando que la posición siga usando el forward de la rotación ya actualizada, igual que
+     el código original). `TrafficNetwork.OnDrawGizmosSelected` ya no llama a `EnsureBuilt()`:
+     si el grafo no está construido, no dibuja nada en vez de construirlo entero solo por
+     seleccionar el objeto en el Editor.
+   - **A.11** — `Assets/CityGenerator/Runtime/CityGenerator.Runtime.asmdef` (referencia
+     `Unity.InputSystem`) y `Assets/CityGenerator/Editor/CityGenerator.Editor.asmdef`
+     (`includePlatforms: Editor`, referencia al de Runtime y a `Unity.InputSystem`, que hace
+     falta para el campo `InputActionAsset` de A.12). Verificado con
+     `CompilationPipeline.GetAssemblies()`: 7 ficheros en `CityGenerator.Runtime`, 17 en
+     `CityGenerator.Editor`, ninguno ya en `Assembly-CSharp`/`-Editor`.
+   - **A.12** — `GeneralSettings.inputActions` (`InputActionAsset`) sustituye la ruta
+     hardcodeada `Assets/InputSystem_Actions.inputactions` en
+     `CityGeneratorSceneBuilder.CreateMainCamera`. `CityGeneratorDefaultAssets` lo rellena con
+     ese mismo asset (es el único fichero no portable, así que sigue siendo el sitio correcto).
+     El validador bloquea la generación si hay `playerPrefab` sin `inputActions`; la ventana
+     marca el campo como requerido (asterisco condicional) en ese mismo caso.
+   - **A.14–A.16** — `CityGeneratorPlacementEngine` incorpora `ObstacleCache`: `GetRect` mide
+     el rect XZ de cada obstáculo una sola vez (no en cada comparación), y `BorrowProbe`/
+     `Consume` reutilizan una única instancia "sonda" por prefab para medir cada candidato
+     rechazado en vez de instanciar y `DestroyImmediate` uno por candidato — el objeto
+     rechazado simplemente se reposiciona para el siguiente candidato del mismo prefab, y
+     `DestroyRemainingProbes()` limpia cualquier sonda que quedó viva al final de la
+     generación. Nota: esto se desvía del literal de A.16 ("proyectar bounds sin instanciar")
+     porque asumir rotaciones múltiplo de 90° acoplaría el motor genérico a esa suposición;
+     reutilizar la instancia evita el par Instantiate/Destroy igualmente y funciona con
+     cualquier rotación. `obstacles` ya no se copia por llamada (A.15): `PlaceByDensity` muta
+     la lista compartida directamente y `ContentAssembler`/`PlazaBuilder`/
+     `StreetPropsBuilder` ya no hacen sus propias copias intermedias.
+   - **A.17** — `CityGeneratorSceneBuilder.GetNextFreeScenePath` usa
+     `AssetDatabase.LoadAssetAtPath<SceneAsset>` en vez de `File.Exists` con ruta relativa.
+     Nota: no se adoptó literalmente `AssetDatabase.GenerateUniqueAssetPath` porque, al existir
+     ya `Assets/Scenes/City.unity`, generaría `City 1.unity` (con espacio) en vez de
+     `City1.unity`, rompiendo la convención de nombres ya documentada en `CLAUDE.md`.
+
+   **Verificación realizada**: compilación limpia (0 errores/warnings) tras separar en
+   `.asmdef` — surgió un problema real de dependencias implícitas, tal como avisa el propio
+   hallazgo A.11: `Object.GetInstanceID()` está obsoleto en esta versión de Unity (usar
+   `GetEntityId()`, que devuelve `UnityEngine.EntityId` en vez de `int`), y solo se detectó al
+   aislar `CarAgent.cs` en su propio assembly con los checks de warnings-as-errors del
+   proyecto. Corregido usando `Dictionary<EntityId, CarAgent>`. Generación de extremo a
+   extremo probada con un arnés de validación temporal (creado y borrado en la misma sesión,
+   no forma parte del repositorio): ciudad 3×3 con seed fijo (12345) generada sin errores ni
+   excepciones, con edificios/plaza/farolas/paradas/papeleras/árboles/coches presentes y en
+   las cantidades esperadas; confirmado visualmente por captura de Scene View. 10 segundos de
+   Play mode sobre esa ciudad sin errores ni warnings en consola (ni siquiera el aviso de
+   truncamiento de A.6). No se hizo la comparación de "resultado idéntico antes/después de
+   A.14–A.17 con seed fijo" de forma aislada: A.3 cambia deliberadamente el consumo de
+   `random` de las farolas (antes no consumían ningún número aleatorio; con densidad ahora sí),
+   así que una ciudad generada con el conjunto completo de cambios de la Fase 2 no puede ser
+   bit a bit idéntica a la de antes por diseño, no por un fallo del refactor de rendimiento.
 4. **Tras la Fase 3 (grupo B)** — comparar tamaño de `City.unity` en disco, tiempo de carga
    de escena y memoria de mallas en el Memory Profiler tras B.2; verificar que ninguna
    instancia perdió su malla.

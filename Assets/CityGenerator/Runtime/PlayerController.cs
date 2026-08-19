@@ -40,6 +40,10 @@ namespace CityGenerator.Runtime
 
         private float verticalVelocity;
         private float rotationVelocity;
+        // Refreshed once per Update; OnJumpPerformed (an input callback, not called from Update)
+        // and the two isGrounded reads inside Update all read this instead of hitting
+        // CharacterController.isGrounded three times a frame.
+        private bool grounded;
 
         private static readonly int SpeedHash = Animator.StringToHash("Speed");
         private static readonly int GroundedHash = Animator.StringToHash("Grounded");
@@ -90,7 +94,7 @@ namespace CityGenerator.Runtime
 
         private void OnJumpPerformed(InputAction.CallbackContext ctx)
         {
-            if (controller.isGrounded)
+            if (grounded)
             {
                 verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
                 animator.SetTrigger(JumpHash);
@@ -99,6 +103,8 @@ namespace CityGenerator.Runtime
 
         private void Update()
         {
+            grounded = controller.isGrounded;
+
             Vector2 moveInput = moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
             bool sprinting = sprintAction != null && sprintAction.IsPressed();
 
@@ -124,7 +130,7 @@ namespace CityGenerator.Runtime
             float targetSpeed = (sprinting ? runSpeed : walkSpeed) * Mathf.Clamp01(inputMagnitude);
 
             // Gravity and jump.
-            if (controller.isGrounded && verticalVelocity < 0f)
+            if (grounded && verticalVelocity < 0f)
                 verticalVelocity = -2f; // small downward force to keep the grounded check stable
             verticalVelocity += gravity * Time.deltaTime;
 
@@ -135,7 +141,7 @@ namespace CityGenerator.Runtime
             // Animator: normalized Speed 0 (idle) .. 0.5 (walk) .. 1 (run).
             float normalizedSpeed = targetSpeed <= 0f ? 0f : (sprinting ? Mathf.Lerp(0.5f, 1f, Mathf.Clamp01(inputMagnitude)) : Mathf.Lerp(0f, 0.5f, Mathf.Clamp01(inputMagnitude)));
             animator.SetFloat(SpeedHash, normalizedSpeed);
-            animator.SetBool(GroundedHash, controller.isGrounded);
+            animator.SetBool(GroundedHash, grounded);
             animator.SetFloat(VerticalSpeedHash, verticalVelocity);
         }
     }
