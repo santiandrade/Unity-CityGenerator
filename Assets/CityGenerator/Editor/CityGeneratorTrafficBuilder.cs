@@ -121,12 +121,19 @@ namespace CityGenerator.Editor
             // beyond them) have no outgoing exits and nothing ahead of them: a vehicle spawned
             // there fails CarAgent's initial FindNodeAhead and disables itself. Entries are
             // always safe (their own intersection's exit is always ahead of them).
+            //
+            // An entry node and the exit node of the direction to its right sit at the exact
+            // same world position (TrafficNetwork skips an intermediate node for right turns),
+            // so without deduplication two vehicles could each land on a distinct node index yet
+            // spawn stacked on top of each other. Keep only one candidate per physical position.
             List<int> nodeOrder = Enumerable.Range(0, nodeCount)
                 .Where(i =>
                 {
                     TrafficNetwork.Node node = network.GetNode(i);
                     return node.IsEntry || node.Exits.Count > 0;
                 })
+                .GroupBy(i => network.GetNode(i).Position)
+                .Select(g => g.First())
                 .ToList();
             CityGeneratorRandomUtility.Shuffle(nodeOrder, random);
 

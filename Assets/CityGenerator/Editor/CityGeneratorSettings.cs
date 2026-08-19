@@ -24,7 +24,7 @@ namespace CityGenerator.Editor
         public int plazaCount = 1;
         public int buildingsPerBlock = 4; // clamped 0-4
         public bool includeTraffic = true;
-        public int vehicleCount = 18;
+        public int vehicleCount = 30;
         public bool useCustomSeed = false;
         public int seed = 0;
         public GameObject playerPrefab; // optional
