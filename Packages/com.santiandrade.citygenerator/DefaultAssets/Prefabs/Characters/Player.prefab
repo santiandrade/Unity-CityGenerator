@@ -109,7 +109,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c096bd3318f599042bb2c7b365d75d62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TestAI.PlayerController
-  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  inputActions: {fileID: -944628639613478452, guid: a83f40e44a684cd89fa428856ddefe2d, type: 3}
   actionMapName: Player
   moveActionName: Move
   jumpActionName: Jump
