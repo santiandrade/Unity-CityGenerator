@@ -63,12 +63,16 @@ namespace CityGenerator.Runtime
         private static readonly Dictionary<EntityId, CarAgent> ColliderRegistry = new();
 
         private Collider ownCollider;
+        private TrafficManager trafficManager;
         private int targetNode = -1;
         private int reservedIntersection = -1;
         private int carId;
         private float speed;
         private float distanceTravelled;
         private float stoppedTime;
+        // Cached result of the forward sensor, reused on frames TrafficManager skips it for a
+        // car far from the camera (see TrafficManager.staggerDistance).
+        private float lastAheadClearance = float.MaxValue;
         private StopReason stopReason;
         // Previous frame's reason: the current one is still being computed while the
         // forward sensor runs, so the deadlock check has to look at the last known value.
@@ -118,6 +122,11 @@ namespace CityGenerator.Runtime
         {
             if (ownCollider != null)
                 ColliderRegistry.Remove(ownCollider.GetEntityId());
+            if (trafficManager != null)
+            {
+                trafficManager.Unregister(this);
+                trafficManager = null;
+            }
         }
 
         private void Start()
@@ -140,10 +149,28 @@ namespace CityGenerator.Runtime
             {
                 Debug.LogError($"{name}: no network node found ahead of the vehicle.", this);
                 enabled = false;
+                return;
             }
+
+            // Ticked centrally by TrafficManager rather than through this component's own Update
+            // (see the technical review, A.7). Falls back to finding/creating one so a CarAgent
+            // dropped into a scene outside the generator still drives.
+            trafficManager = TrafficManager.Instance != null ? TrafficManager.Instance : FindFirstObjectByType<TrafficManager>();
+            if (trafficManager == null)
+            {
+                trafficManager = new GameObject("TrafficManager").AddComponent<TrafficManager>();
+            }
+            trafficManager.Register(this);
         }
 
-        private void Update()
+        /// <summary>
+        /// Advances this vehicle by <paramref name="dt"/>. Called once per frame by
+        /// <see cref="TrafficManager"/> for every registered car, instead of through this
+        /// component's own Update. When <paramref name="runSensor"/> is false the forward-sensor
+        /// SphereCast is skipped and the previous frame's clearance is reused — TrafficManager
+        /// only does this for cars far from the camera once enough cars are registered.
+        /// </summary>
+        public void Tick(float dt, bool runSensor)
         {
             TrafficNetwork.Node node = network.GetNode(targetNode);
 
@@ -161,10 +188,14 @@ namespace CityGenerator.Runtime
                 clearance = IntersectionClearance(node, distance);
             }
 
-            float ahead = VehicleAheadClearance();
-            if (ahead < clearance)
+            if (runSensor)
             {
-                clearance = ahead;
+                lastAheadClearance = VehicleAheadClearance();
+            }
+
+            if (lastAheadClearance < clearance)
+            {
+                clearance = lastAheadClearance;
                 stopReason = StopReason.VehicleAhead;
             }
 
@@ -197,7 +228,7 @@ namespace CityGenerator.Runtime
                 }
 
                 rotation = Quaternion.RotateTowards(transform.rotation,
-                    Quaternion.LookRotation(desired, Vector3.up), turnSpeed * Time.deltaTime);
+                    Quaternion.LookRotation(desired, Vector3.up), turnSpeed * dt);
             }
 
             if (clearance < 0.4f)
@@ -206,11 +237,11 @@ namespace CityGenerator.Runtime
             }
 
             float rate = targetSpeed > speed ? acceleration : braking;
-            speed = Mathf.MoveTowards(speed, targetSpeed, rate * Time.deltaTime);
+            speed = Mathf.MoveTowards(speed, targetSpeed, rate * dt);
 
-            float step = speed * Time.deltaTime;
+            float step = speed * dt;
             distanceTravelled += step;
-            stoppedTime = speed < 0.3f ? stoppedTime + Time.deltaTime : 0f;
+            stoppedTime = speed < 0.3f ? stoppedTime + dt : 0f;
 
             // Uses the just-computed rotation's forward, not transform.forward: matches the
             // original behaviour where rotation was applied before this was read.

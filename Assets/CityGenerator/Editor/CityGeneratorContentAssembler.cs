@@ -97,7 +97,10 @@ namespace CityGenerator.Editor
 
             List<GameObject> vehicleInstances = new();
             if (settings.general.includeTraffic)
+            {
+                CityGeneratorTrafficBuilder.AddManagerComponent(trafficNetworkGroup);
                 vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random);
+            }
 
             // Every group except Vehicles is 100% static geometry once generated: marking it
             // unlocks static batching and is a prerequisite for baking occlusion culling / the GPU

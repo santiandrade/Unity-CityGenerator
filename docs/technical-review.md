@@ -28,11 +28,12 @@ Revisado: los 23 scripts de `Assets/CityGenerator/`, `ProjectSettings/*`,
 `Assets/Settings/*` (URP), los 22 prefabs de demo, los 14 materiales, `City.unity` y
 `Packages/manifest.json`.
 
-**Conclusión de una línea**: la mayor parte de lo detectado en la revisión inicial ya está
-corregido en el código de la tool y en el contenido de demo (incluida la migración fuera de
-ProBuilder, B.2); lo que queda pendiente es documentación (README) y trabajo que solo se
-justifica si el tráfico crece un orden de magnitud. ECS no resolvería nada de lo que hoy
-limita al proyecto.
+**Conclusión de una línea**: todo lo detectado en la revisión inicial que merecía la pena ya
+está corregido en el código de la tool y en el contenido de demo (incluida la migración fuera
+de ProBuilder, B.2, el tick centralizado de tráfico, A.7, y el README del paquete, A.18); lo
+único que queda es trabajo que solo se justifica si el tráfico crece un orden de magnitud
+(F.4) o mejoras explícitamente descartadas por sus contrapartidas (A.2, A.13). ECS no
+resolvería nada de lo que hoy limita al proyecto.
 
 ## Cómo está organizado este informe
 
@@ -88,15 +89,15 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | C.2 | `_CameraOpaqueTexture` generada sin consumidor | `m_RequireOpaqueTexture: 0`. `m_RequireDepthTexture` sigue a 1, justificado por el SSAO del `PC_Renderer` |
 | C.3 | GPU Resident Drawer desactivado | `m_GPUResidentDrawerMode: 1` (Instanced Drawing), habilitado por A.1 |
 | C.4 | Framerate sin objetivo fijado | `CityGenerator.Runtime.PerformanceBootstrap`: `vSyncCount = 0`, `targetFrameRate = 60`. Deliberadamente **en el paquete** y no en `ProjectSettings`, para que viaje con la tool |
+| A.7 | Tick por-coche de `CarAgent` (2026-08-20) | Nuevo `CityGenerator.Runtime.TrafficManager`: `CarAgent` ya no implementa `Update()`, expone `Tick(float dt, bool runSensor)` y se registra en `Start()` contra `TrafficManager.Instance` (con fallback a `FindFirstObjectByType`/auto-creación si el componente no viene del generador). `TrafficManager.Update()` itera la lista de agentes registrados y llama a `Tick` desde un único punto. Con más de `staggerMinAgentCount` (60 por defecto) coches registrados, además escalona el `SphereCast` del sensor frontal para los coches lejos de `Camera.main`, reutilizando el último `clearance` en los frames que se saltan — por debajo de ese umbral (la demo por defecto tiene 30) el comportamiento es idéntico al `Update()` original. `CityGeneratorTrafficBuilder.AddManagerComponent` añade el componente al `GameObject` `TrafficNetwork` solo si `includeTraffic` está activo, y `BuildVehicles` inyecta la referencia a `TrafficNetwork` en cada `CarAgent` generado vía `SerializedObject`, sustituyendo el `FindFirstObjectByType<TrafficNetwork>()` que antes hacía cada coche en `Start`. Verificado en Play mode sobre la ciudad de prueba regenerada: 28/30 coches con `DistanceTravelled > 0.5 m` tras 4 s, sin errores en consola |
+| A.18 | Sin README del paquete (2026-08-20) | `Assets/CityGenerator/README.md`: requisitos (Input System, capa `Vehicle`), qué hacer con `CityGeneratorDefaultAssets.cs` al portar la tool a otro proyecto, requisitos de los prefabs del usuario (pivote en la base, edificios al slot de 22 m, vehículos con `BoxCollider` único y sin `Rigidbody`), pasos posteriores por escena que quedan fuera del alcance de la tool (bake de lightmaps/occlusion, `LODGroup`), y la tabla de configuración de proyecto recomendada (grupo C) |
 
 ### Pendientes
 
 | Alcance | # | Hallazgo | Ganancia | Coste | ¿Merece la pena? |
 |---|---|---|---|---|---|
-| **A** | A.2 | Combinar las marcas viales en una malla por material | Media | Media | Opcional, medir antes |
-| **A** | A.7 | Tick centralizado de `CarAgent` (`TrafficManager`) | Media | Media | Solo si se sube de ~100 coches |
+| **A** | A.2 | Combinar las marcas viales en una malla por material | Media | Media | **No — probado y revertido** |
 | **A** | A.13 | `ScriptableObject` de tuning de vehículos | Baja | Media | **No recomendado** |
-| **A** | A.18 | README del paquete | Alta | Baja | **Sí** |
 | **C** | C.5 | Falsos positivos: GPU instancing, matriz de colisiones | Nula | — | **No tocar** |
 | **C** | C.6 | Ajustes de build | — | — | Sin acción hasta que haya build |
 | — | **F** | **ECS / DOTS** | **Nula hoy** | Muy alto | **No** |
@@ -105,39 +106,35 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 
 ## A. Código de la tool — viaja con el paquete
 
-### A.2 Combinar las marcas viales en una malla por material (opcional)
+### A.2 Combinar las marcas viales en una malla por material — probado y revertido (2026-08-20)
 
-Una ciudad 3×3 coloca del orden de 176 marcas viales (`Dash_*` + `Zebra_*`), cada una un
-`GameObject` con su propio `MeshRenderer`, sin collider, compartiendo solo dos materiales
-(`RoadLine`, `Crosswalk`). La cifra escala con el tamaño de la rejilla.
+Se implementó y se descartó en la misma sesión: `CityGeneratorGroundBuilder.BuildRoadMarkings`
+seguía instanciando cada `Dash_*`/`Zebra_*` individualmente, pero al final combinaba cada
+categoría con `Mesh.CombineMeshes` en un único `GameObject` (`Dashes_Combined`,
+`Zebras_Combined`) y destruía los originales. Funcionaba (verificado: `RoadMarkings` pasó de
+~176 objetos a 2) y el static batching de A.1 ya cubre el problema de draw calls que
+originalmente motivaba esto, así que el único beneficio real era el recuento de objetos en la
+jerarquía. Se revirtió por dos razones que pesan más que ese beneficio:
 
-El static batching de A.1 ya las agrupa en pocos draw calls por material sin trabajo
-adicional, así que el draw call **ya no es el problema**; lo que queda es el recuento de
-objetos en la jerarquía y su coste de carga de escena. Si molesta, la extensión natural es
-combinarlas al final de `CityGeneratorGroundBuilder.BuildRoadMarkings` con
-`Mesh.CombineMeshes`, una malla para dashes y otra para zebras.
+- **Occlusion culling roto a escala.** Una malla combinada tiene un único bounds que abarca
+  toda la rejilla de calles. Unity no puede recortarla por frustum ni por occlusion salvo que
+  esté completamente fuera de cámara: en una ciudad 3×3 casi no se nota, pero en una 10×10 es
+  justo el caso que el usuario esperaría que occlusion culling resolviera, y con la malla
+  combinada no puede — se renderiza entera en cuanto se ve un solo fragmento. El static
+  batching de A.1 no tiene este problema porque conserva los bounds por renderer original.
+- **Se pierde la instancia de prefab.** Un `Dash_*`/`Zebra_*` combinado deja de ser una
+  `PrefabUtility.InstantiatePrefab` y pasa a ser un `GameObject` con una malla y un material
+  sueltos, sin conexión al asset. El usuario pierde poder retocar el color/material de las
+  líneas o los pasos de cebra generados desde el propio prefab (algo que sí puede hacer con
+  cualquier otro elemento generado por la tool), y cualquier componente que el prefab tenga en
+  el futuro se perdería silenciosamente al combinar.
 
-**Contrapartida**: la malla combinada es un asset generado que hay que guardar en algún
-sitio dentro del proyecto del usuario, lo cual va contra el principio de que la tool no
-crea assets fuera de la escena. Eso, más que el coste técnico, es lo que mantiene esto en
-"opcional". **Veredicto**: medir el recuento de objetos con A.1 ya aplicado antes de
-decidir.
-
-### A.7 Tick centralizado de agentes
-
-Cada `CarAgent` tiene su propio `Update()`, con el coste fijo de marshalling que Unity
-cobra por cada uno. Con 30 coches es irrelevante; con 200+ empieza a contar, y sobre todo
-**impide escalonar trabajo**.
-
-**Propuesta** (solo si se sube el número de coches): un `TrafficManager` con un único
-`Update` que itere una `List<CarAgent>` llamando a `Tick(float dt)`. Habilita gratis
-escalonar el `SphereCast` (los coches lejos de la cámara lo ejecutan 1 de cada N frames
-reutilizando el `clearance` anterior) y sustituir el `FindFirstObjectByType<TrafficNetwork>()`
-que hoy hace cada coche en `Start` por una referencia inyectada.
-
-**Veredicto**: no prioritario. El techo real no es el rendimiento sino el gridlock, ya
-acotado en `CityGeneratorConstants.VehicleDensityWarningThreshold` (0.4 de los nodos de
-spawn; medido en 5×5: 38% fluía, 76% se atascaba desde el primer frame). Ver F.4.
+**Veredicto**: no implementar. Si el recuento de objetos llega a ser un problema real, la
+alternativa a explorar sería combinar por trozos (por bloque o por segmento de calle) en vez
+de por categoría completa, para no perder ni la granularidad de culling ni, si se resuelve
+además el problema de la conexión a prefab (p. ej. dejando el `MeshFilter`/`MeshRenderer`
+combinado como hijo de un prefab instance vacío en vez de sustituirlo), la editabilidad — pero
+nadie ha medido todavía que el recuento de objetos sea, en la práctica, un problema.
 
 ### A.13 `ScriptableObject` para el tuning de vehículos — no recomendado
 
@@ -146,27 +143,6 @@ Centralizarlos en un `CarProfile` como `ScriptableObject` permitiría ajustar el
 tocar cada prefab. Es mejora de mantenibilidad, no de rendimiento, y **complica el
 paquete**: el usuario tendría que crear y asignar perfiles además de prefabs, cuando hoy
 solo tiene que arrastrar un prefab. **No hacerlo** salvo que el tuning se toque a menudo.
-
-### A.18 README del paquete
-
-Es el hueco más claro que queda de cara a distribuir la tool. `Assets/CityGenerator/` no
-tiene documentación propia: quien copie la carpeta a otro proyecto no sabe qué necesita ni
-qué esperar. Debería cubrir, como mínimo:
-
-- **Requisitos**: Input System (referenciado por ambos asmdef) y una capa llamada `Vehicle`
-  si se quiere tráfico (la tool avisa en vez de fallar si no existe, pero conviene decirlo).
-- **Qué hacer con `CityGeneratorDefaultAssets.cs`**: es el único fichero deliberadamente no
-  portable — apunta por ruta a los prefabs de demo de *este* repositorio. En otro proyecto
-  hay que reescribirlo con los assets propios o borrarlo y dejar los campos vacíos.
-- **Requisitos de los prefabs del usuario**: pivote en la base, edificios dimensionados al
-  slot de 22 m (la tool **no** comprueba solape entre edificios), vehículos con un único
-  `BoxCollider` en la raíz y sin `Rigidbody`.
-- **Pasos posteriores por escena, responsabilidad del usuario**: hornear lightmaps y
-  occlusion culling (la geometría ya sale marcada static), y añadir `LODGroup` a los
-  prefabs propios si la ciudad es grande. Explícitamente fuera del alcance de la tool.
-- **Configuración recomendada del proyecto destino**: los valores del grupo C.
-
-**Ganancia**: alta — sin esto el paquete no es distribuible. **Coste**: bajo.
 
 ---
 
@@ -184,8 +160,8 @@ esos modelos.
 ## C. Configuración de proyecto — ajustes recomendados para el proyecto destino
 
 Vive en `ProjectSettings/*` y `Assets/Settings/*`. **No viaja con el paquete**: en cuanto la
-tool se instale en otro proyecto habrá que reproducir estos valores allí. Su sitio natural
-es el README (A.18); se conservan aquí como referencia de qué se ajustó y por qué.
+tool se instale en otro proyecto habrá que reproducir estos valores allí. Ya recogidos en
+`Assets/CityGenerator/README.md`; se conservan aquí como referencia de qué se ajustó y por qué.
 
 **Valores aplicados en este proyecto**, y recomendados en cualquier otro:
 
@@ -306,7 +282,8 @@ el camino con mejor relación coste/beneficio no es ECS, sino, por orden:
 
 1. **Planificación de rutas en `CarAgent`**. Es el techo real: sin ella, más coches solo
    significa atascarse antes. Todo lo demás es prematuro hasta resolver esto.
-2. A.7 (tick centralizado + escalonado de sensores).
+2. A.7, ya implementado (`TrafficManager`: tick centralizado + escalonado de sensores por
+   encima de `staggerMinAgentCount`).
 3. Sustituir el `SphereCast` por una **rejilla espacial** propia: los coches ya viven en un
    grafo de carriles conocido, así que "el coche de delante" se resuelve por índice de carril
    en O(1) **sin tocar el motor de física** — y de paso desaparece la necesidad del
@@ -321,20 +298,15 @@ Con esos pasos el proyecto soportaría del orden de 500–1 000 coches por ciuda
 
 ## G. Orden de ejecución propuesto
 
-Queda poco, y lo que queda no es urgente. Por orden:
+A.7 y A.18 ya están implementados (2026-08-20; ver "Ya resueltos" arriba). Lo único que queda
+no es urgente:
 
-**1 — A.18: README del paquete.** Coste bajo, y es lo único que hoy separa a
-`Assets/CityGenerator/` de ser distribuible. Es ahora mismo el hallazgo pendiente de mayor
-prioridad.
+**Si el plan es subir el tráfico, seguir F.4** — empezar por la planificación de rutas
+(F.4.1), no por el rendimiento; A.7 (F.4.2) ya está hecho.
 
-**2 — A.2: medir antes de decidir.** Cuenta objetos y tiempo de carga en una ciudad 5×5 con
-A.1 ya aplicado. Solo si el recuento molesta, implementar la combinación de mallas.
-
-**3 — A.7 y F.4: solo si el plan es subir el tráfico.** Y en ese caso, empezar por la
-planificación de rutas (F.4.1), no por el rendimiento.
-
-**No hacer**: F (ECS/DOTS), `LODGroup` dentro de la tool (documentarlo como responsabilidad
-del usuario en el README), C.5, A.13.
+**No hacer**: F (ECS/DOTS), A.2 (probado y revertido — rompe occlusion culling a escala y la
+conexión a prefab de las marcas viales), `LODGroup` dentro de la tool (ya documentado como
+responsabilidad del usuario en el README), C.5, A.13.
 
 ---
 

@@ -36,6 +36,16 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
+        /// Adds the <see cref="TrafficManager"/> that ticks every generated <see cref="CarAgent"/>
+        /// from one central Update instead of each car's own (see the technical review, A.7).
+        /// Only called when traffic is actually generated.
+        /// </summary>
+        public static void AddManagerComponent(Transform trafficNetworkGroup)
+        {
+            trafficNetworkGroup.gameObject.AddComponent<TrafficManager>();
+        }
+
+        /// <summary>
         /// Places 4 traffic lights (one per arm) at every intersection fully surrounded by
         /// blocks (both axis indices strictly interior — the same set as the zebra crossings),
         /// wired into a <see cref="TrafficLightIntersection"/> that cycles east-west vs north-south.
@@ -164,8 +174,15 @@ namespace CityGenerator.Editor
                     if (vehicleLayer >= 0)
                         instance.layer = vehicleLayer;
 
-                    if (instance.GetComponent<CarAgent>() == null)
-                        instance.AddComponent<CarAgent>();
+                    CarAgent carAgent = instance.GetComponent<CarAgent>();
+                    if (carAgent == null)
+                        carAgent = instance.AddComponent<CarAgent>();
+
+                    // Injected here instead of each car finding it via FindFirstObjectByType in
+                    // Start (see the technical review, A.7).
+                    var serializedAgent = new SerializedObject(carAgent);
+                    serializedAgent.FindProperty("network").objectReferenceValue = network;
+                    serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
                     placed.Add(instance);
                 }
