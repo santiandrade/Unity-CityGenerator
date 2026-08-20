@@ -17,9 +17,9 @@ Un dato técnico condiciona todo el diseño del versionado: **Unity no ofrece ac
 
 - **Creación del package embebido** `Packages/com.santiandrade.citygenerator/` con su `package.json`: `name` `com.santiandrade.citygenerator`, `displayName` `City Generator`, `version` `1.0.0`, `unity` `6000.0`, `license` `MIT`, `author`, `documentationUrl`/`changelogUrl` apuntando al repo, y `dependencies`: `com.unity.inputsystem` y `com.unity.cloud.gltfast`.
 - **Movimiento de la tool** desde `Assets/CityGenerator/` a `Packages/com.santiandrade.citygenerator/{Runtime,Editor}`, con sus `.meta` (los GUID se conservan, `City.unity` no se rompe). Los dos `.asmdef` mantienen nombre, namespace y referencias actuales.
-- **Movimiento del contenido demo referenciado** a `Packages/com.santiandrade.citygenerator/Demo/{Prefabs,Materials,Meshes,Models,Animations,Input}`: los 22 prefabs, los 14 materiales de `Materials/City/`, las 17 mallas extraídas, `PlayerAnimator.controller`, `InputSystem_Actions.inputactions` y únicamente los modelos de `Assets/Models/` que algún prefab usa.
+- **Movimiento del contenido demo referenciado** a `Packages/com.santiandrade.citygenerator/DefaultAssets/{Prefabs,Materials,Meshes,Models,Animations,Input}`: los 22 prefabs, los 14 materiales de `Materials/City/`, las 17 mallas extraídas, `PlayerAnimator.controller`, `InputSystem_Actions.inputactions` y únicamente los modelos de `Assets/Models/` que algún prefab usa.
 - **Los modelos huérfanos se quedan en `Assets/Models/`** del repo de desarrollo, fuera del package (CLAUDE.md los conserva a propósito para uso futuro).
-- **`CityGeneratorDefaultAssets` reescrito** para cargar por rutas `Packages/com.santiandrade.citygenerator/Demo/...`. Deja de ser el fichero no portable de la herramienta: en cualquier proyecto que instale el package, esas rutas existen y la ventana abre con todos los prefabs asignados.
+- **`CityGeneratorDefaultAssets` reescrito** para cargar por rutas `Packages/com.santiandrade.citygenerator/DefaultAssets/...`. Deja de ser el fichero no portable de la herramienta: en cualquier proyecto que instale el package, esas rutas existen y la ventana abre con todos los prefabs asignados.
 - **Documentación bilingüe en la raíz del repo**: `README.md` (inglés, por defecto) y `README.es.md` (traducción íntegra), con enlace mutuo en la primera línea. Contenido: qué es la tool, instalación por git URL, cómo actualizar, requisitos, requisitos de tus propios prefabs, qué no hace la tool, ajustes de proyecto recomendados y escalado de tráfico. Absorben el `README.md` actual de `Assets/CityGenerator/`.
 - **README corto dentro del package** que apunta al del repo, para quien lo lea desde `Packages/`.
 - **Sistema de versionado**: `CHANGELOG.md` en la raíz del package en formato Keep a Changelog, versiones SemVer, un tag git `vX.Y.Z` por release. `LICENSE.md` (MIT) en la raíz del repo y dentro del package.
@@ -36,7 +36,7 @@ Un dato técnico condiciona todo el diseño del versionado: **Unity no ofrece ac
 - Resolver los seguimientos abiertos de la SPEC 01 (rejillas grandes, rejillas no 3×3, rendimiento O(n²)).
 - Eliminar la dependencia de glTFast sustituyendo `Fountain.glb` por una malla extraída.
 - Hacer los materiales demo independientes del pipeline de render: siguen siendo URP/Lit y se verán magenta en Built-in/HDRP. El README lo advierte.
-- **Escena demo dentro del package.** Se valoró incluir una `Demo/Scenes/DemoCity.unity` de escaparate; se descarta para no congelar en cada release una escena que hay que regenerar cada vez que cambie la generación. El usuario genera su primera ciudad con un clic desde la ventana, que ya abre con todos los prefabs demo asignados.
+- **Escena demo dentro del package.** Se valoró incluir una `DefaultAssets/Scenes/DemoCity.unity` de escaparate; se descarta para no congelar en cada release una escena que hay que regenerar cada vez que cambie la generación. El usuario genera su primera ciudad con un clic desde la ventana, que ya abre con todos los prefabs demo asignados.
 - Traducciones a otros idiomas más allá de inglés y español.
 
 ## Modelo de datos
@@ -83,7 +83,7 @@ Packages/com.santiandrade.citygenerator/
 │   ├── CityGenerator.Editor.asmdef
 │   ├── ToolThumbnail.png
 │   └── CityGenerator*.cs  (los 17 ficheros de la tool)
-└── Demo/
+└── DefaultAssets/
     ├── Prefabs/       Buildings/ Characters/ Floors/ Props/ Vegetation/ Vehicles/
     ├── Materials/     (los 14 de Materials/City/)
     ├── Meshes/        (las 17 mallas extraídas)
@@ -99,12 +99,12 @@ Packages/com.santiandrade.citygenerator/
 | `Assets/CityGenerator/Runtime/` | `Packages/com.santiandrade.citygenerator/Runtime/` |
 | `Assets/CityGenerator/Editor/` | `Packages/com.santiandrade.citygenerator/Editor/` |
 | `Assets/CityGenerator/README.md` | absorbido por el `README.md` de la raíz del repo (se borra) |
-| `Assets/Prefabs/` | `…/Demo/Prefabs/` |
-| `Assets/Materials/City/` | `…/Demo/Materials/` |
-| `Assets/Meshes/` | `…/Demo/Meshes/` |
-| `Assets/Animations/` | `…/Demo/Animations/` |
-| `Assets/InputSystem_Actions.inputactions` | `…/Demo/Input/` |
-| modelos de `Assets/Models/` **referenciados** + sus texturas | `…/Demo/Models/` |
+| `Assets/Prefabs/` | `…/DefaultAssets/Prefabs/` |
+| `Assets/Materials/City/` | `…/DefaultAssets/Materials/` |
+| `Assets/Meshes/` | `…/DefaultAssets/Meshes/` |
+| `Assets/Animations/` | `…/DefaultAssets/Animations/` |
+| `Assets/InputSystem_Actions.inputactions` | `…/DefaultAssets/Input/` |
+| modelos de `Assets/Models/` **referenciados** + sus texturas | `…/DefaultAssets/Models/` |
 | modelos de `Assets/Models/` **huérfanos** | se quedan en `Assets/Models/` |
 | `Assets/Scenes/City.unity`, `Assets/Settings/` | sin cambios |
 
@@ -135,7 +135,7 @@ Cada paso deja el proyecto compilando y la herramienta funcionando, y es commita
 2. **Mover el código de la herramienta.** Con Unity cerrado, `git mv` de `Assets/CityGenerator/Runtime` y `Assets/CityGenerator/Editor` (con sus `.meta`) a la raíz del package. Borrar `Assets/CityGenerator/README.md` y la carpeta vacía con su `.meta`.
    *Verificación:* Unity recompila sin errores; `Tools > City Generator` abre la ventana con la miniatura y los prefabs demo asignados (siguen en `Assets/Prefabs`, aún válidos); `City.unity` abre sin *missing script*.
 
-3. **Mover el contenido demo y reescribir las rutas.** Calcular con `AssetDatabase.GetDependencies` qué modelos y texturas usan los 22 prefabs y `PlayerAnimator.controller`. `git mv` de esos modelos, más `Prefabs/`, `Materials/City/`, `Meshes/`, `Animations/` e `InputSystem_Actions.inputactions`, a `Demo/` según el mapa de movimientos. Reescribir las 20 rutas de `CityGeneratorDefaultAssets.ApplyTo` a `Packages/com.santiandrade.citygenerator/Demo/...` y sustituir su comentario de cabecera: ya no es el fichero no portable, ahora carga assets del propio package.
+3. **Mover el contenido demo y reescribir las rutas.** Calcular con `AssetDatabase.GetDependencies` qué modelos y texturas usan los 22 prefabs y `PlayerAnimator.controller`. `git mv` de esos modelos, más `Prefabs/`, `Materials/City/`, `Meshes/`, `Animations/` e `InputSystem_Actions.inputactions`, a `DefaultAssets/` según el mapa de movimientos. Reescribir las 20 rutas de `CityGeneratorDefaultAssets.ApplyTo` a `Packages/com.santiandrade.citygenerator/DefaultAssets/...` y sustituir su comentario de cabecera: ya no es el fichero no portable, ahora carga assets del propio package.
    *Verificación:* `City.unity` sigue abriendo con todos los prefabs resueltos (GUID intactos); "Reset to Defaults" rellena los 20 campos; "Build City in New Scene" genera una ciudad completa.
 
 4. **`README.md` en la raíz (inglés).** Absorbe el contenido del antiguo `Assets/CityGenerator/README.md` (requisitos, requisitos de tus prefabs, qué no hace la tool, ajustes recomendados, escalado de tráfico) y añade las secciones nuevas: **Installation** (la git URL con `?path=` y `#vX.Y.Z`, y la variante sin tag), **Updating** (reinstalar la URL con el tag nuevo; nota explícita de que Unity no ofrece botón "Update" para paquetes git), **Requirements** (Unity 6000.0+, Input System, glTFast, layer `Vehicle`), **Demo content** (viene incluido y es read-only al instalarse), **Render pipeline** (materiales URP/Lit, magenta en Built-in/HDRP) y **License**.
@@ -163,7 +163,7 @@ Cada paso deja el proyecto compilando y la herramienta funcionando, y es commita
 - [ ] No queda ningún fichero en `Assets/CityGenerator/` ni la carpeta misma.
 - [ ] `Assets/` contiene únicamente `Scenes/City.unity`, `Settings/`, `Editor/CityGeneratorReleaseWindow.cs` y los modelos huérfanos de `Models/`.
 - [ ] `Assets/Scenes/City.unity` abre sin *missing script* y sin ninguna referencia de prefab, material o malla rota.
-- [ ] `Tools > City Generator` abre la ventana con la miniatura y los 20 campos de prefab rellenos por `CityGeneratorDefaultAssets`, cargados desde rutas `Packages/com.santiandrade.citygenerator/Demo/...`.
+- [ ] `Tools > City Generator` abre la ventana con la miniatura y los 20 campos de prefab rellenos por `CityGeneratorDefaultAssets`, cargados desde rutas `Packages/com.santiandrade.citygenerator/DefaultAssets/...`.
 - [ ] "Build City in New Scene" genera una ciudad completa sin errores de consola, con el package como única fuente de assets.
 - [ ] `grep -r "Assets/CityGenerator\|Assets/Prefabs" --include=*.cs --include=*.md` no devuelve ninguna ruta viva (fuera de `specs/01`, que es histórico).
 - [ ] `README.md` y `README.es.md` existen en la raíz del repo, cada uno enlaza al otro en su primera línea, y ambos contienen las mismas secciones en el mismo orden.
@@ -196,7 +196,7 @@ Cada paso deja el proyecto compilando y la herramienta funcionando, y es commita
 - **Sí: script de release como ventana de Editor, fuera del package.** El bump y el CHANGELOG se hacen sin salir de Unity, y la herramienta de release no viaja al proyecto del usuario, que no tiene nada que versionar. No ejecuta git: enseña el comando y lo ejecuta la persona, para que el tag nunca se cree por accidente.
 - **Sí: `README.md` completo en la raíz del repo y README corto dentro del package.** La raíz es la portada que GitHub enseña y lo primero que lee quien descubre el proyecto; duplicar el texto íntegro en ambos sitios crearía dos copias que se desincronizan en cada release.
 - **Sí: `README.es.md` como traducción íntegra, no como resumen.** El README es también la única documentación de la herramienta, así que un resumen dejaría al lector en español sin la mitad de la información técnica.
-- **No: escena demo dentro del package.** Se valoró incluir una `Demo/Scenes/DemoCity.unity` de escaparate (1,3 MB, ya sin mallas de ProBuilder embebidas). Se descarta porque congelaría en cada release una escena que habría que regenerar cada vez que cambie la generación, y CLAUDE.md define `City.unity` como banco de pruebas desechable. La ventana abre con todos los prefabs asignados, así que la primera ciudad está a un clic.
+- **No: escena demo dentro del package.** Se valoró incluir una `DefaultAssets/Scenes/DemoCity.unity` de escaparate (1,3 MB, ya sin mallas de ProBuilder embebidas). Se descarta porque congelaría en cada release una escena que habría que regenerar cada vez que cambie la generación, y CLAUDE.md define `City.unity` como banco de pruebas desechable. La ventana abre con todos los prefabs asignados, así que la primera ciudad está a un clic.
 - **Sí: mover con `git mv` y Unity cerrado, llevando los `.meta`.** Conserva los GUID, que es lo que impide que `City.unity` pierda referencias; el historial de git sigue el rastro de los ficheros.
 - **Sí: esta spec no toca el comportamiento de la herramienta.** Sólo mueve ficheros, reescribe rutas y añade metadatos, para que cualquier regresión sea atribuible al empaquetado y no a un cambio de generación colado por el camino.
 
