@@ -6,3 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-08-20
+
+### Added
+
+- First release of City Generator as an installable Unity package
+  (`com.santiandrade.citygenerator`), embedding the tool's Runtime and Editor code,
+  demo prefabs and runtime components — installable from Package Manager via
+  "Install package from git URL".
+- Demo content bundled inside the package under `DefaultAssets/`: the 22 sample
+  prefabs (buildings, floors, props, vegetation, vehicles, player), the 14 URP/Lit
+  materials, extracted ProBuilder meshes, `PlayerAnimator.controller` and
+  `InputSystem_Actions.inputactions`, so the tool window opens with every field
+  filled in right after installing.
+- Root `README.md` / `README.es.md` covering installation, updating, requirements,
+  demo content, requirements for user-supplied prefabs, recommended project
+  settings, traffic scaling and render pipeline notes.
+- `Tools > City Generator > Release` editor window (outside the package) to bump
+  `package.json`'s version and roll this changelog for future releases.
+- Only the model files a demo prefab or `PlayerAnimator.controller` actually
+  references travel inside the package: 6 buildings, 4 vehicles, `character-male-d.fbx`
+  and the fountain `.glb`, plus the three `Textures/colormap.png` atlases they share
+  with the categories below (copied in, not moved, so the orphans keep working).
+  Everything else from the same asset packs is **not** part of the package and stays
+  in this repository's `Assets/Models/` for future use, decided by
+  `AssetDatabase.GetDependencies` rather than by inspection:
+  - `Buildings/` — 35 unreferenced models (extra buildings, low-detail variants,
+    awnings, overhangs, parasols).
+  - `Cars/` — 46 unreferenced models (other vehicles, wheels, debris parts).
+  - `Characters/` — 25 unreferenced models (other characters, mobility aids,
+    wheelchairs).
+  - `Pets/` — 24 unreferenced models (none of this category is used by any demo
+    prefab).
