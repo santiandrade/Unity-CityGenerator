@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &2507194284278536604
+--- !u!1001 &3709675339896094155
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -8,77 +8,73 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalPosition.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalPosition.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalRotation.w
       value: 1
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalRotation.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - target: {fileID: 919132149155446097, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       propertyPath: m_Name
-      value: SedanSportCar
-      objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: 0eabca42a47114743b1829897410a03b, type: 3}
-      propertyPath: m_Layer
-      value: 8
+      value: Sedan
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 8520092452595253304}
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 0eabca42a47114743b1829897410a03b, type: 3}
+      addedObject: {fileID: 3335804132564320026}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 7298884377124005245}
-  m_SourcePrefab: {fileID: 100100000, guid: 0eabca42a47114743b1829897410a03b, type: 3}
---- !u!1 &3317532499126707405 stripped
+      addedObject: {fileID: 4518062646807638233}
+  m_SourcePrefab: {fileID: 100100000, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
+--- !u!1 &4591986896556867738 stripped
 GameObject:
-  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 0eabca42a47114743b1829897410a03b, type: 3}
-  m_PrefabInstance: {fileID: 2507194284278536604}
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 515cedd48fb833441ab5e3d77477bfdd, type: 3}
+  m_PrefabInstance: {fileID: 3709675339896094155}
   m_PrefabAsset: {fileID: 0}
---- !u!65 &8520092452595253304
+--- !u!65 &3335804132564320026
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3317532499126707405}
+  m_GameObject: {fileID: 4591986896556867738}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -91,26 +87,26 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.33, y: 1.1, z: 2.6}
-  m_Center: {x: -1.7763869e-17, y: 0.55, z: -0.029999971}
---- !u!114 &7298884377124005245
+  m_Size: {x: 1.5152888, y: 1.3192894, z: 2.5648327}
+  m_Center: {x: 0.0015805662, y: 0.64648163, z: -0.026871681}
+--- !u!114 &4518062646807638233
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3317532499126707405}
+  m_GameObject: {fileID: 4591986896556867738}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8dcbe03e646732489babe75ed357584, type: 3}
   m_Name: 
   m_EditorClassIdentifier: CityGenerator.Runtime::CityGenerator.Runtime.CarAgent
   network: {fileID: 0}
-  maxSpeed: 12.8
-  acceleration: 9.5
-  braking: 17
-  turnSpeed: 260
-  cornerSpeedFactor: 0.5
+  maxSpeed: 10
+  acceleration: 5
+  braking: 13
+  turnSpeed: 220
+  cornerSpeedFactor: 0.43
   arriveRadius: 1.5
   vehicleMask:
     serializedVersion: 2

@@ -20,12 +20,12 @@ namespace CityGenerator.Editor
     [Serializable]
     internal class GeneralSettings
     {
-        public int gridWidth = 3;
-        public int gridHeight = 3;
+        public int gridWidth = 5;
+        public int gridHeight = 5;
         public int plazaCount = 1;
         public int buildingsPerBlock = 4; // clamped 0-4
         public bool includeTraffic = true;
-        public int vehicleCount = 30;
+        public int vehicleCount = 80;
         public bool useCustomSeed = false;
         public int seed = 0;
         public GameObject playerPrefab; // optional

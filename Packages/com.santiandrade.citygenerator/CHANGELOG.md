@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 12 new demo prefabs: 10 buildings (`Building-B/C/D/E/G/H/L` and
+  `Building-Skyscraper-A/B/D`) and 11 vehicles (`Ambulance`, `Delivery-Flat`,
+  `Firetruck`, `Garbage-Truck`, `Hatchback-Sports`, `Sedan`, `Suv`, `Suv-Luxury`,
+  `Truck`, `Truck-Flat`, `Van`), each vehicle with its own `CarAgent` tuning.
+- `Tools > City Generator > Set Current Selection As Default`: captures whatever is
+  currently assigned in an open City Generator window and writes it back as the
+  tool's new default (prefabs, counts, densities...), so the next window and
+  "Reset to Defaults" both open with it.
+
+### Changed
+
+- The tool's default settings now reflect the full demo prefab lineup above: all 16
+  building prefabs, all 15 vehicle prefabs (with rebalanced percentages), a 5x5 grid
+  and a vehicle count of 80.
+
+### Fixed
+
+- 4 of the demo vehicle prefabs (`DeliveryCar`, `PoliceCar`, `SedanSportCar`,
+  `TaxiCar`) had lost their baked `CarAgent` component while being reassigned to
+  new base models; the 11 new vehicles never had one either. Without it,
+  `CityGeneratorTrafficBuilder.BuildVehicles` fell back to adding a fresh `CarAgent`
+  with the script's own defaults, so every generated vehicle drove identically
+  regardless of type. Restored/added on all 15 prefabs.
+
 ## [1.1.0] - 2026-08-20
 
 ### Added

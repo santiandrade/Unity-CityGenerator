@@ -65,7 +65,7 @@ PrefabInstance:
       addedObject: {fileID: 3732397164434404392}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: ed3538aa7630a454fb36ea007d022b04, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1929477523933321420}
+      addedObject: {fileID: 6121022434999503963}
   m_SourcePrefab: {fileID: 100100000, guid: ed3538aa7630a454fb36ea007d022b04, type: 3}
 --- !u!1 &772324440904980526 stripped
 GameObject:
@@ -93,7 +93,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.33, y: 1.6, z: 3.26}
   m_Center: {x: 0, y: 0.8, z: -0.029999971}
---- !u!114 &1929477523933321420
+--- !u!114 &6121022434999503963
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -104,7 +104,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8dcbe03e646732489babe75ed357584, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TestAI.CarAgent
+  m_EditorClassIdentifier: CityGenerator.Runtime::CityGenerator.Runtime.CarAgent
   network: {fileID: 0}
   maxSpeed: 6.5
   acceleration: 3
@@ -114,7 +114,7 @@ MonoBehaviour:
   arriveRadius: 1.5
   vehicleMask:
     serializedVersion: 2
-    m_Bits: 256
+    m_Bits: 4294967295
   sensorRange: 12
   sensorRadius: 0.7
   minGap: 2.2
@@ -122,3 +122,5 @@ MonoBehaviour:
   yieldDistance: 12
   claimDistance: 5
   yieldSpeed: 4.5
+  deadlockTimeout: 6
+  deadlockBreakDuration: 4

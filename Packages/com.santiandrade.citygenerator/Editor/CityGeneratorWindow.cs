@@ -27,6 +27,44 @@ namespace CityGenerator.Editor
             window.Show();
         }
 
+        /// <summary>
+        /// Captures whatever is currently assigned in the open window and writes it back as the
+        /// tool's new default (source files under the package's own Editor/ folder), so the next
+        /// window and "Reset to Defaults" both open with it. Requires an already-open window
+        /// rather than opening one itself: creating a fresh one just to save its empty/default
+        /// state as the new default would be self-defeating.
+        /// </summary>
+        [MenuItem("Tools/City Generator/Set Current Selection As Default")]
+        private static void SetCurrentSelectionAsDefaultMenuItem()
+        {
+            CityGeneratorWindow window = FindOpenWindow();
+            if (window == null)
+            {
+                EditorUtility.DisplayDialog(
+                    "City Generator",
+                    "Open the City Generator window first (Tools > City Generator > Open) so there is a current selection to save.",
+                    "OK");
+                return;
+            }
+
+            bool confirmed = EditorUtility.DisplayDialog(
+                "City Generator - Set Current Selection As Default",
+                "This overwrites the tool's default settings (prefabs, counts, densities...) with what is currently assigned in the open City Generator window, by editing the package's own source files. This cannot be undone with Ctrl+Z.",
+                "Save as Default",
+                "Cancel");
+            if (!confirmed)
+                return;
+
+            CityGeneratorDefaultAssetsWriter.SaveCurrentAsDefault(window.settings);
+            EditorUtility.DisplayDialog("City Generator", "Current selection saved as the new default.", "OK");
+        }
+
+        private static CityGeneratorWindow FindOpenWindow()
+        {
+            CityGeneratorWindow[] windows = Resources.FindObjectsOfTypeAll<CityGeneratorWindow>();
+            return windows.Length > 0 ? windows[0] : null;
+        }
+
         // Runs once per window instance (not on every domain reload's OnEnable, since
         // defaultsInitialized is itself serialized): AssetDatabase can't be touched from a field
         // initializer, so the tool's own reference-city prefabs are assigned here instead.

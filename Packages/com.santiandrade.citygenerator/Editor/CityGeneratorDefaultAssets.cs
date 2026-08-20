@@ -12,6 +12,9 @@ namespace CityGenerator.Editor
     /// in any project that installs the package, not just this one.
     /// Every path is resolved defensively (silently left null if missing), since a project
     /// without these assets must still get an otherwise-empty, working settings object.
+    /// Regenerated wholesale by <see cref="CityGeneratorDefaultAssetsWriter.SaveCurrentAsDefault"/>
+    /// ("Tools &gt; City Generator &gt; Set Current Selection As Default") — hand edits survive
+    /// until the next time that command runs.
     /// </summary>
     internal static class CityGeneratorDefaultAssets
     {
@@ -34,10 +37,20 @@ namespace CityGenerator.Editor
             settings.buildingPrefabs = new List<GameObject>
             {
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-A.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-B.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-C.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-D.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-E.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-F.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-G.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-H.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-I.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-L.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-M.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-A.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-B.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-C.prefab"),
+                Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-D.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-E.prefab"),
             };
 
@@ -48,10 +61,21 @@ namespace CityGenerator.Editor
 
             settings.vehicles = new List<VehicleEntry>
             {
-                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/DeliveryCar.prefab"), percentage = 25f },
-                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/PoliceCar.prefab"), percentage = 10f },
-                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/SedanSportCar.prefab"), percentage = 5f },
-                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/TaxiCar.prefab"), percentage = 60f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Ambulance.prefab"), percentage = 1f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Delivery-Flat.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/DeliveryCar.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Firetruck.prefab"), percentage = 1f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Garbage-Truck.prefab"), percentage = 2f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Hatchback-Sports.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/PoliceCar.prefab"), percentage = 3f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Sedan.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/SedanSportCar.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Suv.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Suv-Luxury.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/TaxiCar.prefab"), percentage = 23f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Truck.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Truck-Flat.prefab"), percentage = 7f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Van.prefab"), percentage = 7f },
             };
 
             settings.props.trafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight.prefab");
