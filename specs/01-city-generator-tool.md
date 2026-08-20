@@ -2,6 +2,7 @@
 
 ## Header
 
+- **Continuación:** El empaquetado y la distribución de la tool (movimiento a `Packages/com.santiandrade.citygenerator/`, versionado, README) se tratan en `specs/02-unity-package-distribution.md`. Esta spec queda como registro histórico de la implementación original y no se reescribe.
 - **Estado:** Completado — los 11 pasos del plan de implementación están hechos, incluido el QA manual (paso 11), confirmado por el usuario. Quedan abiertos únicamente los seguimientos listados en "Riesgos identificados" que no formaban parte del alcance de ese QA (rejillas grandes, tamaños de rejilla distintos de 3×3, ruta fija a `InputSystem_Actions.inputactions`, ausencia de `.asmdef`).
 - **Dependencias:** Ninguna (proyecto ya contiene la ciudad de referencia `City.unity` y los scripts a generalizar: `PlayerController`, `ThirdPersonCamera`, `TrafficNetwork`, `CarAgent`, `TrafficLight`, `TrafficLightIntersection`)
 - **Fecha:** 2026-08-18
