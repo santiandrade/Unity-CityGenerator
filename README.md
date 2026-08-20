@@ -2,6 +2,8 @@
 
 # City Generator
 
+<img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="City Generator thumbnail" width="100%">
+
 An Editor tool for Unity that procedurally generates a city — roads, sidewalks, road
 markings, buildings, plazas, street furniture, traffic lights and autonomous traffic —
 into a new or existing scene. Open it from **Tools > City Generator > Open**.

@@ -2,6 +2,8 @@
 
 # City Generator
 
+<img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="Miniatura de City Generator" width="100%">
+
 Una herramienta de Editor para Unity que genera proceduralmente una ciudad —
 carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos y
 tráfico autónomo— en una escena nueva o existente. Ábrela desde **Tools > City
