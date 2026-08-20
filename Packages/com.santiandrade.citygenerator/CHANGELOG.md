@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-20
+
+### Fixed
+
+- `DefaultAssets/Input/InputSystem_Actions.inputactions` shipped with the same GUID
+  Unity assigns to that asset in every new project created from the Input System
+  template. Since the file lives in the package's immutable folder, Unity refused to
+  reassign the GUID and silently ignored the asset, leaving `general.inputActions`
+  unresolved (and the player/camera unable to read input) in any project that still
+  has its own default `InputSystem_Actions.inputactions`. Reassigned a fresh GUID to
+  the package's copy. **If you installed v1.0.0, reinstall with `#v1.0.1`** — this
+  affects most default Unity projects.
+
 ## [1.0.0] - 2026-08-20
 
 ### Added
