@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-20
+
+### Added
+
+- `licensesUrl` in `package.json`, pointing at `LICENSE.md` on GitHub. Without it,
+  Unity Package Manager's "Licenses" link opened the local file through the OS file
+  explorer instead of a browser, unlike the "Documentation" and "Changelog" links.
+
+### Fixed
+
+- Root README installation instructions no longer hardcode a version tag in the
+  primary install URL — every past release required editing the README to keep the
+  example current. The untagged URL (tracks the default branch) is now the default
+  instruction, with pinning to a `#vX.Y.Z` release documented as an option that
+  links to the [Releases page](https://github.com/santiandrade/Unity-CityGenerator/releases)
+  instead of a hardcoded number.
+
 ## [1.0.1] - 2026-08-20
 
 ### Fixed

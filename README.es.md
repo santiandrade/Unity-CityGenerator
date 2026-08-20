@@ -17,14 +17,16 @@ En tu proyecto de Unity, abre **Window > Package Manager**, pulsa el botón **+*
 **Install package from git URL** y pega:
 
 ```
-https://github.com/santiandrade/Unity-CityGenerator.git?path=/Packages/com.santiandrade.citygenerator#v1.0.0
+https://github.com/santiandrade/Unity-CityGenerator.git?path=/Packages/com.santiandrade.citygenerator
 ```
 
 El segmento `?path=` apunta al package dentro de este repositorio (la raíz del
-repositorio no es en sí misma un package); el segmento `#v1.0.0` fija una versión
-publicada exacta. Puedes omitir el sufijo `#v1.0.0` para instalar directamente desde la
-punta de la rama por defecto en vez de una versión etiquetada — útil para seguir el
-desarrollo, a costa de perder instalaciones repetibles.
+repositorio no es en sí misma un package). Esta forma sigue la punta de la rama por
+defecto.
+
+Para una instalación reproducible fijada a una versión concreta, añade `#vX.Y.Z` con un
+tag de la [página de Releases](https://github.com/santiandrade/Unity-CityGenerator/releases)
+— por ejemplo, `...citygenerator#v1.0.1` para esa versión exacta.
 
 ## Actualizar
 
@@ -34,10 +36,12 @@ y este package no está publicado en ninguno. Al instalar por git URL, el Packag
 resuelve y fija el commit actual en `Packages/packages-lock.json`; nunca vuelve a
 consultar el remoto por su cuenta.
 
-Para actualizar a una versión nueva, reinstala el package con el tag nuevo: en
-**Package Manager**, elimina tu entrada instalada de "City Generator" y vuelve a
-instalarla desde la git URL con el tag nuevo, p. ej. `...#v1.1.0`. Esto sustituye el
-commit fijado por el que apunta el tag nuevo.
+Para actualizar, reinstala el package: en **Package Manager**, elimina tu entrada
+instalada de "City Generator" y vuelve a instalarla desde la git URL. Si la instalaste
+con un tag `#vX.Y.Z`, usa el tag nuevo de la [página de Releases](https://github.com/santiandrade/Unity-CityGenerator/releases)
+para fijar la versión nueva. Si la instalaste sin tag, reinstalar la misma URL sin tag
+vuelve a resolver a lo que haya ahora en la rama por defecto. En ambos casos, esto
+sustituye el commit fijado en `Packages/packages-lock.json`.
 
 ## Requisitos
 

@@ -16,14 +16,15 @@ In your Unity project, open **Window > Package Manager**, click the **+** button
 **Install package from git URL**, and paste:
 
 ```
-https://github.com/santiandrade/Unity-CityGenerator.git?path=/Packages/com.santiandrade.citygenerator#v1.0.0
+https://github.com/santiandrade/Unity-CityGenerator.git?path=/Packages/com.santiandrade.citygenerator
 ```
 
 The `?path=` segment points at the package inside this repository (the repository root is
-not itself a package); the `#v1.0.0` segment pins an exact released version. You can drop
-the `#v1.0.0` suffix to install straight from the tip of the default branch instead of a
-tagged release — useful for tracking development, at the cost of losing repeatable
-installs.
+not itself a package). This form tracks the tip of the default branch.
+
+For a reproducible install pinned to a specific release, append `#vX.Y.Z` with a tag from
+the [Releases page](https://github.com/santiandrade/Unity-CityGenerator/releases) — for
+example, `...citygenerator#v1.0.1` for that exact version.
 
 ## Updating
 
@@ -33,10 +34,12 @@ which this package is not published to. When you install by git URL, the Package
 resolves and locks the current commit in `Packages/packages-lock.json`; it never checks
 the remote again on its own.
 
-To update to a new version, reinstall the package with the new tag: **Package Manager >
-your installed "City Generator" entry > remove it**, then install again from git URL with
-the new tag, e.g. `...#v1.1.0`. This replaces the locked commit with the one the new tag
-points at.
+To update, reinstall the package: **Package Manager > your installed "City Generator"
+entry > remove it**, then install again from git URL. If you installed with a `#vX.Y.Z`
+tag, use the new tag from the [Releases page](https://github.com/santiandrade/Unity-CityGenerator/releases) to pin the new version. If you installed
+without a tag, reinstalling the same untagged URL re-resolves to whatever is on the
+default branch now. Either way, this replaces the commit locked in
+`Packages/packages-lock.json`.
 
 ## Requirements
 
