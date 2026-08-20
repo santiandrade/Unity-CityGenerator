@@ -64,6 +64,11 @@ namespace CityGenerator.Editor
         public const float TrafficLightStartOffsetMax = 4f;
         public const string VehicleLayerName = "Vehicle";
 
+        // Layers 0-7 are Unity's built-in/reserved slots (Default, TransparentFX, Ignore Raycast,
+        // Water, UI, plus a few left unnamed by Unity itself) — auto-creating the Vehicle layer
+        // only searches from here up, same convention every other layer-creating tool follows.
+        public const int FirstUserLayerIndex = 8;
+
         // CarAgent has no route planning or congestion avoidance, so once a stretch of road
         // fills up it stays gridlocked. Measured on a 5x5 grid (264 valid spawn nodes): 100
         // vehicles (38%) flowed with the occasional self-resolving crossing conflict, 200 (76%)

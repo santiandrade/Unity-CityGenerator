@@ -1,8 +1,9 @@
 # SPEC 02 — City Generator como package instalable por git URL
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (City Generator Tool)
 > **Fecha:** 2026-08-20
+> **Versión publicada:** `1.0.2` (no `1.0.0` — `v1.0.0` y `v1.0.1` tenían un bug de colisión de GUID en `InputSystem_Actions.inputactions` con el asset por defecto que Unity genera en cualquier proyecto nuevo con el template de Input System, encontrado durante la verificación del paso 9. Ver el CHANGELOG del package para el detalle de cada parche.)
 > **Objetivo:** Convertir `Assets/CityGenerator/` en un package embebido `com.santiandrade.citygenerator` instalable desde Unity con "Install package from git URL", con sus assets demo incluidos, documentación bilingüe en la raíz del repo y un flujo de versionado por tags SemVer que permita actualizar reinstalando la URL con la nueva versión.
 
 ## Por qué existe esta spec
@@ -158,25 +159,25 @@ Cada paso deja el proyecto compilando y la herramienta funcionando, y es commita
 
 ## Criterios de aceptación
 
-- [ ] `Packages/com.santiandrade.citygenerator/package.json` existe con `name` `com.santiandrade.citygenerator`, `version` `1.0.0`, `unity` `6000.0`, `license` `MIT` y las dependencias `com.unity.inputsystem` y `com.unity.cloud.gltfast`.
-- [ ] El Package Manager de este proyecto lista "City Generator" en **In Project > Custom** con su versión, descripción, README y CHANGELOG visibles.
-- [ ] No queda ningún fichero en `Assets/CityGenerator/` ni la carpeta misma.
-- [ ] `Assets/` contiene únicamente `Scenes/City.unity`, `Settings/`, `Editor/CityGeneratorReleaseWindow.cs` y los modelos huérfanos de `Models/`.
-- [ ] `Assets/Scenes/City.unity` abre sin *missing script* y sin ninguna referencia de prefab, material o malla rota.
-- [ ] `Tools > City Generator > Open` abre la ventana con la miniatura y los 20 campos de prefab rellenos por `CityGeneratorDefaultAssets`, cargados desde rutas `Packages/com.santiandrade.citygenerator/DefaultAssets/...`.
-- [ ] "Build City in New Scene" genera una ciudad completa sin errores de consola, con el package como única fuente de assets.
-- [ ] `grep -r "Assets/CityGenerator\|Assets/Prefabs" --include=*.cs --include=*.md` no devuelve ninguna ruta viva (fuera de `specs/01`, que es histórico).
-- [ ] `README.md` y `README.es.md` existen en la raíz del repo, cada uno enlaza al otro en su primera línea, y ambos contienen las mismas secciones en el mismo orden.
-- [ ] `README.md` documenta la git URL de instalación exacta, incluyendo `?path=/Packages/com.santiandrade.citygenerator` y el sufijo `#vX.Y.Z`.
-- [ ] `README.md` explica que Unity no ofrece botón "Update" para paquetes git y que actualizar consiste en reinstalar la URL con el tag nuevo.
-- [ ] `LICENSE.md` (MIT) existe en la raíz del repo y dentro del package, con el mismo texto.
-- [ ] `CHANGELOG.md` del package tiene una sección `## [1.0.0] - 2026-08-20` y una `## [Unreleased]` vacía encima.
-- [ ] `Tools > City Generator > Release` sube `version` en `package.json`, cierra la sección `[Unreleased]` con el número y la fecha nuevos, crea una `[Unreleased]` vacía, y muestra el comando `git tag` sin ejecutarlo.
-- [ ] El tag `v1.0.0` existe en el remoto y su GitHub Release está publicada con las notas del CHANGELOG.
-- [ ] En un proyecto Unity 6 limpio, instalar por la git URL con `#v1.0.0` deja el package en `Packages/` y la ventana abre con los 20 campos rellenos.
-- [ ] En ese proyecto limpio, una ciudad 3×3 con tráfico se genera sin errores, los coches circulan, los semáforos ciclan y el jugador se mueve en Play.
-- [ ] En ese proyecto limpio, sin layer `Vehicle`, la generación no falla y el aviso aparece en consola.
-- [ ] `CLAUDE.md` describe la estructura de package y no menciona rutas `Assets/CityGenerator/`.
+- [x] `Packages/com.santiandrade.citygenerator/package.json` existe con `name` `com.santiandrade.citygenerator`, `version` `1.0.0`, `unity` `6000.0`, `license` `MIT` y las dependencias `com.unity.inputsystem` y `com.unity.cloud.gltfast`. (La `version` actual es `1.0.2` tras los parches — ver nota de cabecera.)
+- [x] El Package Manager de este proyecto lista "City Generator" en **In Project > Custom** con su versión, descripción, README y CHANGELOG visibles.
+- [x] No queda ningún fichero en `Assets/CityGenerator/` ni la carpeta misma.
+- [x] `Assets/` contiene únicamente `Scenes/City.unity`, `Settings/`, `Editor/CityGeneratorReleaseWindow.cs` y los modelos huérfanos de `Models/`.
+- [x] `Assets/Scenes/City.unity` abre sin *missing script* y sin ninguna referencia de prefab, material o malla rota.
+- [x] `Tools > City Generator > Open` abre la ventana con la miniatura y los 20 campos de prefab rellenos por `CityGeneratorDefaultAssets`, cargados desde rutas `Packages/com.santiandrade.citygenerator/DefaultAssets/...`.
+- [x] "Build City in New Scene" genera una ciudad completa sin errores de consola, con el package como única fuente de assets.
+- [x] `grep -r "Assets/CityGenerator\|Assets/Prefabs" --include=*.cs --include=*.md` no devuelve ninguna ruta viva (fuera de `specs/01`, que es histórico).
+- [x] `README.md` y `README.es.md` existen en la raíz del repo, cada uno enlaza al otro en su primera línea, y ambos contienen las mismas secciones en el mismo orden.
+- [x] `README.md` documenta la git URL de instalación exacta, incluyendo `?path=/Packages/com.santiandrade.citygenerator` y el sufijo `#vX.Y.Z`. (La URL sin tag es la instrucción principal desde `v1.0.2`, con el sufijo `#vX.Y.Z` documentado como opción — ver el CHANGELOG de esa versión.)
+- [x] `README.md` explica que Unity no ofrece botón "Update" para paquetes git y que actualizar consiste en reinstalar la URL con el tag nuevo.
+- [x] `LICENSE.md` (MIT) existe en la raíz del repo y dentro del package, con el mismo texto.
+- [x] `CHANGELOG.md` del package tiene una sección `## [1.0.0] - 2026-08-20` y una `## [Unreleased]` vacía encima. (Además de `1.0.1` y `1.0.2`, con las secciones `[Unreleased]` intactas por encima de todas.)
+- [x] `Tools > City Generator > Release` sube `version` en `package.json`, cierra la sección `[Unreleased]` con el número y la fecha nuevos, crea una `[Unreleased]` vacía, y muestra el comando `git tag` sin ejecutarlo. (Lógica verificada por simulación en el paso 6 — los diálogos modales de Unity no son accionables vía MCP — y replicada manualmente dos veces al publicar `1.0.1` y `1.0.2`.)
+- [x] El tag `v1.0.0` existe en el remoto y su GitHub Release está publicada con las notas del CHANGELOG.
+- [x] En un proyecto Unity 6 limpio, instalar por la git URL con `#v1.0.0` deja el package en `Packages/` y la ventana abre con los 20 campos rellenos. (`v1.0.0` y `v1.0.1` tenían el bug de colisión de GUID de `InputSystem_Actions.inputactions` — verificado y confirmado correcto con `v1.0.2`.)
+- [x] En ese proyecto limpio, una ciudad 3×3 con tráfico se genera sin errores, los coches circulan, los semáforos ciclan y el jugador se mueve en Play. (Confirmado por el usuario con `v1.0.2`.)
+- [x] En ese proyecto limpio, sin layer `Vehicle`, la generación no falla y el aviso aparece en consola. (Confirmado: warning `Layer 'Vehicle' not found...` y la ciudad se construye igualmente.)
+- [x] `CLAUDE.md` describe la estructura de package y no menciona rutas `Assets/CityGenerator/`.
 
 ## Decisiones tomadas y descartadas
 

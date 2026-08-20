@@ -49,11 +49,12 @@ default branch now. Either way, this replaces the commit locked in
   `UnityEngine.Input` API is not used anywhere.
 - **glTFast** (`com.unity.cloud.gltfast`, declared as a package dependency). Needed to
   import the demo fountain prop, which is a `.glb` model.
-- A layer named **`Vehicle`** if you want traffic. The tool does not create this layer for
-  you — it warns in the console and falls back to the Default layer instead of failing,
-  but vehicles on the Default layer will not detect each other with their forward sensor,
-  so traffic will drive through itself. Add the layer in *Project Settings > Tags and
-  Layers* before generating.
+- A layer named **`Vehicle`**, used by traffic so vehicles can detect each other with
+  their forward sensor. You don't need to create it yourself — the tool creates it the
+  first time it generates traffic with one, using the first free layer slot, and logs
+  that it did so. Only if every layer slot is already taken does it fall back to
+  warning instead — vehicles then won't detect each other at all (they still stop for
+  lights and unsignalled-crossing priority) until you free one up.
 - A `TrafficLight` prefab with a `CityGenerator.Runtime.TrafficLight` component if
   **Include Traffic** is enabled — the tool validates this and blocks generation
   otherwise.

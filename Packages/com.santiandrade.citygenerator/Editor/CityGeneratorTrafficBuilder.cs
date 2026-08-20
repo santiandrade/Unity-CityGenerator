@@ -112,6 +112,45 @@ namespace CityGenerator.Editor
         private static Vector3 RightOfDir(Vector3 dir) => new(dir.z, 0f, -dir.x);
 
         /// <summary>
+        /// Creates the <see cref="CityGeneratorConstants.VehicleLayerName"/> layer in this project
+        /// if it doesn't already exist, using the first free slot from
+        /// <see cref="CityGeneratorConstants.FirstUserLayerIndex"/> up. Requiring the user to create
+        /// this layer by hand was a recurring source of confusion (SPEC 02 verification), and the
+        /// tool can do it itself the same way any Editor script would: writing directly to
+        /// <c>ProjectSettings/TagManager.asset</c> via <see cref="SerializedObject"/>. If every slot
+        /// is already taken, warns instead of failing — <see cref="BuildVehicles"/> then leaves
+        /// every vehicle's forward sensor mask empty rather than falling back to whatever layer the
+        /// instance happens to share with unrelated scene geometry, so vehicles simply won't detect
+        /// each other until a slot frees up.
+        /// </summary>
+        private static void EnsureVehicleLayerExists()
+        {
+            if (LayerMask.NameToLayer(CityGeneratorConstants.VehicleLayerName) >= 0)
+                return;
+
+            Object[] tagManagerAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (tagManagerAssets.Length == 0)
+                return;
+
+            var tagManager = new SerializedObject(tagManagerAssets[0]);
+            SerializedProperty layers = tagManager.FindProperty("layers");
+
+            for (int i = CityGeneratorConstants.FirstUserLayerIndex; i < layers.arraySize; i++)
+            {
+                SerializedProperty layerSlot = layers.GetArrayElementAtIndex(i);
+                if (string.IsNullOrEmpty(layerSlot.stringValue))
+                {
+                    layerSlot.stringValue = CityGeneratorConstants.VehicleLayerName;
+                    tagManager.ApplyModifiedProperties();
+                    Debug.Log($"[City Generator] Created layer '{CityGeneratorConstants.VehicleLayerName}' at slot {i} (Project Settings > Tags and Layers) so vehicles can detect each other.");
+                    return;
+                }
+            }
+
+            Debug.LogWarning($"[City Generator] Could not auto-create the '{CityGeneratorConstants.VehicleLayerName}' layer: every user layer slot ({CityGeneratorConstants.FirstUserLayerIndex}-31) is already in use. Free one up in Project Settings > Tags and Layers — until then, vehicles won't detect each other (they'll still stop for lights and unsignalled-crossing priority).");
+        }
+
+        /// <summary>
         /// Distributes <paramref name="vehicleCount"/> vehicles across the entries in
         /// <paramref name="vehicles"/> by their configured percentage, and spawns each one at a
         /// distinct (shuffled) node of the already-built <paramref name="network"/> so it starts
@@ -147,17 +186,9 @@ namespace CityGenerator.Editor
                 .ToList();
             CityGeneratorRandomUtility.Shuffle(nodeOrder, random);
 
-            float occupancy = (float)vehicleCount / nodeOrder.Count;
-            if (occupancy > CityGeneratorConstants.VehicleDensityWarningThreshold)
-            {
-                int recommendedMax = Mathf.FloorToInt(nodeOrder.Count * CityGeneratorConstants.VehicleDensityWarningThreshold);
-                Debug.LogWarning($"[City Generator] {vehicleCount} vehicles fill {occupancy:P0} of this grid's {nodeOrder.Count} spawn points. CarAgent has no route planning or congestion avoidance, so traffic tends to gridlock above ~{CityGeneratorConstants.VehicleDensityWarningThreshold:P0} (recommended max ~{recommendedMax} for this grid size).");
-            }
-
             int[] counts = DistributePercentages(vehicles, vehicleCount);
+            EnsureVehicleLayerExists();
             int vehicleLayer = LayerMask.NameToLayer(CityGeneratorConstants.VehicleLayerName);
-            if (vehicleLayer < 0)
-                Debug.LogWarning($"[City Generator] Layer '{CityGeneratorConstants.VehicleLayerName}' not found in this project; vehicles were spawned on the Default layer instead.");
 
             for (int p = 0; p < vehicles.Count; p++)
             {
@@ -182,6 +213,17 @@ namespace CityGenerator.Editor
                     // Start (see the technical review, A.7).
                     var serializedAgent = new SerializedObject(carAgent);
                     serializedAgent.FindProperty("network").objectReferenceValue = network;
+
+                    // vehicleMask must match instance.layer exactly, not whatever LayerMask the
+                    // prefab happened to be authored with: if the 'Vehicle' layer sits at a
+                    // different index in this project, a mask baked for a different index would
+                    // make the forward sensor miss every other vehicle. When EnsureVehicleLayerExists
+                    // couldn't create the layer at all (every slot taken), there's no layer of the
+                    // vehicles' own to match — mask stays 0 (Nothing) rather than falling back to
+                    // whatever layer the instance happens to sit on, which could just as easily be
+                    // shared with unrelated scene geometry. Cars simply don't brake for each other
+                    // in that case; they still stop for lights and unsignalled-crossing priority.
+                    serializedAgent.FindProperty("vehicleMask").intValue = vehicleLayer >= 0 ? 1 << instance.layer : 0;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
                     placed.Add(instance);

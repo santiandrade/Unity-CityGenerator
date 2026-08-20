@@ -51,11 +51,13 @@ sustituye el commit fijado en `Packages/packages-lock.json`.
   `Unity.InputSystem`; la API clásica `UnityEngine.Input` no se usa en ningún sitio.
 - **glTFast** (`com.unity.cloud.gltfast`, declarado como dependencia del package).
   Necesario para importar la fuente de demostración, que es un modelo `.glb`.
-- Una layer llamada **`Vehicle`** si quieres tráfico. La herramienta no la crea por ti
-  — avisa por consola y recurre a la layer Default en vez de fallar, pero los vehículos
-  en la layer Default no se detectarán entre sí con su sensor frontal, así que el
-  tráfico se atravesará. Añade la layer en *Project Settings > Tags and Layers* antes
-  de generar.
+- Una layer llamada **`Vehicle`**, que usa el tráfico para que los vehículos se
+  detecten entre sí con su sensor frontal. No hace falta que la crees tú — la
+  herramienta la crea la primera vez que genera tráfico con ella, usando el primer
+  slot de layer libre, y avisa por consola de que lo ha hecho. Solo si ya están todos
+  los slots de layer ocupados, recurre a avisar en vez de crearla — en ese caso los
+  vehículos dejan de detectarse entre sí por completo (siguen parando en semáforos y
+  por prioridad en cruces sin semáforo) hasta que liberes un slot.
 - Un prefab `TrafficLight` con un componente `CityGenerator.Runtime.TrafficLight` si
   **Include Traffic** está activado — la herramienta lo valida y bloquea la generación
   si falta.

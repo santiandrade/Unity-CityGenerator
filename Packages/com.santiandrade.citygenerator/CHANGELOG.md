@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-20
+
+### Added
+
+- `CityGeneratorTrafficBuilder` now creates the `Vehicle` layer itself, the first time
+  it generates traffic in a project that doesn't have one, using the first free layer
+  slot (8-31) and logging that it did so. You no longer need to create it by hand.
+
+### Fixed
+
+- `CarAgent.vehicleMask` is now recomputed for every vehicle instance at generation
+  time (`1 << instance.layer`), instead of relying on the value baked into the vehicle
+  prefab's own serialized data. The baked value only happened to work when `Vehicle`
+  landed on the same layer index the prefab was authored against (index 8, for the
+  demo prefabs) — on any other index, vehicles would silently stop detecting each
+  other, with no warning.
+- `BuildVehicles` no longer logs a console warning for high vehicle density — the
+  live `HelpBox` in `CityGeneratorWindow` already surfaces it before you click
+  generate, and repeating it in the console after the fact added nothing.
+
+### Changed
+
+- If every layer slot is already taken and the `Vehicle` layer can't be auto-created,
+  vehicles now stop detecting each other entirely (`vehicleMask` is left at `0`)
+  instead of falling back to whatever layer their prefab happens to share with
+  unrelated scene geometry. They still stop for traffic lights and unsignalled-crossing
+  priority.
+
 ## [1.0.2] - 2026-08-20
 
 ### Added
