@@ -9,7 +9,7 @@ namespace CityGenerator.Editor
     {
         private const int MinGridSize = 1;
         private const int MaxGridSize = 10;
-        private const string ThumbnailPath = "Assets/CityGenerator/Editor/ToolThumbnail.png";
+        private const string ThumbnailPath = "Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png";
 
         [SerializeField] private CityGeneratorSettings settings = new();
         [SerializeField] private bool defaultsInitialized;
@@ -18,7 +18,7 @@ namespace CityGenerator.Editor
         private Vector2 scrollPosition;
         private Texture2D thumbnail;
 
-        [MenuItem("Tools/City Generator")]
+        [MenuItem("Tools/City Generator/Open")]
         private static void ShowWindow()
         {
             var window = GetWindow<CityGeneratorWindow>();

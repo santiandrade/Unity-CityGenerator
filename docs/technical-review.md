@@ -5,13 +5,16 @@
 Revisión técnica (rendimiento, memoria, buenas prácticas y calidad de código) del proyecto
 **City Generator**, más el análisis de si merece la pena adoptar ECS/DOTS.
 
-El producto de este repositorio es **la tool**: `Assets/CityGenerator/`, una ventana de
-Editor que genera ciudades procedurales, pensada para copiarse como paquete portable a
-cualquier proyecto Unity. Todo lo demás son medios para ese fin:
+El producto de este repositorio es **la tool**: `Packages/com.santiandrade.citygenerator/`,
+una ventana de Editor que genera ciudades procedurales, distribuida como package embebido
+instalable por git URL en cualquier proyecto Unity (SPEC 02). Todo lo demás son medios para
+ese fin:
 
-- `Assets/Prefabs`, `Assets/Materials`, `Assets/Meshes`, `Assets/Animations`,
-  `Assets/Models` — **contenido de demo**, los prefabs de ejemplo con los que la tool
-  funciona nada más abrirla (`CityGeneratorDefaultAssets`). No viajan con el paquete.
+- `Packages/com.santiandrade.citygenerator/DefaultAssets/` — **contenido de demo**, los
+  prefabs de ejemplo con los que la tool funciona nada más abrirla
+  (`CityGeneratorDefaultAssets`). Desde SPEC 02 viaja **dentro** del package, salvo los
+  modelos huérfanos que se quedan en `Assets/Models/` de este repo (no referenciados por
+  ningún prefab de demo).
 - `Assets/Scenes/City.unity` — **escena de prueba desechable**, generada por la tool y
   regenerada sin miramientos. No contiene trabajo manual que preservar.
 
@@ -24,7 +27,7 @@ en su propio proyecto, sobre su propia ciudad. La responsabilidad de la tool ter
 de este informe tenía un grupo D dedicado a ese trabajo por escena; se ha eliminado, y las
 notas correspondientes pertenecen ahora al README del paquete, no aquí.
 
-Revisado: los 23 scripts de `Assets/CityGenerator/`, `ProjectSettings/*`,
+Revisado: los 23 scripts de `Packages/com.santiandrade.citygenerator/`, `ProjectSettings/*`,
 `Assets/Settings/*` (URP), los 22 prefabs de demo, los 14 materiales, `City.unity` y
 `Packages/manifest.json`.
 
@@ -40,13 +43,14 @@ resolvería nada de lo que hoy limita al proyecto.
 El criterio sigue siendo **dónde vive el fix**, pero reordenado según lo que importa ahora:
 si el fix viaja con el paquete o no.
 
-- **A — Código de la tool** (`Assets/CityGenerator/Runtime` y `Editor`): **viaja con el
-  paquete**. Se arregla una vez y se aplica en cada generación futura, en este proyecto y en
-  cualquier otro donde se instale la tool. Máxima prioridad por definición.
-- **B — Contenido de demo** (`Assets/Prefabs`, `Assets/Materials`, `Assets/Models`): **no
-  viaja**. Un fix aquí mejora las ciudades generadas en este proyecto y la primera impresión
-  de quien pruebe la tool con los assets de ejemplo, pero desaparece en cuanto el usuario
-  asigne sus propios prefabs.
+- **A — Código de la tool** (`Packages/com.santiandrade.citygenerator/Runtime` y `Editor`):
+  **viaja con el paquete**. Se arregla una vez y se aplica en cada generación futura, en este
+  proyecto y en cualquier otro donde se instale la tool. Máxima prioridad por definición.
+- **B — Contenido de demo** (`Packages/com.santiandrade.citygenerator/DefaultAssets/`): desde
+  SPEC 02 **viaja con el paquete** igual que el código (categoría heredada de cuando el
+  contenido de demo vivía en `Assets/` del repo de desarrollo y no se distribuía). Un fix aquí
+  mejora las ciudades generadas con los assets de ejemplo, en este proyecto y en cualquiera
+  que instale el package, pero solo hasta que el usuario asigne sus propios prefabs.
 - **C — Configuración de proyecto** (`ProjectSettings/*`, `Assets/Settings/*` URP):
   **no viaja**. Global a este proyecto Unity. Su valor real hoy es documental: es la lista
   de ajustes recomendados que conviene reproducir en el proyecto destino, y que debería
@@ -90,7 +94,7 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | C.3 | GPU Resident Drawer desactivado | `m_GPUResidentDrawerMode: 1` (Instanced Drawing), habilitado por A.1 |
 | C.4 | Framerate sin objetivo fijado | `CityGenerator.Runtime.PerformanceBootstrap`: `vSyncCount = 0`, `targetFrameRate = 60`. Deliberadamente **en el paquete** y no en `ProjectSettings`, para que viaje con la tool |
 | A.7 | Tick por-coche de `CarAgent` (2026-08-20) | Nuevo `CityGenerator.Runtime.TrafficManager`: `CarAgent` ya no implementa `Update()`, expone `Tick(float dt, bool runSensor)` y se registra en `Start()` contra `TrafficManager.Instance` (con fallback a `FindFirstObjectByType`/auto-creación si el componente no viene del generador). `TrafficManager.Update()` itera la lista de agentes registrados y llama a `Tick` desde un único punto. Con más de `staggerMinAgentCount` (60 por defecto) coches registrados, además escalona el `SphereCast` del sensor frontal para los coches lejos de `Camera.main`, reutilizando el último `clearance` en los frames que se saltan — por debajo de ese umbral (la demo por defecto tiene 30) el comportamiento es idéntico al `Update()` original. `CityGeneratorTrafficBuilder.AddManagerComponent` añade el componente al `GameObject` `TrafficNetwork` solo si `includeTraffic` está activo, y `BuildVehicles` inyecta la referencia a `TrafficNetwork` en cada `CarAgent` generado vía `SerializedObject`, sustituyendo el `FindFirstObjectByType<TrafficNetwork>()` que antes hacía cada coche en `Start`. Verificado en Play mode sobre la ciudad de prueba regenerada: 28/30 coches con `DistanceTravelled > 0.5 m` tras 4 s, sin errores en consola |
-| A.18 | Sin README del paquete (2026-08-20) | `Assets/CityGenerator/README.md`: requisitos (Input System, capa `Vehicle`), qué hacer con `CityGeneratorDefaultAssets.cs` al portar la tool a otro proyecto, requisitos de los prefabs del usuario (pivote en la base, edificios al slot de 22 m, vehículos con `BoxCollider` único y sin `Rigidbody`), pasos posteriores por escena que quedan fuera del alcance de la tool (bake de lightmaps/occlusion, `LODGroup`), y la tabla de configuración de proyecto recomendada (grupo C) |
+| A.18 | Sin README del paquete (2026-08-20) | `Assets/CityGenerator/README.md` en su momento, absorbido después por el `README.md`/`README.es.md` de la raíz del repo (SPEC 02): requisitos (Input System, capa `Vehicle`), qué hacer con `CityGeneratorDefaultAssets.cs` al portar la tool a otro proyecto, requisitos de los prefabs del usuario (pivote en la base, edificios al slot de 22 m, vehículos con `BoxCollider` único y sin `Rigidbody`), pasos posteriores por escena que quedan fuera del alcance de la tool (bake de lightmaps/occlusion, `LODGroup`), y la tabla de configuración de proyecto recomendada (grupo C) |
 
 ### Pendientes
 
@@ -146,22 +150,24 @@ solo tiene que arrastrar un prefab. **No hacerlo** salvo que el tuning se toque 
 
 ---
 
-## B. Contenido de demo — no viaja con el paquete
+## B. Contenido de demo — viaja con el paquete desde SPEC 02
 
 ### B.6 Modelos no referenciados — sin acción
 
 Buena parte de `Assets/Models/Characters` y `Assets/Models/Pets` no está referenciada por
-ningún prefab ni escena, así que Unity no los incluye en la build: cero coste en runtime.
-**No tocar**: la carpeta `Models` se mantiene íntegra a propósito, hay planes de usar más de
-esos modelos.
+ningún prefab de demo ni escena, así que Unity no los incluye en la build: cero coste en
+runtime. **No tocar**: la carpeta `Models` de este repo se mantiene íntegra a propósito,
+hay planes de usar más de esos modelos; SPEC 02 ya excluye estos huérfanos del package por
+el mismo motivo (`AssetDatabase.GetDependencies`, no inspección manual).
 
 ---
 
 ## C. Configuración de proyecto — ajustes recomendados para el proyecto destino
 
 Vive en `ProjectSettings/*` y `Assets/Settings/*`. **No viaja con el paquete**: en cuanto la
-tool se instale en otro proyecto habrá que reproducir estos valores allí. Ya recogidos en
-`Assets/CityGenerator/README.md`; se conservan aquí como referencia de qué se ajustó y por qué.
+tool se instale en otro proyecto habrá que reproducir estos valores allí. Ya recogidos en el
+`README.md` de la raíz del repo (sección *Recommended project settings*); se conservan aquí
+como referencia de qué se ajustó y por qué.
 
 **Valores aplicados en este proyecto**, y recomendados en cualquier otro:
 
