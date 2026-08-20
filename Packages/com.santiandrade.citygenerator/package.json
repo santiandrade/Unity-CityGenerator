@@ -1,0 +1,25 @@
+{
+  "name": "com.santiandrade.citygenerator",
+  "version": "1.0.0",
+  "displayName": "City Generator",
+  "description": "Editor tool that procedurally generates a full city — roads, sidewalks, markings, buildings, plazas, street furniture, traffic lights and autonomous traffic — into a new or existing scene.",
+  "unity": "6000.0",
+  "license": "MIT",
+  "author": {
+    "name": "Santi Andrade",
+    "url": "https://github.com/santiandrade"
+  },
+  "documentationUrl": "https://github.com/santiandrade/Unity-CityGenerator#readme",
+  "changelogUrl": "https://github.com/santiandrade/Unity-CityGenerator/blob/main/Packages/com.santiandrade.citygenerator/CHANGELOG.md",
+  "keywords": [
+    "city",
+    "generator",
+    "procedural",
+    "traffic",
+    "editor-tool"
+  ],
+  "dependencies": {
+    "com.unity.inputsystem": "1.20.0",
+    "com.unity.cloud.gltfast": "6.19.0"
+  }
+}
