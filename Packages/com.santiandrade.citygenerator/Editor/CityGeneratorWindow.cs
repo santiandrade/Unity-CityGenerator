@@ -18,7 +18,7 @@ namespace CityGenerator.Editor
         private Vector2 scrollPosition;
         private Texture2D thumbnail;
 
-        [MenuItem("Tools/City Generator")]
+        [MenuItem("Tools/City Generator/Open")]
         private static void ShowWindow()
         {
             var window = GetWindow<CityGeneratorWindow>();

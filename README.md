@@ -4,7 +4,7 @@
 
 An Editor tool for Unity that procedurally generates a city — roads, sidewalks, road
 markings, buildings, plazas, street furniture, traffic lights and autonomous traffic —
-into a new or existing scene. Open it from **Tools > City Generator**.
+into a new or existing scene. Open it from **Tools > City Generator > Open**.
 
 It ships as the embedded package `com.santiandrade.citygenerator`, installable directly
 from a git URL, with a full set of demo prefabs included so the window is ready to
@@ -59,7 +59,7 @@ points at.
 
 The package includes a full set of demo assets under its `DefaultAssets/` folder —
 buildings, vehicles, vegetation, street furniture, floor pieces, materials and the
-player prefab — so `Tools > City Generator` opens with every required field already
+player prefab — so `Tools > City Generator > Open` opens with every required field already
 filled in and a city is one click away.
 
 This demo content lives inside the package, which Unity treats as read-only in your

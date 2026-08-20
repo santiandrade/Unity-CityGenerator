@@ -5,7 +5,7 @@
 Una herramienta de Editor para Unity que genera proceduralmente una ciudad —
 carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos y
 tráfico autónomo— en una escena nueva o existente. Ábrela desde **Tools > City
-Generator**.
+Generator > Open**.
 
 Se distribuye como el package embebido `com.santiandrade.citygenerator`, instalable
 directamente desde una git URL, con un conjunto completo de prefabs de demostración
@@ -60,7 +60,7 @@ commit fijado por el que apunta el tag nuevo.
 
 El package incluye un conjunto completo de assets de demostración bajo su carpeta
 `DefaultAssets/` — edificios, vehículos, vegetación, mobiliario urbano, piezas de
-suelo, materiales y el prefab del jugador— así que `Tools > City Generator` se abre con
+suelo, materiales y el prefab del jugador— así que `Tools > City Generator > Open` se abre con
 todos los campos obligatorios ya rellenos y una ciudad está a un clic de distancia.
 
 Este contenido de demostración vive dentro del package, que Unity trata como de solo

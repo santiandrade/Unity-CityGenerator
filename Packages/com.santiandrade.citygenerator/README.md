@@ -4,7 +4,7 @@ Editor tool that procedurally generates a full city — roads, sidewalks, markin
 buildings, plazas, street furniture, traffic lights and autonomous traffic — into
 a new or existing scene.
 
-Open it from **Tools > City Generator**.
+Open it from **Tools > City Generator > Open**.
 
 The complete documentation (installation, updating, requirements, prefab
 requirements, recommended project settings and traffic scaling) lives in the
