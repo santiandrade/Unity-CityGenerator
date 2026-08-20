@@ -1,5 +1,14 @@
 {
   "dependencies": {
+    "com.santiandrade.citygenerator": {
+      "version": "file:com.santiandrade.citygenerator",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.inputsystem": "1.20.0",
+        "com.unity.cloud.gltfast": "6.19.0"
+      }
+    },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
       "depth": 1,
