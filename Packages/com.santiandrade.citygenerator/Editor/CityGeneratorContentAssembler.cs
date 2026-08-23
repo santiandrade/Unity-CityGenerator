@@ -16,8 +16,9 @@ namespace CityGenerator.Editor
         public readonly int streetTreeCount;
         public readonly int trafficLightCount;
         public readonly int vehicleCount;
+        public readonly Vector3 playerSpawnPosition;
 
-        public CityBuildSummary(int blockCount, int buildingCount, int plazaSolidCount, int lampCount, int binCount, int streetTreeCount, int trafficLightCount, int vehicleCount)
+        public CityBuildSummary(int blockCount, int buildingCount, int plazaSolidCount, int lampCount, int binCount, int streetTreeCount, int trafficLightCount, int vehicleCount, Vector3 playerSpawnPosition)
         {
             this.blockCount = blockCount;
             this.buildingCount = buildingCount;
@@ -27,6 +28,7 @@ namespace CityGenerator.Editor
             this.streetTreeCount = streetTreeCount;
             this.trafficLightCount = trafficLightCount;
             this.vehicleCount = vehicleCount;
+            this.playerSpawnPosition = playerSpawnPosition;
         }
     }
 
@@ -79,14 +81,25 @@ namespace CityGenerator.Editor
             // Instantiate/DestroyImmediate pair each time.
             var cache = new ObstacleCache();
             var obstacles = new List<GameObject>(builtBuildings);
+            // Mirrors `obstacles` but leaves out ground cover (plaza lawns) that the player is
+            // meant to be able to stand on; used only to pick its spawn position below.
+            var playerAvoidObstacles = new List<GameObject>(builtBuildings);
 
             List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, cache, out List<GameObject> plazaLawns);
             obstacles.AddRange(plazaSolids);
             obstacles.AddRange(plazaLawns);
+            playerAvoidObstacles.AddRange(plazaSolids);
 
             List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, settings.props.lampDensity, streetLights, blocks, random, obstacles, cache);
             List<GameObject> bins = CityGeneratorStreetPropsBuilder.BuildBins(settings.props.binPrefab, settings.props.binDensity, props, blocks, random, obstacles, cache);
             List<GameObject> streetTrees = CityGeneratorStreetPropsBuilder.BuildStreetVegetation(settings.vegetation, trees, blocks, random, obstacles, cache);
+            playerAvoidObstacles.AddRange(lamps);
+            playerAvoidObstacles.AddRange(bins);
+            playerAvoidObstacles.AddRange(streetTrees);
+
+            Vector3 playerSpawnPosition = CityGeneratorPlayerSpawner.FindSpawnPosition(
+                settings.general.playerPrefab, blocks, playerAvoidObstacles, random, cityRoot, cache);
+
             cache.DestroyRemainingProbes();
 
             // The traffic network and its lights are always generated (every 4-way intersection
@@ -118,7 +131,8 @@ namespace CityGenerator.Editor
             return new CityBuildSummary(
                 blocks.Count, builtBuildings.Count, plazaSolids.Count,
                 lamps.Count, bins.Count, streetTrees.Count,
-                trafficLightInstances.Count, vehicleInstances.Count);
+                trafficLightInstances.Count, vehicleInstances.Count,
+                playerSpawnPosition);
         }
 
         private static Transform GetOrCreateGroup(Transform parent, string name)

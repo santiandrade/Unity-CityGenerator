@@ -32,6 +32,8 @@ namespace CityGenerator.Editor
                 {
                     player = (GameObject)PrefabUtility.InstantiatePrefab(settings.general.playerPrefab, scene);
                     player.name = "Player";
+                    player.transform.position = summary.playerSpawnPosition;
+                    EnsurePlayerComponents(player, settings.general.inputActions);
                 }
 
                 CreateMainCamera(scene, player, settings.general.inputActions);
@@ -82,6 +84,42 @@ namespace CityGenerator.Editor
             var light = lightGO.AddComponent<Light>();
             light.type = LightType.Directional;
             light.shadows = LightShadows.Soft;
+        }
+
+        // Lets any character model be assigned as Player Prefab, not just one already set up for
+        // it: DefaultAssets/Prefabs/Characters/ models stay clean (just their Animator), and
+        // CharacterController/PlayerController are added here, with hardcoded default values,
+        // whenever the assigned prefab doesn't already carry them.
+        private static void EnsurePlayerComponents(GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions)
+        {
+            if (player.GetComponent<CharacterController>() == null)
+            {
+                var characterController = player.AddComponent<CharacterController>();
+                characterController.height = CityGeneratorConstants.PlayerControllerHeight;
+                characterController.radius = CityGeneratorConstants.PlayerControllerRadius;
+                characterController.slopeLimit = CityGeneratorConstants.PlayerControllerSlopeLimit;
+                characterController.stepOffset = CityGeneratorConstants.PlayerControllerStepOffset;
+                characterController.skinWidth = CityGeneratorConstants.PlayerControllerSkinWidth;
+                characterController.minMoveDistance = CityGeneratorConstants.PlayerControllerMinMoveDistance;
+                characterController.center = CityGeneratorConstants.PlayerControllerCenter;
+            }
+
+            if (player.GetComponent<PlayerController>() == null)
+            {
+                var playerController = player.AddComponent<PlayerController>();
+                var serialized = new SerializedObject(playerController);
+                serialized.FindProperty("inputActions").objectReferenceValue = inputActions;
+                serialized.FindProperty("actionMapName").stringValue = CityGeneratorConstants.PlayerActionMapName;
+                serialized.FindProperty("moveActionName").stringValue = CityGeneratorConstants.PlayerMoveActionName;
+                serialized.FindProperty("jumpActionName").stringValue = CityGeneratorConstants.PlayerJumpActionName;
+                serialized.FindProperty("sprintActionName").stringValue = CityGeneratorConstants.PlayerSprintActionName;
+                serialized.FindProperty("walkSpeed").floatValue = CityGeneratorConstants.PlayerWalkSpeed;
+                serialized.FindProperty("runSpeed").floatValue = CityGeneratorConstants.PlayerRunSpeed;
+                serialized.FindProperty("rotationSmoothTime").floatValue = CityGeneratorConstants.PlayerRotationSmoothTime;
+                serialized.FindProperty("gravity").floatValue = CityGeneratorConstants.PlayerGravity;
+                serialized.FindProperty("jumpHeight").floatValue = CityGeneratorConstants.PlayerJumpHeight;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions)

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 12 selectable Player Prefab characters (`Character-Male-A` through `-F`,
+  `Character-Female-A` through `-F`), replacing the single hardcoded `Player`
+  prefab. Each is a clean model+Animator prefab (`CharacterAnimator.controller`,
+  shared across all 12) with no movement setup baked in — `CharacterController`
+  and `PlayerController` are now added by `CityGeneratorSceneBuilder` at
+  generation time, with hardcoded default tuning, to whichever prefab is
+  assigned, so any of the 12 (or a user-supplied one) works without extra setup.
+- `CityGeneratorPlayerSpawner`: picks the player's spawn position inside a plaza
+  block when the city has one (random order across plazas), or a random block
+  otherwise, checked against every already-placed building/plaza solid/prop/
+  vegetation instance so the player never spawns overlapping them.
+
+### Changed
+
+- Default `general.playerPrefab` is now `Character-Male-D` (previously `Player`).
+- The 10 mobility-aid models (canes, crutches, masks, glasses, hearing aid,
+  defibrillators) and 4 wheelchair models under `Assets/Models/Characters/`,
+  never referenced by any demo prefab, have been removed from the repo rather
+  than kept as orphans.
+
 ## [1.2.0] - 2026-08-21
 ### Added
 

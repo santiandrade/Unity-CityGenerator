@@ -22,7 +22,7 @@ namespace CityGenerator.Editor
 
         public static void ApplyTo(CityGeneratorSettings settings)
         {
-            settings.general.playerPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Player.prefab");
+            settings.general.playerPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-D.prefab");
             settings.general.inputActions = AssetDatabase.LoadAssetAtPath<InputActionAsset>($"{DefaultAssetsRoot}/Input/InputSystem_Actions.inputactions");
 
             settings.ground.roadBasePrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadBase.prefab");
