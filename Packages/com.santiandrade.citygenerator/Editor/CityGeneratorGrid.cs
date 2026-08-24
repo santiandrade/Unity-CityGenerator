@@ -43,52 +43,21 @@ namespace CityGenerator.Editor
             return new Vector3(GetBlockAxisPosition(gridWidth, gridX), 0f, GetBlockAxisPosition(gridHeight, gridY));
         }
 
-        public static List<BlockCell> BuildBlocks(int gridWidth, int gridHeight, int plazaCount, System.Random random)
+        public static List<BlockCell> BuildBlocks(int gridWidth, int gridHeight, IReadOnlyCollection<Vector2Int> plazaCells)
         {
-            HashSet<int> plazaIndices = ChoosePlazaIndices(gridWidth, gridHeight, plazaCount, random);
+            var plazaLookup = new HashSet<Vector2Int>(plazaCells);
             var cells = new List<BlockCell>(gridWidth * gridHeight);
 
             for (int gy = 0; gy < gridHeight; gy++)
             {
                 for (int gx = 0; gx < gridWidth; gx++)
                 {
-                    int index = gy * gridWidth + gx;
                     Vector3 center = GetBlockCenter(gx, gy, gridWidth, gridHeight);
-                    cells.Add(new BlockCell(gx, gy, center, plazaIndices.Contains(index)));
+                    cells.Add(new BlockCell(gx, gy, center, plazaLookup.Contains(new Vector2Int(gx, gy))));
                 }
             }
 
             return cells;
-        }
-
-        private static HashSet<int> ChoosePlazaIndices(int gridWidth, int gridHeight, int plazaCount, System.Random random)
-        {
-            int totalBlocks = gridWidth * gridHeight;
-            plazaCount = Mathf.Clamp(plazaCount, 0, totalBlocks);
-            var result = new HashSet<int>();
-            if (plazaCount <= 0)
-                return result;
-
-            if (plazaCount == 1)
-            {
-                int centerX = gridWidth / 2;
-                int centerY = gridHeight / 2;
-                result.Add(centerY * gridWidth + centerX);
-                return result;
-            }
-
-            var pool = new List<int>(totalBlocks);
-            for (int i = 0; i < totalBlocks; i++)
-                pool.Add(i);
-
-            while (result.Count < plazaCount && pool.Count > 0)
-            {
-                int pick = random.Next(pool.Count);
-                result.Add(pool[pick]);
-                pool.RemoveAt(pick);
-            }
-
-            return result;
         }
     }
 }

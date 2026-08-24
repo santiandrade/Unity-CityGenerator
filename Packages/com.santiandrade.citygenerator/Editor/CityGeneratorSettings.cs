@@ -23,7 +23,7 @@ namespace CityGenerator.Editor
     {
         public int gridWidth = 5;
         public int gridHeight = 5;
-        public int plazaCount = 1;
+        public List<Vector2Int> plazaCells = new(); // block (x, y) coordinates picked by clicking the grid preview; actual default filled by CityGeneratorDefaultAssets.ApplyTo
         public int buildingsPerBlock = 4; // clamped 0-4
         public bool includeTraffic = true;
         public int vehicleCount = 80;
@@ -48,7 +48,7 @@ namespace CityGenerator.Editor
     internal class PlazaSettings
     {
         public GameObject centerpiecePrefab; // optional
-        public GameObject lawnPrefab; // required if plazaCount > 0
+        public GameObject lawnPrefab; // required if plazaCells is non-empty
         public GameObject benchPrefab; // optional
     }
 

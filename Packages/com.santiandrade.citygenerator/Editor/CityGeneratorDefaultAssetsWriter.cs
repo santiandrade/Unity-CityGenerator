@@ -78,6 +78,7 @@ namespace CityGenerator.Editor
 
             AppendAssignment(sb, "settings.general.playerPrefab", BuildGameObjectExpr(settings.general.playerPrefab, warnings, "General > Player Prefab"));
             AppendAssignment(sb, "settings.general.inputActions", BuildInputActionsExpr(settings.general.inputActions, warnings));
+            AppendVector2IntList(sb, "settings.general.plazaCells", settings.general.plazaCells);
             sb.AppendLine();
 
             AppendAssignment(sb, "settings.ground.roadBasePrefab", BuildGameObjectExpr(settings.ground.roadBasePrefab, warnings, "Ground > Road Base Prefab"));
@@ -132,6 +133,15 @@ namespace CityGenerator.Editor
                 if (expression != null)
                     sb.AppendLine($"                {expression},");
             }
+            sb.AppendLine("            };");
+        }
+
+        private static void AppendVector2IntList(StringBuilder sb, string lhs, List<Vector2Int> items)
+        {
+            sb.AppendLine($"            {lhs} = new List<Vector2Int>");
+            sb.AppendLine("            {");
+            foreach (Vector2Int cell in items)
+                sb.AppendLine($"                new Vector2Int({cell.x}, {cell.y}),");
             sb.AppendLine("            };");
         }
 
@@ -205,7 +215,6 @@ namespace CityGenerator.Editor
         {
             source = ReplaceField(source, "gridWidth", settings.general.gridWidth.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "gridHeight", settings.general.gridHeight.ToString(CultureInfo.InvariantCulture));
-            source = ReplaceField(source, "plazaCount", settings.general.plazaCount.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "buildingsPerBlock", settings.general.buildingsPerBlock.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "includeTraffic", settings.general.includeTraffic ? "true" : "false");
             source = ReplaceField(source, "vehicleCount", settings.general.vehicleCount.ToString(CultureInfo.InvariantCulture));

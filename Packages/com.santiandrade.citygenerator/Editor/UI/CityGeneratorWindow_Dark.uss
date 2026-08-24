@@ -1,0 +1,15 @@
+/* Color palette for the dark Editor skin. Loaded instead of the light sheet based on
+   EditorGUIUtility.isProSkin — see CityGeneratorWindow.CreateGUI. */
+:root {
+    --cg-bg: #2d2d2d;
+    --cg-surface: #383838;
+    --cg-surface-alt: #333333;
+    --cg-border: #202020;
+    --cg-text: #d4d4d4;
+    --cg-text-muted: #9a9a9a;
+    --cg-accent: #4fa8e0;
+    --cg-accent-text: #ffffff;
+    --cg-danger: #e05252;
+    --cg-danger-bg: rgba(224, 82, 82, 0.12);
+    --cg-success: #6abf69;
+}

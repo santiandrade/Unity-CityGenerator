@@ -1,0 +1,19 @@
+<engine:UXML xmlns:engine="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements">
+    <engine:VisualElement name="cg-root" class="cg-root">
+        <engine:VisualElement name="cg-banner" class="cg-banner" />
+
+        <engine:ScrollView name="cg-scroll" class="cg-scroll">
+            <engine:VisualElement name="cg-cards" class="cg-cards" />
+        </engine:ScrollView>
+
+        <engine:VisualElement name="cg-footer" class="cg-footer">
+            <engine:VisualElement name="cg-validation-panel" class="cg-validation-panel" />
+            <engine:VisualElement name="cg-result-panel" class="cg-result-panel" />
+            <engine:VisualElement class="cg-footer__buttons">
+                <engine:Button name="cg-build-new-scene-button" text="Build City in New Scene" class="cg-button cg-button--primary" />
+                <engine:Button name="cg-rebuild-current-scene-button" text="Re-Build City in Current Scene" class="cg-button cg-button--secondary" />
+                <engine:Button name="cg-reset-defaults-button" text="Reset to Defaults" class="cg-button cg-button--ghost" />
+            </engine:VisualElement>
+        </engine:VisualElement>
+    </engine:VisualElement>
+</engine:UXML>

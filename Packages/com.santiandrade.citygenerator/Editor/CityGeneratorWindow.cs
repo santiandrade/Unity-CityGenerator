@@ -1,7 +1,11 @@
+using System;
 using System.Collections.Generic;
+using CityGenerator.Editor.UI;
 using CityGenerator.Runtime;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace CityGenerator.Editor
 {
@@ -9,14 +13,52 @@ namespace CityGenerator.Editor
     {
         private const int MinGridSize = 1;
         private const int MaxGridSize = 10;
+        private const string UiFolder = "Packages/com.santiandrade.citygenerator/Editor/UI/";
+        private const string UxmlPath = UiFolder + "CityGeneratorWindow.uxml";
+        private const string UssPath = UiFolder + "CityGeneratorWindow.uss";
+        private const string UssDarkPath = UiFolder + "CityGeneratorWindow_Dark.uss";
+        private const string UssLightPath = UiFolder + "CityGeneratorWindow_Light.uss";
         private const string ThumbnailPath = "Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png";
 
         [SerializeField] private CityGeneratorSettings settings = new();
         [SerializeField] private bool defaultsInitialized;
 
         private SerializedObject serializedWindow;
-        private Vector2 scrollPosition;
-        private Texture2D thumbnail;
+
+        // Populated by BuildUi; consulted by Revalidate to mark a card/field as the source of a
+        // validation issue, and to size badges/summaries live as the user edits.
+        private readonly Dictionary<string, CityGeneratorCard> cardsBySettingsSegment = new();
+        private readonly List<RequiredRow> requiredRows = new();
+        private CityGeneratorCard generalCard;
+        private CityGeneratorCard buildingsCard;
+        private CityGeneratorCard vegetationCard;
+        private CityGeneratorCard vehiclesCard;
+        private CityGeneratorCard pedestriansCard;
+        private CityGeneratorGridPreview gridPreview;
+        private Label gridPreviewCaption;
+        private Label summaryLine;
+        private HelpBox vehicleDensityWarning;
+        private HelpBox pedestrianDensityWarning;
+        private HelpBox isolatedBlocksWarning;
+        private VisualElement validationPanel;
+        private VisualElement resultPanel;
+        private PropertyField seedField;
+        private Button buildNewSceneButton;
+        private Button rebuildCurrentSceneButton;
+
+        private readonly struct RequiredRow
+        {
+            public readonly VisualElement row;
+            public readonly Func<bool> isRequired;
+            public readonly Func<bool> isEmpty;
+
+            public RequiredRow(VisualElement row, Func<bool> isRequired, Func<bool> isEmpty)
+            {
+                this.row = row;
+                this.isRequired = isRequired;
+                this.isEmpty = isEmpty;
+            }
+        }
 
         [MenuItem("Tools/City Generator/Open")]
         private static void ShowWindow()
@@ -69,7 +111,7 @@ namespace CityGenerator.Editor
         [MenuItem("Tools/City Generator/Rebuild Pedestrian Network")]
         private static void RebuildPedestrianNetworkMenuItem()
         {
-            var network = Object.FindFirstObjectByType<PedestrianNetwork>();
+            var network = UnityEngine.Object.FindAnyObjectByType<PedestrianNetwork>();
             if (network == null)
             {
                 EditorUtility.DisplayDialog(
@@ -101,154 +143,350 @@ namespace CityGenerator.Editor
             defaultsInitialized = true;
         }
 
-        private void OnGUI()
+        private void CreateGUI()
         {
-            DrawThumbnail();
+            BuildUi();
+        }
 
-            serializedWindow ??= new SerializedObject(this);
-            serializedWindow.Update();
+        private void BuildUi()
+        {
+            // Clear() only removes children; it does not undo the previous Bind/
+            // TrackSerializedObjectValue call on rootVisualElement itself. Without this Unbind,
+            // rebuilding the UI (e.g. from ResetToDefaults) throws NotSupportedException when
+            // TrackSerializedObjectValue tries to track a new SerializedObject on an element still
+            // tracking the old one.
+            rootVisualElement.Unbind();
+            rootVisualElement.Clear();
+            cardsBySettingsSegment.Clear();
+            requiredRows.Clear();
 
-            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
-
-            // The default auto-computed label width does not grow with this window's long
-            // labels (e.g. "Vehicles (if Vehicle Count > 0, percentages must sum to 100)"),
-            // so it clips against the field control regardless of window width. Scale it with
-            // the actual window width instead, within a sane range.
-            float previousLabelWidth = EditorGUIUtility.labelWidth;
-            EditorGUIUtility.labelWidth = Mathf.Clamp(position.width * 0.55f, 160f, 420f);
-
-            DrawGeneralSection();
-            DrawGroundSection();
-            DrawPlazaSection();
-            DrawBuildingsSection();
-            DrawVegetationSection();
-            DrawVehiclesSection();
-            DrawPedestriansSection();
-            DrawPropsSection();
-
-            EditorGUIUtility.labelWidth = previousLabelWidth;
-
-            EditorGUILayout.EndScrollView();
-
-            EditorGUILayout.Space(4f);
-            DrawRequiredLegend();
-
-            EditorGUILayout.Space(8f);
-            if (GUILayout.Button("Build City in New Scene", GUILayout.Height(32f)))
+            var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(UxmlPath);
+            var baseStyle = AssetDatabase.LoadAssetAtPath<StyleSheet>(UssPath);
+            var themeStyle = AssetDatabase.LoadAssetAtPath<StyleSheet>(EditorGUIUtility.isProSkin ? UssDarkPath : UssLightPath);
+            if (visualTree == null || baseStyle == null || themeStyle == null)
             {
-                BuildCityInNewScene();
-            }
-
-            if (GUILayout.Button("Re-Build City in Current Scene", GUILayout.Height(32f)))
-            {
-                RebuildCityInCurrentScene();
-            }
-
-            EditorGUILayout.Space(4f);
-            if (GUILayout.Button("Reset to Defaults", GUILayout.Height(22f)))
-            {
-                ResetToDefaults();
-                // The SerializedObject below still refers to the settings instance we just
-                // replaced: applying it now would write this frame's (pre-reset) UI values
-                // straight back onto the new object. Bail out and let the next OnGUI pass
-                // build a fresh SerializedObject against the reset settings instead.
+                rootVisualElement.Add(new Label("City Generator UI assets are missing from the package."));
                 return;
             }
 
-            serializedWindow.ApplyModifiedProperties();
+            visualTree.CloneTree(rootVisualElement);
+            // Theme sheet first so the base sheet's var() lookups (--cg-*) resolve against it.
+            rootVisualElement.styleSheets.Add(themeStyle);
+            rootVisualElement.styleSheets.Add(baseStyle);
+
+            serializedWindow = new SerializedObject(this);
+
+            BuildBanner();
+            VisualElement cardsContainer = rootVisualElement.Q<VisualElement>("cg-cards");
+            BuildGeneralCard(cardsContainer);
+            BuildGroundCard(cardsContainer);
+            BuildPlazaCard(cardsContainer);
+            BuildBuildingsCard(cardsContainer);
+            BuildVegetationCard(cardsContainer);
+            BuildVehiclesCard(cardsContainer);
+            BuildPedestriansCard(cardsContainer);
+            BuildPropsCard(cardsContainer);
+            BuildFooter();
+
+            rootVisualElement.Bind(serializedWindow);
+            rootVisualElement.TrackSerializedObjectValue(serializedWindow, _ => RefreshDynamicUi());
+            RefreshDynamicUi();
         }
 
         /// <summary>
-        /// Draws <paramref name="property"/> with its normal label, plus a real (non-rich-text)
-        /// red asterisk right after the label whenever <paramref name="isRequired"/> is true —
-        /// callers whose "required" status depends on another field's value (e.g. the Lawn
-        /// Prefab only when Plaza Count > 0) pass that condition in so the asterisk only shows
-        /// while it actually applies. PropertyField's own label style does not render
-        /// `&lt;color&gt;` tags, and a trailing GUILayout control after a flexible-width field
-        /// gets pushed past the visible area on a narrow window (e.g. once the scrollbar eats
-        /// into the width) — drawn as a Rect overlay inside the field's own reserved space
-        /// instead, it always stays inside the label column regardless of window width.
+        /// The header is just the thumbnail, at whatever width the window currently has, with its
+        /// full image always visible — never cropped or distorted. USS can't derive height from an
+        /// element's own resolved width, so the aspect-correct height is recomputed here on every
+        /// layout pass instead (mirrors the old IMGUI window's own <c>width / aspect</c> math).
         /// </summary>
-        private static void DrawRequiredField(SerializedProperty property, string label, bool includeChildren = false, bool isRequired = true)
+        private void BuildBanner()
         {
-            float height = EditorGUI.GetPropertyHeight(property, includeChildren);
-            Rect rect = EditorGUILayout.GetControlRect(true, height);
-            EditorGUI.PropertyField(rect, property, new GUIContent(label), includeChildren);
-            if (isRequired)
-                DrawRedAsterisk(new Rect(rect.x + EditorGUIUtility.labelWidth - 10f, rect.y, 10f, EditorGUIUtility.singleLineHeight));
-        }
-
-        private static void DrawRedAsterisk(Rect rect)
-        {
-            Color previousColor = GUI.color;
-            GUI.color = Color.red;
-            GUI.Label(rect, "*");
-            GUI.color = previousColor;
-        }
-
-        private static void DrawRedAsterisk()
-        {
-            Color previousColor = GUI.color;
-            GUI.color = Color.red;
-            GUILayout.Label("*", GUILayout.Width(10f));
-            GUI.color = previousColor;
-        }
-
-        private static void DrawRequiredLegend()
-        {
-            EditorGUILayout.BeginHorizontal();
-            DrawRedAsterisk();
-            EditorGUILayout.LabelField("Required field (some only when the related option is enabled)", EditorStyles.miniLabel);
-            EditorGUILayout.EndHorizontal();
-        }
-
-        private void DrawThumbnail()
-        {
+            var banner = rootVisualElement.Q<VisualElement>("cg-banner");
+            var thumbnail = AssetDatabase.LoadAssetAtPath<Texture2D>(ThumbnailPath);
             if (thumbnail == null)
-                thumbnail = AssetDatabase.LoadAssetAtPath<Texture2D>(ThumbnailPath);
-            if (thumbnail == null)
+            {
+                banner.style.display = DisplayStyle.None;
+                return;
+            }
+
+            banner.style.backgroundImage = new StyleBackground(thumbnail);
+            float aspect = (float)thumbnail.width / thumbnail.height;
+            banner.RegisterCallback<GeometryChangedEvent>(evt =>
+            {
+                float width = evt.newRect.width;
+                if (width > 0f)
+                    banner.style.height = width / aspect;
+            });
+
+            UnityEditor.PackageManager.PackageInfo packageInfo =
+                UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(CityGeneratorWindow).Assembly);
+            banner.tooltip = packageInfo != null ? $"City Generator v{packageInfo.version}" : "City Generator";
+        }
+
+        private void BuildGeneralCard(VisualElement parent)
+        {
+            generalCard = AddCard(parent, "general", "General Options", "d_SceneAsset Icon", defaultExpanded: true);
+            VisualElement content = generalCard.ContentContainer;
+
+            gridPreview = new CityGeneratorGridPreview();
+            gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
+            content.Add(gridPreview);
+            gridPreviewCaption = new Label();
+            gridPreviewCaption.AddToClassList("cg-grid-preview__caption");
+            content.Add(gridPreviewCaption);
+            var gridPreviewHint = new Label("Click a block above to toggle it as a plaza.");
+            gridPreviewHint.AddToClassList("cg-grid-preview__caption");
+            content.Add(gridPreviewHint);
+
+            content.Add(CreateIntSlider(FindProperty("general.gridWidth"), "Grid Width", MinGridSize, MaxGridSize));
+            content.Add(CreateIntSlider(FindProperty("general.gridHeight"), "Grid Height", MinGridSize, MaxGridSize));
+            content.Add(CreateIntSlider(FindProperty("general.buildingsPerBlock"), "Buildings Per Block", 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock));
+
+            summaryLine = new Label();
+            summaryLine.AddToClassList("cg-summary-line");
+            content.Add(summaryLine);
+
+            content.Add(CreateField("general.includeTraffic"));
+            content.Add(CreateField("general.vehicleCount"));
+            vehicleDensityWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            vehicleDensityWarning.style.display = DisplayStyle.None;
+            content.Add(vehicleDensityWarning);
+
+            content.Add(CreateField("general.includePedestrians"));
+            content.Add(CreateField("general.pedestrianCount"));
+            pedestrianDensityWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            pedestrianDensityWarning.style.display = DisplayStyle.None;
+            content.Add(pedestrianDensityWarning);
+            isolatedBlocksWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            isolatedBlocksWarning.style.display = DisplayStyle.None;
+            content.Add(isolatedBlocksWarning);
+
+            content.Add(CreateField("general.playerPrefab"));
+            AddRequiredField(content, "general.inputActions", "Input Actions (if Player Prefab is set)",
+                () => FindProperty("general.playerPrefab").objectReferenceValue != null);
+
+            content.Add(CreateField("general.useCustomSeed", "Custom Seed"));
+            PropertyField seedField = CreateField("general.seed", "Seed");
+            content.Add(seedField);
+            // Visibility only, re-applied every RefreshDynamicUi pass (see below) rather than a
+            // dedicated poll, since a settings change already triggers that refresh.
+            this.seedField = seedField;
+        }
+
+        private void BuildGroundCard(VisualElement parent)
+        {
+            CityGeneratorCard card = AddCard(parent, "ground", "Ground", "d_Terrain Icon", defaultExpanded: false);
+            AddRequiredField(card.ContentContainer, "ground.roadBasePrefab", "Road Base Prefab", () => true);
+            AddRequiredField(card.ContentContainer, "ground.sidewalkPrefab", "Sidewalk Prefab", () => true);
+            AddRequiredField(card.ContentContainer, "ground.roadLinePrefab", "Road Line Prefab", () => true);
+            AddRequiredField(card.ContentContainer, "ground.crosswalkLinePrefab", "Crosswalk Line Prefab", () => true);
+        }
+
+        private void BuildPlazaCard(VisualElement parent)
+        {
+            CityGeneratorCard card = AddCard(parent, "plaza", "Plazas", "d_Prefab Icon", defaultExpanded: false);
+            card.ContentContainer.Add(CreateField("plaza.centerpiecePrefab"));
+            AddRequiredField(card.ContentContainer, "plaza.lawnPrefab", "Lawn Prefab (if any plaza block is selected)",
+                () => FindProperty("general.plazaCells").arraySize > 0);
+            card.ContentContainer.Add(CreateField("plaza.benchPrefab"));
+        }
+
+        private void BuildBuildingsCard(VisualElement parent)
+        {
+            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", "d_BoxCollider Icon", defaultExpanded: false);
+            var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
+            grid.Bind(FindProperty("buildingPrefabs"));
+            buildingsCard.ContentContainer.Add(grid);
+        }
+
+        private void BuildVegetationCard(VisualElement parent)
+        {
+            vegetationCard = AddCard(parent, "vegetation", "Vegetation", "d_tree_icon", defaultExpanded: false);
+            var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
+            grid.Bind(FindProperty("vegetation.prefabs"));
+            vegetationCard.ContentContainer.Add(grid);
+            vegetationCard.ContentContainer.Add(CreateField("vegetation.density"));
+        }
+
+        private void BuildVehiclesCard(VisualElement parent)
+        {
+            vehiclesCard = AddCard(parent, "vehicles", "Vehicles", "d_WheelCollider Icon", defaultExpanded: false);
+            var list = new CityGeneratorWeightedPrefabList(RefreshDynamicUi);
+            list.Bind(FindProperty("vehicles"));
+            vehiclesCard.ContentContainer.Add(list);
+        }
+
+        private void BuildPedestriansCard(VisualElement parent)
+        {
+            pedestriansCard = AddCard(parent, "pedestrians", "Pedestrians", "d_Avatar Icon", defaultExpanded: false);
+            var list = new CityGeneratorWeightedPrefabList(RefreshDynamicUi);
+            list.Bind(FindProperty("pedestrians"));
+            pedestriansCard.ContentContainer.Add(list);
+        }
+
+        private void BuildPropsCard(VisualElement parent)
+        {
+            CityGeneratorCard card = AddCard(parent, "props", "Props", "d_Light Icon", defaultExpanded: false);
+            AddRequiredField(card.ContentContainer, "props.trafficLightPrefab", "Traffic Light Prefab (if Include Traffic)",
+                () => FindProperty("general.includeTraffic").boolValue);
+            card.ContentContainer.Add(CreateField("props.lampPrefab"));
+            card.ContentContainer.Add(CreateField("props.lampDensity"));
+            card.ContentContainer.Add(CreateField("props.binPrefab"));
+            card.ContentContainer.Add(CreateField("props.binDensity"));
+        }
+
+        private void BuildFooter()
+        {
+            validationPanel = rootVisualElement.Q<VisualElement>("cg-validation-panel");
+            resultPanel = rootVisualElement.Q<VisualElement>("cg-result-panel");
+            resultPanel.style.display = DisplayStyle.None;
+
+            buildNewSceneButton = rootVisualElement.Q<Button>("cg-build-new-scene-button");
+            buildNewSceneButton.clicked += BuildCityInNewScene;
+
+            rebuildCurrentSceneButton = rootVisualElement.Q<Button>("cg-rebuild-current-scene-button");
+            rebuildCurrentSceneButton.clicked += RebuildCityInCurrentScene;
+
+            var resetButton = rootVisualElement.Q<Button>("cg-reset-defaults-button");
+            resetButton.clicked += ResetToDefaults;
+        }
+
+        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded)
+        {
+            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded);
+            parent.Add(card);
+            cardsBySettingsSegment[settingsSegment] = card;
+            return card;
+        }
+
+        private PropertyField CreateField(string relativePath, string label = null)
+        {
+            SerializedProperty property = FindProperty(relativePath);
+            var field = new PropertyField(property, label);
+            field.AddToClassList("cg-field-row");
+            return field;
+        }
+
+        private VisualElement CreateIntSlider(SerializedProperty property, string label, int min, int max)
+        {
+            var slider = new SliderInt(label, min, max) { value = property.intValue, showInputField = true };
+            slider.AddToClassList("cg-field-row");
+            slider.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue == property.intValue)
+                    return;
+                property.serializedObject.Update();
+                property.intValue = evt.newValue;
+                property.serializedObject.ApplyModifiedProperties();
+            });
+            return slider;
+        }
+
+        /// <summary>
+        /// Draws <paramref name="relativePath"/>'s field with a "required" marker (see the
+        /// <c>cg-required</c>/<c>cg-required--missing</c> USS classes) that only shows while
+        /// <paramref name="isRequired"/> holds — e.g. the Lawn Prefab only while a plaza block is selected —
+        /// mirroring the old IMGUI window's conditional red asterisk. Registered in
+        /// <see cref="requiredRows"/> so <see cref="RefreshDynamicUi"/> can re-evaluate it live.
+        /// </summary>
+        private void AddRequiredField(VisualElement parent, string relativePath, string label, Func<bool> isRequired)
+        {
+            SerializedProperty property = FindProperty(relativePath);
+            PropertyField field = CreateField(relativePath, label);
+            parent.Add(field);
+            requiredRows.Add(new RequiredRow(field, isRequired, () => property.objectReferenceValue == null));
+        }
+
+        private SerializedProperty FindProperty(string relativePath)
+        {
+            return serializedWindow.FindProperty("settings." + relativePath);
+        }
+
+        /// <summary>
+        /// Re-derives everything that depends on the current settings values: card badges, the
+        /// grid preview/summary, the three density HelpBoxes, required-field highlighting, and
+        /// the live validation panel (which also enables/disables the Build button). Called after
+        /// every settings change via <c>TrackSerializedObjectValue</c>, plus once right after
+        /// building the UI.
+        /// </summary>
+        private void RefreshDynamicUi()
+        {
+            if (serializedWindow == null)
                 return;
 
-            float aspect = (float)thumbnail.width / thumbnail.height;
-            float width = EditorGUIUtility.currentViewWidth;
-            float height = width / aspect;
+            int gridWidth = FindProperty("general.gridWidth").intValue;
+            int gridHeight = FindProperty("general.gridHeight").intValue;
+            int plazaCount = FindProperty("general.plazaCells").arraySize;
+            int blockCount = gridWidth * gridHeight;
+            int buildingsPerBlock = FindProperty("general.buildingsPerBlock").intValue;
+            int vehicleCount = FindProperty("general.vehicleCount").intValue;
+            int pedestrianCount = FindProperty("general.pedestrianCount").intValue;
 
-            Rect rect = GUILayoutUtility.GetRect(width, height, GUILayout.ExpandWidth(true));
-            GUI.DrawTexture(rect, thumbnail, ScaleMode.StretchToFill);
-            EditorGUILayout.Space(10f);
+            generalCard.SetBadge($"{gridWidth} x {gridHeight}");
+            buildingsCard.SetBadge($"{FindProperty("buildingPrefabs").arraySize} prefabs");
+            vegetationCard.SetBadge($"{FindProperty("vegetation.prefabs").arraySize} prefabs");
+            vehiclesCard.SetBadge($"{FindProperty("vehicles").arraySize} entries");
+            pedestriansCard.SetBadge($"{FindProperty("pedestrians").arraySize} entries");
+
+            gridPreview.SetGrid(gridWidth, gridHeight);
+            int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
+            int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
+            float totalSize = gridWidth * CityGeneratorConstants.CellPitch;
+            float totalSizeZ = gridHeight * CityGeneratorConstants.CellPitch;
+            gridPreviewCaption.text = $"{blockCount} blocks ({plazaCount} plaza) · {totalSize:0}m x {totalSizeZ:0}m";
+            summaryLine.text = $"~{estimatedBuildings} buildings · {vehicleCount} vehicles · {pedestrianCount} pedestrians";
+
+            bool useCustomSeed = FindProperty("general.useCustomSeed").boolValue;
+            seedField.style.display = useCustomSeed ? DisplayStyle.Flex : DisplayStyle.None;
+
+            SetWarning(vehicleDensityWarning, GetVehicleDensityWarning());
+            SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());
+            SetWarning(isolatedBlocksWarning, GetIsolatedBlocksWarning());
+
+            foreach (RequiredRow row in requiredRows)
+            {
+                bool required = row.isRequired();
+                bool missing = required && row.isEmpty();
+                row.row.EnableInClassList("cg-required", required);
+                row.row.EnableInClassList("cg-required--missing", missing);
+            }
+
+            RefreshValidation();
         }
 
-        private void DrawGeneralSection()
+        private static void SetWarning(HelpBox helpBox, string message)
         {
-            EditorGUILayout.LabelField("General Options", EditorStyles.boldLabel);
-            DrawGridSizeSlider("general.gridWidth", "Grid Width");
-            DrawGridSizeSlider("general.gridHeight", "Grid Height");
-            EditorGUILayout.PropertyField(FindProperty("general.plazaCount"));
-            DrawIntSlider("general.buildingsPerBlock", "Buildings Per Block", 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock);
-            EditorGUILayout.PropertyField(FindProperty("general.includeTraffic"));
-            EditorGUILayout.PropertyField(FindProperty("general.vehicleCount"));
-            string densityWarning = GetVehicleDensityWarning();
-            if (densityWarning != null)
-                EditorGUILayout.HelpBox(densityWarning, MessageType.Warning);
-            EditorGUILayout.PropertyField(FindProperty("general.includePedestrians"));
-            EditorGUILayout.PropertyField(FindProperty("general.pedestrianCount"));
-            string pedestrianDensityWarning = GetPedestrianDensityWarning();
-            if (pedestrianDensityWarning != null)
-                EditorGUILayout.HelpBox(pedestrianDensityWarning, MessageType.Warning);
-            string isolatedBlocksWarning = GetIsolatedBlocksWarning();
-            if (isolatedBlocksWarning != null)
-                EditorGUILayout.HelpBox(isolatedBlocksWarning, MessageType.Warning);
-            EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
-            DrawRequiredField(FindProperty("general.inputActions"), "Input Actions (if Player Prefab is set)",
-                isRequired: FindProperty("general.playerPrefab").objectReferenceValue != null);
-            EditorGUILayout.PropertyField(FindProperty("general.useCustomSeed"), new GUIContent("Custom Seed"));
-            if (FindProperty("general.useCustomSeed").boolValue)
+            helpBox.style.display = message == null ? DisplayStyle.None : DisplayStyle.Flex;
+            if (message != null)
+                helpBox.text = message;
+        }
+
+        private void RefreshValidation()
+        {
+            CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            foreach (CityGeneratorCard card in cardsBySettingsSegment.Values)
+                card.SetHasError(false);
+
+            validationPanel.Clear();
+            foreach (CityGeneratorValidationIssue issue in issues)
             {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(FindProperty("general.seed"), new GUIContent("Seed"));
-                EditorGUI.indentLevel--;
+                var label = new Label(issue.message);
+                label.AddToClassList("cg-validation-panel__item");
+                validationPanel.Add(label);
+
+                int dotIndex = issue.settingsPath.IndexOf('.');
+                string segment = dotIndex >= 0 ? issue.settingsPath.Substring(0, dotIndex) : issue.settingsPath;
+                if (cardsBySettingsSegment.TryGetValue(segment, out CityGeneratorCard card))
+                    card.SetHasError(true);
             }
-            EditorGUILayout.Space(8f);
+
+            bool valid = issues.Count == 0;
+            buildNewSceneButton.SetEnabled(valid);
+            rebuildCurrentSceneButton.SetEnabled(valid);
+            string tooltip = valid ? string.Empty : $"{issues.Count} problem(s) to fix — see below.";
+            buildNewSceneButton.tooltip = tooltip;
+            rebuildCurrentSceneButton.tooltip = tooltip;
         }
 
         /// <summary>
@@ -318,87 +556,11 @@ namespace CityGenerator.Editor
                    "every block's pedestrians stay confined to their own sidewalk ring.";
         }
 
-        private void DrawGroundSection()
-        {
-            EditorGUILayout.LabelField("Ground", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("ground.roadBasePrefab"), "Road Base Prefab");
-            DrawRequiredField(FindProperty("ground.sidewalkPrefab"), "Sidewalk Prefab");
-            DrawRequiredField(FindProperty("ground.roadLinePrefab"), "Road Line Prefab");
-            DrawRequiredField(FindProperty("ground.crosswalkLinePrefab"), "Crosswalk Line Prefab");
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawPlazaSection()
-        {
-            EditorGUILayout.LabelField("Plazas", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(FindProperty("plaza.centerpiecePrefab"));
-            DrawRequiredField(FindProperty("plaza.lawnPrefab"), "Lawn Prefab (if Plaza Count > 0)", isRequired: FindProperty("general.plazaCount").intValue > 0);
-            EditorGUILayout.PropertyField(FindProperty("plaza.benchPrefab"));
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawBuildingsSection()
-        {
-            EditorGUILayout.LabelField("Buildings", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(FindProperty("buildingPrefabs"), includeChildren: true);
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawVegetationSection()
-        {
-            EditorGUILayout.LabelField("Vegetation", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("vegetation.prefabs"), "Prefabs (if Density > 0)", includeChildren: true, isRequired: FindProperty("vegetation.density").floatValue > 0f);
-            EditorGUILayout.PropertyField(FindProperty("vegetation.density"));
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawVehiclesSection()
-        {
-            EditorGUILayout.LabelField("Vehicles", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("vehicles"), "Vehicles (if Vehicle Count > 0, percentages must sum to 100)", includeChildren: true, isRequired: FindProperty("general.vehicleCount").intValue > 0);
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawPedestriansSection()
-        {
-            EditorGUILayout.LabelField("Pedestrians", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("pedestrians"), "Pedestrians (if Pedestrian Count > 0, percentages must sum to 100)", includeChildren: true, isRequired: FindProperty("general.pedestrianCount").intValue > 0);
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawPropsSection()
-        {
-            EditorGUILayout.LabelField("Props", EditorStyles.boldLabel);
-            DrawRequiredField(FindProperty("props.trafficLightPrefab"), "Traffic Light Prefab (if Include Traffic)", isRequired: FindProperty("general.includeTraffic").boolValue);
-            EditorGUILayout.PropertyField(FindProperty("props.lampPrefab"));
-            EditorGUILayout.PropertyField(FindProperty("props.lampDensity"));
-            EditorGUILayout.PropertyField(FindProperty("props.binPrefab"));
-            EditorGUILayout.PropertyField(FindProperty("props.binDensity"));
-            EditorGUILayout.Space(8f);
-        }
-
-        private void DrawGridSizeSlider(string relativePath, string label)
-        {
-            DrawIntSlider(relativePath, label, MinGridSize, MaxGridSize);
-        }
-
-        private void DrawIntSlider(string relativePath, string label, int min, int max)
-        {
-            SerializedProperty property = FindProperty(relativePath);
-            property.intValue = EditorGUILayout.IntSlider(label, property.intValue, min, max);
-        }
-
-        private SerializedProperty FindProperty(string relativePath)
-        {
-            return serializedWindow.FindProperty("settings." + relativePath);
-        }
-
         private void ResetToDefaults()
         {
             settings = new CityGeneratorSettings();
             CityGeneratorDefaultAssets.ApplyTo(settings);
-            serializedWindow = null;
-            GUI.FocusControl(null);
+            BuildUi();
         }
 
         private bool ValidateOrReport()
@@ -423,13 +585,17 @@ namespace CityGenerator.Editor
 
             try
             {
-                (string scenePath, CityBuildSummary _) = GenerateCity();
-                EditorUtility.DisplayDialog("City Generator", $"City generated successfully at:\n{scenePath}", "OK");
+                (string scenePath, CityBuildSummary summary) = GenerateCity(ReportProgress);
+                ShowResult(scenePath, summary, success: true);
             }
             catch (System.Exception exception)
             {
                 Debug.LogError("[City Generator] Generation failed: " + exception);
-                EditorUtility.DisplayDialog("City Generator - Generation Failed", exception.Message + "\n\nSee the Console for details.", "OK");
+                ShowResult(null, default, success: false, exception.Message);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
             }
         }
 
@@ -448,21 +614,66 @@ namespace CityGenerator.Editor
 
             try
             {
-                CityBuildSummary summary = CityGeneratorSceneBuilder.RebuildInActiveScene(settings);
-                LogSummary(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path, summary);
-                EditorUtility.DisplayDialog("City Generator", "City regenerated in the current scene.", "OK");
+                CityBuildSummary summary = CityGeneratorSceneBuilder.RebuildInActiveScene(settings, ReportProgress);
+                string scenePath = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+                LogSummary(scenePath, summary);
+                ShowResult(scenePath, summary, success: true);
             }
             catch (System.Exception exception)
             {
                 Debug.LogError("[City Generator] Generation failed: " + exception);
-                EditorUtility.DisplayDialog("City Generator - Generation Failed", exception.Message + "\n\nSee the Console for details.", "OK");
+                ShowResult(null, default, success: false, exception.Message);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        private static void ReportProgress(string phase, float fraction)
+        {
+            EditorUtility.DisplayProgressBar("City Generator", phase, fraction);
+        }
+
+        private void ShowResult(string scenePath, CityBuildSummary summary, bool success, string errorMessage = null)
+        {
+            resultPanel.Clear();
+            resultPanel.style.display = DisplayStyle.Flex;
+            resultPanel.EnableInClassList("cg-result-panel--success", success);
+
+            var title = new Label(success ? "City generated" : "Generation failed");
+            title.AddToClassList("cg-result-panel__title");
+            resultPanel.Add(title);
+
+            if (!success)
+            {
+                var errorLabel = new Label(errorMessage + " (see the Console for details)");
+                errorLabel.AddToClassList("cg-result-panel__stats");
+                resultPanel.Add(errorLabel);
+                return;
+            }
+
+            int propsTotal = summary.lampCount + summary.binCount;
+            int vegetationTotal = summary.plazaSolidCount + summary.streetTreeCount;
+            var stats = new Label(
+                $"{scenePath}\n{summary.blockCount} blocks · {summary.buildingCount} buildings · " +
+                $"{propsTotal} props · {vegetationTotal} vegetation · {summary.trafficLightCount} traffic lights · " +
+                $"{summary.vehicleCount} vehicles · {summary.pedestrianCount} pedestrians");
+            stats.AddToClassList("cg-result-panel__stats");
+            resultPanel.Add(stats);
+
+            if (!string.IsNullOrEmpty(scenePath))
+            {
+                var pingButton = new Button(() => EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath)))
+                    { text = "Ping Scene" };
+                resultPanel.Add(pingButton);
             }
         }
 
         /// <summary>Validated settings -> generated, saved scene. No dialogs: kept separate from <see cref="BuildCityInNewScene"/> so it can be exercised directly (e.g. from tests) without a modal blocking the Editor.</summary>
-        internal (string scenePath, CityBuildSummary summary) GenerateCity()
+        internal (string scenePath, CityBuildSummary summary) GenerateCity(Action<string, float> onProgress = null)
         {
-            (string scenePath, CityBuildSummary summary) = CityGeneratorSceneBuilder.BuildAndSaveScene(settings);
+            (string scenePath, CityBuildSummary summary) = CityGeneratorSceneBuilder.BuildAndSaveScene(settings, onProgress);
             LogSummary(scenePath, summary);
             return (scenePath, summary);
         }

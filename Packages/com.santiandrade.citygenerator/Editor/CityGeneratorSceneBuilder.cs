@@ -17,13 +17,19 @@ namespace CityGenerator.Editor
 
         public static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings)
         {
+            return BuildAndSaveScene(settings, onProgress: null);
+        }
+
+        /// <summary>Same as <see cref="BuildAndSaveScene(CityGeneratorSettings)"/>, forwarding generation progress to <paramref name="onProgress"/> — see <see cref="CityGeneratorContentAssembler.Assemble(CityGeneratorSettings, Transform, System.Action{string, float})"/>.</summary>
+        public static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings, System.Action<string, float> onProgress)
+        {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
 
             try
             {
                 var cityRootGO = new GameObject("City");
                 SceneManager.MoveGameObjectToScene(cityRootGO, scene);
-                CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform);
+                CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform, onProgress);
 
                 CreateDirectionalLight(scene);
 
@@ -58,6 +64,12 @@ namespace CityGenerator.Editor
         /// </summary>
         public static CityBuildSummary RebuildInActiveScene(CityGeneratorSettings settings)
         {
+            return RebuildInActiveScene(settings, onProgress: null);
+        }
+
+        /// <summary>Same as <see cref="RebuildInActiveScene(CityGeneratorSettings)"/>, forwarding generation progress to <paramref name="onProgress"/>.</summary>
+        public static CityBuildSummary RebuildInActiveScene(CityGeneratorSettings settings, System.Action<string, float> onProgress)
+        {
             Scene scene = EditorSceneManager.GetActiveScene();
 
             foreach (GameObject root in scene.GetRootGameObjects())
@@ -71,7 +83,7 @@ namespace CityGenerator.Editor
 
             var cityRootGO = new GameObject("City");
             SceneManager.MoveGameObjectToScene(cityRootGO, scene);
-            CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform);
+            CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform, onProgress);
 
             EditorSceneManager.MarkSceneDirty(scene);
             return summary;

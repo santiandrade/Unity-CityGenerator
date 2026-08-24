@@ -24,6 +24,7 @@ namespace CityGenerator.Editor
         {
             settings.general.playerPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-D.prefab");
             settings.general.inputActions = AssetDatabase.LoadAssetAtPath<InputActionAsset>($"{DefaultAssetsRoot}/Input/InputSystem_Actions.inputactions");
+            settings.general.plazaCells = new List<Vector2Int> { new Vector2Int(2, 2) };
 
             settings.ground.roadBasePrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadBase.prefab");
             settings.ground.sidewalkPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadSidewalk.prefab");

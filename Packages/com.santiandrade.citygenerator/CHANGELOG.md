@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the "Plaza Count" field with direct plaza placement: click a block in the grid preview
+  to toggle it as a plaza (`GeneralSettings.plazaCells`, a `List<Vector2Int>` of block coordinates,
+  replaces the old `plazaCount` int). The preview now always matches the generated scene exactly —
+  previously, with more than one plaza, `CityGeneratorGrid` picked blocks at random
+  (`System.Random`) while the preview only approximated the picture with a reading-order stand-in,
+  so the two could disagree. `CityGeneratorGrid.BuildBlocks` no longer takes a `System.Random`
+  parameter, since plaza placement is no longer randomized.
+
+- Rebuilt the City Generator Editor window in UI Toolkit (UXML/USS), replacing the previous
+  IMGUI layout entirely: a non-stretched banner, collapsible cards per section (state persisted
+  in `EditorPrefs`) with a live summary badge, thumbnail grids for the Building/Vegetation prefab
+  lists, a percentage-weighted list with a stacked bar and a "Normalize to 100%" button for the
+  Vehicles/Pedestrians lists, and a top-down grid/plaza preview with an estimated build summary.
+  Validation now runs continuously as settings change (`CityGeneratorValidator.ValidateDetailed`)
+  instead of only on Build: invalid fields and their card are highlighted live, the problem list
+  shows in the footer, and the Build buttons stay disabled until every issue is fixed. Generation
+  now reports coarse per-phase progress through an `EditorUtility.DisplayProgressBar` (new optional
+  `onProgress` parameter threaded through `CityGeneratorContentAssembler.Assemble`,
+  `CityGeneratorSceneBuilder.BuildAndSaveScene`/`RebuildInActiveScene` and
+  `CityGeneratorWindow.GenerateCity` — all additive, default `null` behaves exactly as before), and
+  the result is shown in an in-window panel (with a "Ping Scene" button) instead of a blocking
+  `EditorUtility.DisplayDialog`. No change to generation behaviour or output.
+
 ## [1.4.0] - 2026-08-24
 
 ### Added

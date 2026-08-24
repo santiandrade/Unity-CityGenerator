@@ -48,8 +48,17 @@ namespace CityGenerator.Editor
         private static readonly StaticEditorFlags MarkedStaticFlags =
             StaticEditorFlags.BatchingStatic | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic;
 
-        public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
+        /// <summary>
+        /// Runs the pipeline exactly as <see cref="Assemble(CityGeneratorSettings, Transform)"/>,
+        /// additionally reporting coarse-grained progress through <paramref name="onProgress"/>
+        /// (phase label, 0..1 fraction) so a caller can drive a progress bar during what would
+        /// otherwise be a silent, UI-frozen generation. Purely additive: passing null behaves
+        /// identically to the two-argument overload.
+        /// </summary>
+        public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot, System.Action<string, float> onProgress)
         {
+            void Report(string phase, float fraction) => onProgress?.Invoke(phase, fraction);
+
             var random = settings.general.useCustomSeed
                 ? new System.Random(settings.general.seed)
                 : new System.Random();
@@ -70,12 +79,15 @@ namespace CityGenerator.Editor
             Transform pedestrians = GetOrCreateGroup(cityRoot, "Pedestrians");
             Transform pedestrianNetworkGroup = GetOrCreateGroup(cityRoot, "PedestrianNetwork");
 
-            List<BlockCell> blocks = CityGeneratorGrid.BuildBlocks(gridWidth, gridHeight, settings.general.plazaCount, random);
+            Report("Grid", 0f);
+            List<BlockCell> blocks = CityGeneratorGrid.BuildBlocks(gridWidth, gridHeight, settings.general.plazaCells);
 
+            Report("Ground", 0.1f);
             CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, gridWidth, gridHeight);
             CityGeneratorGroundBuilder.BuildSidewalks(settings.ground.sidewalkPrefab, sidewalks, blocks);
             CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
 
+            Report("Buildings", 0.25f);
             List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random);
 
             // Street furniture avoids buildings/plaza content, the plaza lawns, and each other via
@@ -89,11 +101,13 @@ namespace CityGenerator.Editor
             // meant to be able to stand on; used only to pick its spawn position below.
             var playerAvoidObstacles = new List<GameObject>(builtBuildings);
 
+            Report("Plazas", 0.35f);
             List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, cache, out List<GameObject> plazaLawns);
             obstacles.AddRange(plazaSolids);
             obstacles.AddRange(plazaLawns);
             playerAvoidObstacles.AddRange(plazaSolids);
 
+            Report("Street furniture", 0.45f);
             List<GameObject> lamps = CityGeneratorStreetPropsBuilder.BuildLamps(settings.props.lampPrefab, settings.props.lampDensity, streetLights, blocks, random, obstacles, cache);
             List<GameObject> bins = CityGeneratorStreetPropsBuilder.BuildBins(settings.props.binPrefab, settings.props.binDensity, props, blocks, random, obstacles, cache);
             List<GameObject> streetTrees = CityGeneratorStreetPropsBuilder.BuildStreetVegetation(settings.vegetation, trees, blocks, random, obstacles, cache);
@@ -101,6 +115,7 @@ namespace CityGenerator.Editor
             playerAvoidObstacles.AddRange(bins);
             playerAvoidObstacles.AddRange(streetTrees);
 
+            Report("Player spawn", 0.55f);
             Vector3 playerSpawnPosition = CityGeneratorPlayerSpawner.FindSpawnPosition(
                 settings.general.playerPrefab, blocks, playerAvoidObstacles, random, cityRoot, cache);
 
@@ -108,6 +123,7 @@ namespace CityGenerator.Editor
 
             // The traffic network and its lights are always generated (every 4-way intersection
             // stays regulated), even when traffic itself is switched off.
+            Report("Traffic network", 0.6f);
             TrafficNetwork network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup, gridWidth, gridHeight);
             List<GameObject> trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, gridWidth, gridHeight, random);
             network.Build();
@@ -115,6 +131,7 @@ namespace CityGenerator.Editor
             List<GameObject> vehicleInstances = new();
             if (settings.general.includeTraffic)
             {
+                Report("Vehicles", 0.7f);
                 CityGeneratorTrafficBuilder.AddManagerComponent(trafficNetworkGroup);
                 vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random);
                 // Independent of includePedestrians: the player (placed by CityGeneratorSceneBuilder
@@ -124,6 +141,7 @@ namespace CityGenerator.Editor
 
             // The pedestrian network mirrors the traffic network: always generated (so its
             // crossings stay wired to the real traffic lights), independent of includePedestrians.
+            Report("Pedestrian network", 0.8f);
             PedestrianNetwork pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight);
             pedestrianNetwork.Build();
             CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
@@ -132,6 +150,7 @@ namespace CityGenerator.Editor
             List<GameObject> pedestrianInstances = new();
             if (settings.general.includePedestrians)
             {
+                Report("Pedestrians", 0.88f);
                 CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup);
                 pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random);
             }
@@ -140,6 +159,7 @@ namespace CityGenerator.Editor
             // marking it unlocks static batching and is a prerequisite for baking occlusion
             // culling / the GPU Resident Drawer (see the technical review, A.1/C.3). Both agent
             // groups move by transform every frame instead.
+            Report("Static flags", 0.95f);
             MarkStatic(roads);
             MarkStatic(sidewalks);
             MarkStatic(roadMarkings);
@@ -150,11 +170,17 @@ namespace CityGenerator.Editor
             MarkStatic(props);
             MarkStatic(trafficLights);
 
+            Report("Done", 1f);
             return new CityBuildSummary(
                 blocks.Count, builtBuildings.Count, plazaSolids.Count,
                 lamps.Count, bins.Count, streetTrees.Count,
                 trafficLightInstances.Count, vehicleInstances.Count, pedestrianInstances.Count,
                 playerSpawnPosition);
+        }
+
+        public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
+        {
+            return Assemble(settings, cityRoot, onProgress: null);
         }
 
         private static Transform GetOrCreateGroup(Transform parent, string name)
