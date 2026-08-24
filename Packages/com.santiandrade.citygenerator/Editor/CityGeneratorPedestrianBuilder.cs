@@ -154,41 +154,13 @@ namespace CityGenerator.Editor
                     if (animator != null)
                         animator.cullingMode = AnimatorCullingMode.CullCompletely;
 
-                    AddCollider(instance);
+                    CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
 
                     placed.Add(instance);
                 }
             }
 
             return placed;
-        }
-
-        /// <summary>
-        /// Adds a BoxCollider to the generated instance, dimensioned from its combined Renderer
-        /// bounds — never added to the user's prefab asset. Not a trigger: CarAgent's forward
-        /// SphereCast hits a non-trigger collider regardless of its own QueryTriggerInteraction
-        /// setting, so the vehicle sensor still detects it, and a solid collider is also what lets
-        /// the player's CharacterController physically collide with it instead of walking through
-        /// (CharacterController resolves against any non-trigger collider even without a
-        /// Rigidbody on either side). Pedestrians themselves never push back or get blocked by it
-        /// — PedestrianAgent moves by setting transform.position directly, with no physics
-        /// response of its own.
-        /// </summary>
-        private static void AddCollider(GameObject instance)
-        {
-            Bounds worldBounds = CityGeneratorBoundsUtility.GetWorldBounds(instance);
-            BoxCollider collider = instance.GetComponent<BoxCollider>();
-            if (collider == null)
-                collider = instance.AddComponent<BoxCollider>();
-
-            collider.isTrigger = false;
-            collider.center = instance.transform.InverseTransformPoint(worldBounds.center);
-            Vector3 worldSize = worldBounds.size;
-            Vector3 lossyScale = instance.transform.lossyScale;
-            collider.size = new Vector3(
-                lossyScale.x != 0f ? worldSize.x / lossyScale.x : worldSize.x,
-                lossyScale.y != 0f ? worldSize.y / lossyScale.y : worldSize.y,
-                lossyScale.z != 0f ? worldSize.z / lossyScale.z : worldSize.z);
         }
 
         /// <summary>

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-25
+
+### Fixed
+
+- Unified the collider policy for generated vehicle and pedestrian instances into a shared
+  `CityGeneratorColliderUtility.EnsureNonTriggerCollider`, called from both
+  `CityGeneratorTrafficBuilder.BuildVehicles` and `CityGeneratorPedestrianBuilder.BuildPedestrians`.
+  Pedestrians previously got a trigger `BoxCollider` unconditionally; now, like vehicles, an
+  existing `Collider` anywhere in the prefab's hierarchy is kept as-is (only forced to
+  `isTrigger = false`), and a non-trigger `BoxCollider` is added only when the prefab has none.
+  This lets the player's `CharacterController` physically collide with pedestrians and lets
+  vehicles detect them, instead of walking/driving through.
+- `PedestrianAgent` no longer spams a console warning every frame for a pedestrian prefab with no
+  `Animator`, or an `Animator` with no controller assigned — it now checks a cached
+  `hasAnimatorController` flag before calling `SetFloat`/`SetBool`, and still walks normally
+  without animation.
+- Nudged `PlayerControllerCenter` (`CharacterController.center`) from `0.36` to `0.4` to better
+  match the default character prefabs' pivot.
+
 ## [1.5.0] - 2026-08-24
 
 ### Changed

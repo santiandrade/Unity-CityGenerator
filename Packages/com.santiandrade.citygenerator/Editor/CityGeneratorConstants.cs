@@ -85,7 +85,7 @@ namespace CityGenerator.Editor
         public const float PlayerControllerStepOffset = 0.2f;
         public const float PlayerControllerSkinWidth = 0.02f;
         public const float PlayerControllerMinMoveDistance = 0.001f;
-        public static readonly UnityEngine.Vector3 PlayerControllerCenter = new(0f, 0.36f, 0f);
+        public static readonly UnityEngine.Vector3 PlayerControllerCenter = new(0f, 0.4f, 0f);
 
         public const string PlayerActionMapName = "Player";
         public const string PlayerMoveActionName = "Move";

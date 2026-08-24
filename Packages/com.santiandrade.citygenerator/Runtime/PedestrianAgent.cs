@@ -51,6 +51,10 @@ namespace CityGenerator.Runtime
         private static readonly int GroundedHash = Animator.StringToHash("Grounded");
 
         private Animator animator;
+        // A prefab with no Animator (or one with no controller assigned) still walks fine — only
+        // the animation is skipped. Without this guard every SetFloat/SetBool call below spams
+        // "Animator is not playing an AnimatorController" once per frame.
+        private bool hasAnimatorController;
         private PedestrianManager manager;
         private PedestrianState state = PedestrianState.Walking;
 
@@ -83,6 +87,7 @@ namespace CityGenerator.Runtime
         private void Awake()
         {
             animator = GetComponent<Animator>();
+            hasAnimatorController = animator.runtimeAnimatorController != null;
         }
 
         private void Start()
@@ -155,14 +160,20 @@ namespace CityGenerator.Runtime
                     TickWalking(dt, runLogic);
                     break;
                 case PedestrianState.WaitingToCross:
-                    animator.SetFloat(SpeedHash, 0f);
+                    if (hasAnimatorController)
+                    {
+                        animator.SetFloat(SpeedHash, 0f);
+                    }
                     if (runLogic)
                     {
                         TryResumeCrossing();
                     }
                     break;
                 case PedestrianState.Idling:
-                    animator.SetFloat(SpeedHash, 0f);
+                    if (hasAnimatorController)
+                    {
+                        animator.SetFloat(SpeedHash, 0f);
+                    }
                     if (runLogic && Time.time >= stopUntilTime)
                     {
                         PlanNewDestination();
@@ -170,14 +181,20 @@ namespace CityGenerator.Runtime
                     break;
             }
 
-            animator.SetBool(GroundedHash, true);
+            if (hasAnimatorController)
+            {
+                animator.SetBool(GroundedHash, true);
+            }
         }
 
         private void TickWalking(float dt, bool runLogic)
         {
             Vector3 targetPosition = AimPoint(pathIndex);
             MoveTowards(targetPosition, dt);
-            animator.SetFloat(SpeedHash, normalizedSpeed);
+            if (hasAnimatorController)
+            {
+                animator.SetFloat(SpeedHash, normalizedSpeed);
+            }
 
             if (!runLogic)
             {

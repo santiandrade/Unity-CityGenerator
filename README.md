@@ -89,14 +89,18 @@ instances* it generates — but it does expect a few things from what you assign
   or against the block edge — an oversized building prefab will visibly clip into its
   neighbour. This is deliberate: sizing your own prefabs to the slot is your
   responsibility, the same as with any other user-supplied asset.
-- **Vehicles**: a single `BoxCollider` on the root, and **no `Rigidbody`** — vehicles
-  move by transform every frame (`CarAgent`), the collider only exists so they can
-  detect each other with a forward `SphereCast` on the `Vehicle` layer.
-- **Pedestrians**: just a `Renderer` and, if you want walk/idle animation, an `Animator`
-  driving `CharacterAnimator.controller`'s `Speed`/`Grounded` parameters (or your own
-  controller with the same names). Unlike vehicles, you don't need to add a collider
-  yourself — the tool adds a trigger `BoxCollider` to every generated instance, sized
-  from the prefab's own renderer bounds.
+- **Vehicles and pedestrians**: no `Rigidbody` — both move by transform every frame
+  (`CarAgent`/`PedestrianAgent`). You don't need to add a collider yourself: if your
+  prefab already has one or more `Collider`s anywhere in its hierarchy, the tool keeps
+  them as-is (just forcing `isTrigger` off); if it has none, the tool adds a
+  non-trigger `BoxCollider` to the generated instance, sized from the prefab's own
+  combined renderer bounds. Either way it's what lets vehicles detect each other with a
+  forward `SphereCast` on the `Vehicle` layer, lets vehicles detect pedestrians (and the
+  player) the same way, and lets the player's `CharacterController` physically collide
+  with both. Pedestrians additionally want, if you want walk/idle animation, an
+  `Animator` driving `CharacterAnimator.controller`'s `Speed`/`Grounded` parameters (or
+  your own controller with the same names) — otherwise they still walk, just without
+  animation.
 - **Every other prefab** (props, vegetation, floors, plaza content) just needs a
   `Renderer` somewhere in its hierarchy — the tool measures its footprint from combined
   renderer bounds (`CityGeneratorBoundsUtility`) to place it and to check it against

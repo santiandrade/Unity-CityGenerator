@@ -226,6 +226,8 @@ namespace CityGenerator.Editor
                     serializedAgent.FindProperty("vehicleMask").intValue = vehicleLayer >= 0 ? 1 << instance.layer : 0;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
+                    CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
+
                     placed.Add(instance);
                 }
             }

@@ -94,16 +94,19 @@ La herramienta nunca modifica un asset de prefab —todo lo que cambia lo hace s
   de la manzana — un prefab de edificio sobredimensionado se solapará visiblemente con
   su vecino. Es deliberado: dimensionar tus propios prefabs al slot es tu
   responsabilidad, igual que con cualquier otro asset proporcionado por el usuario.
-- **Vehículos**: un único `BoxCollider` en la raíz, y **sin `Rigidbody`** — los
-  vehículos se mueven por transform cada frame (`CarAgent`), el collider solo existe
-  para que puedan detectarse entre sí con un `SphereCast` frontal en la layer
-  `Vehicle`.
-- **Peatones**: solo necesitan un `Renderer` y, si quieres animación de caminar/parado,
-  un `Animator` que controle los parámetros `Speed`/`Grounded` de
-  `CharacterAnimator.controller` (o tu propio controller con los mismos nombres). A
-  diferencia de los vehículos, no hace falta que añadas tú el collider — la
-  herramienta añade un `BoxCollider` en modo trigger a cada instancia generada,
-  dimensionado a partir de los bounds del propio prefab.
+- **Vehículos y peatones**: sin `Rigidbody` — ambos se mueven por transform cada frame
+  (`CarAgent`/`PedestrianAgent`). No hace falta que añadas tú el collider: si tu prefab
+  ya trae uno o más `Collider` en cualquier punto de su jerarquía, la herramienta los
+  mantiene tal cual (solo forzando `isTrigger` a desactivado); si no trae ninguno, la
+  herramienta añade un `BoxCollider` sin trigger a la instancia generada, dimensionado a
+  partir de los bounds combinados de los renderers del propio prefab. En ambos casos es
+  lo que permite a los vehículos detectarse entre sí con un `SphereCast` frontal en la
+  layer `Vehicle`, detectar a los peatones (y al jugador) del mismo modo, y que el
+  `CharacterController` del jugador choque físicamente con ambos. Los peatones además
+  admiten, si quieres animación de caminar/parado, un `Animator` que controle los
+  parámetros `Speed`/`Grounded` de `CharacterAnimator.controller` (o tu propio
+  controller con los mismos nombres) — sin él siguen caminando igualmente, solo que sin
+  animación.
 - **El resto de prefabs** (props, vegetación, suelos, contenido de plaza) solo
   necesitan un `Renderer` en algún punto de su jerarquía — la herramienta mide su huella
   a partir de los bounds combinados de los renderers (`CityGeneratorBoundsUtility`)
