@@ -66,6 +66,28 @@ namespace CityGenerator.Editor
                 }
             }
 
+            if (settings.general.pedestrianCount > 0)
+            {
+                if (settings.pedestrians.Count == 0)
+                {
+                    errors.Add("Pedestrians: at least one pedestrian entry is required when Pedestrian Count > 0.");
+                }
+                else
+                {
+                    float percentageSum = 0f;
+                    for (int i = 0; i < settings.pedestrians.Count; i++)
+                    {
+                        PedestrianEntry entry = settings.pedestrians[i];
+                        if (entry.prefab == null)
+                            errors.Add($"Pedestrians: entry {i + 1} is missing its prefab.");
+                        percentageSum += entry.percentage;
+                    }
+
+                    if (Mathf.Abs(percentageSum - 100f) > PercentageTolerance)
+                        errors.Add($"Pedestrians: percentages must sum to 100 (currently {percentageSum:0.##}).");
+                }
+            }
+
             return errors.Count == 0;
         }
     }

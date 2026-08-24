@@ -29,6 +29,8 @@ namespace CityGenerator.Runtime
 
         [Header("Detection")]
         [SerializeField] private LayerMask vehicleMask = ~0;
+        [Tooltip("Independent from vehicleMask: assigned per instance by CityGeneratorPedestrianBuilder, mirroring how vehicleMask is assigned per instance by CityGeneratorTrafficBuilder.")]
+        [SerializeField] private LayerMask pedestrianMask;
         [SerializeField] private float sensorRange = 12f;
         [SerializeField] private float sensorRadius = 0.7f;
         [SerializeField] private float minGap = 2.2f;
@@ -52,6 +54,7 @@ namespace CityGenerator.Runtime
         [SerializeField] private float deadlockBreakDuration = 4f;
 
         private readonly RaycastHit[] hits = new RaycastHit[16];
+        private readonly RaycastHit[] pedestrianHits = new RaycastHit[16];
 
         // Own identifier for crossing reservations; 0 means "crossing free".
         private static int nextCarId = 1;
@@ -73,6 +76,9 @@ namespace CityGenerator.Runtime
         // Cached result of the forward sensor, reused on frames TrafficManager skips it for a
         // car far from the camera (see TrafficManager.staggerDistance).
         private float lastAheadClearance = float.MaxValue;
+        // Same staggering as lastAheadClearance: refreshed only on frames TrafficManager runs
+        // the sensor for this car (see TrafficManager.staggerDistance).
+        private float lastPedestrianClearance = float.MaxValue;
         private StopReason stopReason;
         // Previous frame's reason: the current one is still being computed while the
         // forward sensor runs, so the deadlock check has to look at the last known value.
@@ -191,11 +197,15 @@ namespace CityGenerator.Runtime
             if (runSensor)
             {
                 lastAheadClearance = VehicleAheadClearance();
+                lastPedestrianClearance = PedestrianAheadClearance();
             }
 
-            if (lastAheadClearance < clearance)
+            // A detected pedestrian is treated exactly like a car ahead: same progressive
+            // braking, no dedicated StopReason or state of its own.
+            float aheadClearance = Mathf.Min(lastAheadClearance, lastPedestrianClearance);
+            if (aheadClearance < clearance)
             {
-                clearance = lastAheadClearance;
+                clearance = aheadClearance;
                 stopReason = StopReason.VehicleAhead;
             }
 
@@ -343,6 +353,34 @@ namespace CityGenerator.Runtime
                 }
 
                 float gap = hits[i].distance <= 0.001f ? 0f : hits[i].distance - minGap;
+                clearance = Mathf.Min(clearance, gap);
+            }
+
+            return clearance;
+        }
+
+        /// <summary>
+        /// Clear distance to the nearest detected pedestrian, minus the minimum gap. Independent
+        /// of vehicleMask/VehicleAheadClearance: pedestrian and player colliders sit on their own
+        /// Pedestrian layer (see pedestrianMask), and QueryTriggerInteraction.Collide is set
+        /// explicitly here rather than relying on the project's global trigger-query setting —
+        /// harmless for pedestrians/the player, whose colliders are solid, not triggers.
+        /// </summary>
+        private float PedestrianAheadClearance()
+        {
+            Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
+            int count = Physics.SphereCastNonAlloc(origin, sensorRadius, transform.forward, pedestrianHits,
+                sensorRange, pedestrianMask, QueryTriggerInteraction.Collide);
+
+            if (count == pedestrianHits.Length)
+            {
+                Debug.LogWarning($"{name}: pedestrian sensor hit its {pedestrianHits.Length}-collider limit; the closest pedestrian may be missing from this frame's results.", this);
+            }
+
+            float clearance = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                float gap = pedestrianHits[i].distance <= 0.001f ? 0f : pedestrianHits[i].distance - minGap;
                 clearance = Mathf.Min(clearance, gap);
             }
 

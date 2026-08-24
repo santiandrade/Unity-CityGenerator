@@ -15,6 +15,7 @@ namespace CityGenerator.Editor
         public VegetationSettings vegetation = new();
         public List<VehicleEntry> vehicles = new();
         public PropsSettings props = new();
+        public List<PedestrianEntry> pedestrians = new();
     }
 
     [Serializable]
@@ -26,6 +27,8 @@ namespace CityGenerator.Editor
         public int buildingsPerBlock = 4; // clamped 0-4
         public bool includeTraffic = true;
         public int vehicleCount = 80;
+        public bool includePedestrians = true;
+        public int pedestrianCount = 90;
         public bool useCustomSeed = false;
         public int seed = 0;
         public GameObject playerPrefab; // optional
@@ -58,6 +61,13 @@ namespace CityGenerator.Editor
 
     [Serializable]
     internal class VehicleEntry
+    {
+        public GameObject prefab;
+        [Range(0f, 100f)] public float percentage;
+    }
+
+    [Serializable]
+    internal struct PedestrianEntry
     {
         public GameObject prefab;
         [Range(0f, 100f)] public float percentage;

@@ -100,6 +100,9 @@ namespace CityGenerator.Editor
             AppendVehiclesList(sb, settings.vehicles, warnings);
             sb.AppendLine();
 
+            AppendPedestriansList(sb, settings.pedestrians, warnings);
+            sb.AppendLine();
+
             AppendAssignment(sb, "settings.props.trafficLightPrefab", BuildGameObjectExpr(settings.props.trafficLightPrefab, warnings, "Props > Traffic Light Prefab"));
             AppendAssignment(sb, "settings.props.lampPrefab", BuildGameObjectExpr(settings.props.lampPrefab, warnings, "Props > Lamp Prefab"));
             AppendAssignment(sb, "settings.props.binPrefab", BuildGameObjectExpr(settings.props.binPrefab, warnings, "Props > Bin Prefab"));
@@ -139,6 +142,20 @@ namespace CityGenerator.Editor
             foreach (VehicleEntry entry in vehicles)
             {
                 string expression = BuildGameObjectExpr(entry.prefab, warnings, "Vehicles");
+                if (expression == null)
+                    continue;
+                sb.AppendLine($"                new() {{ prefab = {expression}, percentage = {FormatFloat(entry.percentage)}f }},");
+            }
+            sb.AppendLine("            };");
+        }
+
+        private static void AppendPedestriansList(StringBuilder sb, List<PedestrianEntry> pedestrians, List<string> warnings)
+        {
+            sb.AppendLine("            settings.pedestrians = new List<PedestrianEntry>");
+            sb.AppendLine("            {");
+            foreach (PedestrianEntry entry in pedestrians)
+            {
+                string expression = BuildGameObjectExpr(entry.prefab, warnings, "Pedestrians");
                 if (expression == null)
                     continue;
                 sb.AppendLine($"                new() {{ prefab = {expression}, percentage = {FormatFloat(entry.percentage)}f }},");
@@ -192,6 +209,8 @@ namespace CityGenerator.Editor
             source = ReplaceField(source, "buildingsPerBlock", settings.general.buildingsPerBlock.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "includeTraffic", settings.general.includeTraffic ? "true" : "false");
             source = ReplaceField(source, "vehicleCount", settings.general.vehicleCount.ToString(CultureInfo.InvariantCulture));
+            source = ReplaceField(source, "includePedestrians", settings.general.includePedestrians ? "true" : "false");
+            source = ReplaceField(source, "pedestrianCount", settings.general.pedestrianCount.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "useCustomSeed", settings.general.useCustomSeed ? "true" : "false");
             source = ReplaceField(source, "seed", settings.general.seed.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "density", FormatFloat(settings.vegetation.density) + "f");

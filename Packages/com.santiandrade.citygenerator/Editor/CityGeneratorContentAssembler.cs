@@ -16,9 +16,10 @@ namespace CityGenerator.Editor
         public readonly int streetTreeCount;
         public readonly int trafficLightCount;
         public readonly int vehicleCount;
+        public readonly int pedestrianCount;
         public readonly Vector3 playerSpawnPosition;
 
-        public CityBuildSummary(int blockCount, int buildingCount, int plazaSolidCount, int lampCount, int binCount, int streetTreeCount, int trafficLightCount, int vehicleCount, Vector3 playerSpawnPosition)
+        public CityBuildSummary(int blockCount, int buildingCount, int plazaSolidCount, int lampCount, int binCount, int streetTreeCount, int trafficLightCount, int vehicleCount, int pedestrianCount, Vector3 playerSpawnPosition)
         {
             this.blockCount = blockCount;
             this.buildingCount = buildingCount;
@@ -28,6 +29,7 @@ namespace CityGenerator.Editor
             this.streetTreeCount = streetTreeCount;
             this.trafficLightCount = trafficLightCount;
             this.vehicleCount = vehicleCount;
+            this.pedestrianCount = pedestrianCount;
             this.playerSpawnPosition = playerSpawnPosition;
         }
     }
@@ -65,6 +67,8 @@ namespace CityGenerator.Editor
             Transform props = GetOrCreateGroup(cityRoot, "Props");
             Transform vehicles = GetOrCreateGroup(cityRoot, "Vehicles");
             Transform trafficNetworkGroup = GetOrCreateGroup(cityRoot, "TrafficNetwork");
+            Transform pedestrians = GetOrCreateGroup(cityRoot, "Pedestrians");
+            Transform pedestrianNetworkGroup = GetOrCreateGroup(cityRoot, "PedestrianNetwork");
 
             List<BlockCell> blocks = CityGeneratorGrid.BuildBlocks(gridWidth, gridHeight, settings.general.plazaCount, random);
 
@@ -113,11 +117,29 @@ namespace CityGenerator.Editor
             {
                 CityGeneratorTrafficBuilder.AddManagerComponent(trafficNetworkGroup);
                 vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random);
+                // Independent of includePedestrians: the player (placed by CityGeneratorSceneBuilder
+                // on the same layer) needs vehicles to detect it too.
+                CityGeneratorPedestrianBuilder.EnsurePedestrianLayerAndAssignMask(vehicles);
             }
 
-            // Every group except Vehicles is 100% static geometry once generated: marking it
-            // unlocks static batching and is a prerequisite for baking occlusion culling / the GPU
-            // Resident Drawer (see the technical review, A.1/C.3).
+            // The pedestrian network mirrors the traffic network: always generated (so its
+            // crossings stay wired to the real traffic lights), independent of includePedestrians.
+            PedestrianNetwork pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight);
+            pedestrianNetwork.Build();
+            CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
+            CityGeneratorPedestrianBuilder.RegisterPointsOfInterest(pedestrianNetwork, settings.plaza, blocks);
+
+            List<GameObject> pedestrianInstances = new();
+            if (settings.general.includePedestrians)
+            {
+                CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup);
+                pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random);
+            }
+
+            // Every group except Vehicles/Pedestrians is 100% static geometry once generated:
+            // marking it unlocks static batching and is a prerequisite for baking occlusion
+            // culling / the GPU Resident Drawer (see the technical review, A.1/C.3). Both agent
+            // groups move by transform every frame instead.
             MarkStatic(roads);
             MarkStatic(sidewalks);
             MarkStatic(roadMarkings);
@@ -131,7 +153,7 @@ namespace CityGenerator.Editor
             return new CityBuildSummary(
                 blocks.Count, builtBuildings.Count, plazaSolids.Count,
                 lamps.Count, bins.Count, streetTrees.Count,
-                trafficLightInstances.Count, vehicleInstances.Count,
+                trafficLightInstances.Count, vehicleInstances.Count, pedestrianInstances.Count,
                 playerSpawnPosition);
         }
 

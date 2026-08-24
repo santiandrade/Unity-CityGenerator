@@ -5,9 +5,9 @@
 <img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="Miniatura de City Generator" width="100%">
 
 Una herramienta de Editor para Unity que genera proceduralmente una ciudad —
-carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos y
-tráfico autónomo— en una escena nueva o existente. Ábrela desde **Tools > City
-Generator > Open**.
+carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos,
+tráfico autónomo y peatones— en una escena nueva o existente. Ábrela desde **Tools >
+City Generator > Open**.
 
 Se distribuye como el package embebido `com.santiandrade.citygenerator`, instalable
 directamente desde una git URL, con un conjunto completo de prefabs de demostración
@@ -60,6 +60,10 @@ sustituye el commit fijado en `Packages/packages-lock.json`.
   los slots de layer ocupados, recurre a avisar en vez de crearla — en ese caso los
   vehículos dejan de detectarse entre sí por completo (siguen parando en semáforos y
   por prioridad en cruces sin semáforo) hasta que liberes un slot.
+- Una layer llamada **`Pedestrian`**, con la misma idea: se crea automáticamente la
+  primera vez que generas peatones, para que el sensor de peatones de `CarAgent` pueda
+  detectarlos. Mismo fallback fail-closed si no queda ningún slot libre — los vehículos
+  simplemente no detectan peatones hasta que liberes uno.
 - Un prefab `TrafficLight` con un componente `CityGenerator.Runtime.TrafficLight` si
   **Include Traffic** está activado — la herramienta lo valida y bloquea la generación
   si falta.
@@ -94,6 +98,12 @@ La herramienta nunca modifica un asset de prefab —todo lo que cambia lo hace s
   vehículos se mueven por transform cada frame (`CarAgent`), el collider solo existe
   para que puedan detectarse entre sí con un `SphereCast` frontal en la layer
   `Vehicle`.
+- **Peatones**: solo necesitan un `Renderer` y, si quieres animación de caminar/parado,
+  un `Animator` que controle los parámetros `Speed`/`Grounded` de
+  `CharacterAnimator.controller` (o tu propio controller con los mismos nombres). A
+  diferencia de los vehículos, no hace falta que añadas tú el collider — la
+  herramienta añade un `BoxCollider` en modo trigger a cada instancia generada,
+  dimensionado a partir de los bounds del propio prefab.
 - **El resto de prefabs** (props, vegetación, suelos, contenido de plaza) solo
   necesitan un `Renderer` en algún punto de su jerarquía — la herramienta mide su huella
   a partir de los bounds combinados de los renderers (`CityGeneratorBoundsUtility`)
@@ -149,6 +159,27 @@ genera automáticamente un `CityGenerator.Runtime.TrafficManager` — este actua
 escalona el sensor frontal de los coches lejos de la cámara. Eso da algo de margen,
 pero el techo real es la falta de planificación de rutas, no el coste de actualización
 por coche.
+
+## Escalar los peatones
+
+Los peatones solo aparecen en los nodos del anillo de acera (8 por manzana), así que la
+herramienta avisa (sin bloquear) cuando **Pedestrian Count** supera ~el 70% de ese
+total — a partir de ahí la multitud se percibe como abarrotada, aunque `PedestrianAgent`
+no tiene ninguna mecánica de atasco propia (solo se separa de vecinos muy cercanos, nunca
+se queda bloqueado de forma permanente como puede pasarle a un coche).
+
+Una **rejilla 1×N o N×1** no tiene intersecciones interiores, así que tampoco tiene
+pasos de cebra ni semáforos — los peatones de cada manzana quedan confinados a su propio
+anillo de acera, sin poder cruzar a la manzana vecina. La herramienta también avisa de
+esto cuando **Include Pedestrians** está activado.
+
+El grafo peatonal se auto-repara contra un obstáculo movido/añadido cada vez que entras
+en Play (y también mediante `Tools > City Generator > Rebuild Pedestrian Network` sin
+necesidad de entrar en Play), usando una pequeña sonda física por nodo de acera — pero
+un prefab de edificio o prop **sin ningún `Collider`** en su jerarquía no lo detecta esa
+comprobación. Aun así, sigue evitándose en el momento de la generación, a través de la
+misma lista de obstáculos compartida contra la que se comprueban el resto de categorías
+(farolas, papeleras, vegetación).
 
 ## Pipeline de render
 

@@ -186,7 +186,7 @@ namespace CityGenerator.Editor
                 .ToList();
             CityGeneratorRandomUtility.Shuffle(nodeOrder, random);
 
-            int[] counts = DistributePercentages(vehicles, vehicleCount);
+            int[] counts = CityGeneratorDistributionUtility.DistributePercentages(vehicles, vehicleCount, v => v.percentage);
             EnsureVehicleLayerExists();
             int vehicleLayer = LayerMask.NameToLayer(CityGeneratorConstants.VehicleLayerName);
 
@@ -231,28 +231,6 @@ namespace CityGenerator.Editor
             }
 
             return placed;
-        }
-
-        private static int[] DistributePercentages(List<VehicleEntry> vehicles, int totalCount)
-        {
-            var counts = new int[vehicles.Count];
-            var remainders = new float[vehicles.Count];
-            int assigned = 0;
-
-            for (int i = 0; i < vehicles.Count; i++)
-            {
-                float exact = totalCount * (vehicles[i].percentage / 100f);
-                counts[i] = Mathf.FloorToInt(exact);
-                remainders[i] = exact - counts[i];
-                assigned += counts[i];
-            }
-
-            List<int> byRemainder = Enumerable.Range(0, vehicles.Count).OrderByDescending(i => remainders[i]).ToList();
-            int remaining = totalCount - assigned;
-            for (int i = 0; i < remaining; i++)
-                counts[byRemainder[i % byRemainder.Count]]++;
-
-            return counts;
         }
 
         private static Transform GetOrCreateGroup(Transform parent, string name)
