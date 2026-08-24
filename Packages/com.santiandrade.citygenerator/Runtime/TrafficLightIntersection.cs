@@ -80,5 +80,24 @@ namespace CityGenerator.Runtime
                 }
             }
         }
+
+        /// <summary>Current state of the east-west group (both its lights always share one state).</summary>
+        public TrafficLightState EastWestState => GroupState(eastWest);
+
+        /// <summary>Current state of the north-south group (both its lights always share one state).</summary>
+        public TrafficLightState NorthSouthState => GroupState(northSouth);
+
+        private static TrafficLightState GroupState(List<TrafficLight> group)
+        {
+            for (int i = 0; i < group.Count; i++)
+            {
+                if (group[i] != null)
+                {
+                    return group[i].State;
+                }
+            }
+
+            return TrafficLightState.Red;
+        }
     }
 }

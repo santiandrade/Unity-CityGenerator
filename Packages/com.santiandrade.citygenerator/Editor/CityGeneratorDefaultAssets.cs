@@ -78,6 +78,22 @@ namespace CityGenerator.Editor
                 new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Vehicles/Van.prefab"), percentage = 7f },
             };
 
+            settings.pedestrians = new List<PedestrianEntry>
+            {
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-A.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-B.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-C.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-D.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-E.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-F.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-A.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-B.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-C.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-D.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-E.prefab"), percentage = 8.333333f },
+                new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-F.prefab"), percentage = 8.333333f },
+            };
+
             settings.props.trafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight.prefab");
             settings.props.lampPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Lamp.prefab");
             settings.props.binPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Bin.prefab");

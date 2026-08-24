@@ -34,6 +34,7 @@ namespace CityGenerator.Editor
                     player.name = "Player";
                     player.transform.position = summary.playerSpawnPosition;
                     EnsurePlayerComponents(player, settings.general.inputActions);
+                    AssignPedestrianLayer(player);
                 }
 
                 CreateMainCamera(scene, player, settings.general.inputActions);
@@ -120,6 +121,20 @@ namespace CityGenerator.Editor
                 serialized.FindProperty("jumpHeight").floatValue = CityGeneratorConstants.PlayerJumpHeight;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
+        }
+
+        // Puts the player on the same layer CityGeneratorPedestrianBuilder uses for NPC
+        // pedestrians, so CarAgent's pedestrian sensor (CarAgent.pedestrianMask) stops for the
+        // player exactly like it does for a pedestrian. The layer itself is created (and the
+        // mask assigned to every vehicle) by CityGeneratorPedestrianBuilder.EnsurePedestrianLayerAndAssignMask
+        // whenever vehicles exist, independent of includePedestrians — this only has to look it
+        // up. Left at its default layer if that layer doesn't exist yet (no vehicles were
+        // generated), the same fail-closed fallback used elsewhere in the tool.
+        private static void AssignPedestrianLayer(GameObject player)
+        {
+            int pedestrianLayer = LayerMask.NameToLayer(CityGeneratorConstants.PedestrianLayerName);
+            if (pedestrianLayer >= 0)
+                player.layer = pedestrianLayer;
         }
 
         private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions)

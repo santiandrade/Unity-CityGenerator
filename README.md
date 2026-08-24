@@ -5,8 +5,8 @@
 <img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="City Generator thumbnail" width="100%">
 
 An Editor tool for Unity that procedurally generates a city — roads, sidewalks, road
-markings, buildings, plazas, street furniture, traffic lights and autonomous traffic —
-into a new or existing scene. Open it from **Tools > City Generator > Open**.
+markings, buildings, plazas, street furniture, traffic lights, autonomous traffic and
+pedestrians — into a new or existing scene. Open it from **Tools > City Generator > Open**.
 
 It ships as the embedded package `com.santiandrade.citygenerator`, installable directly
 from a git URL, with a full set of demo prefabs included so the window is ready to
@@ -57,6 +57,10 @@ default branch now. Either way, this replaces the commit locked in
   that it did so. Only if every layer slot is already taken does it fall back to
   warning instead — vehicles then won't detect each other at all (they still stop for
   lights and unsignalled-crossing priority) until you free one up.
+- A layer named **`Pedestrian`**, same idea: created automatically the first time you
+  generate pedestrians, so `CarAgent`'s pedestrian sensor can detect them. Same
+  fail-closed fallback if every slot is taken — vehicles just won't detect pedestrians
+  until you free one up.
 - A `TrafficLight` prefab with a `CityGenerator.Runtime.TrafficLight` component if
   **Include Traffic** is enabled — the tool validates this and blocks generation
   otherwise.
@@ -88,6 +92,11 @@ instances* it generates — but it does expect a few things from what you assign
 - **Vehicles**: a single `BoxCollider` on the root, and **no `Rigidbody`** — vehicles
   move by transform every frame (`CarAgent`), the collider only exists so they can
   detect each other with a forward `SphereCast` on the `Vehicle` layer.
+- **Pedestrians**: just a `Renderer` and, if you want walk/idle animation, an `Animator`
+  driving `CharacterAnimator.controller`'s `Speed`/`Grounded` parameters (or your own
+  controller with the same names). Unlike vehicles, you don't need to add a collider
+  yourself — the tool adds a trigger `BoxCollider` to every generated instance, sized
+  from the prefab's own renderer bounds.
 - **Every other prefab** (props, vegetation, floors, plaza content) just needs a
   `Renderer` somewhere in its hierarchy — the tool measures its footprint from combined
   renderer bounds (`CityGeneratorBoundsUtility`) to place it and to check it against
@@ -137,6 +146,26 @@ Traffic** is enabled — it ticks every `CarAgent` from one central `Update` and
 more than ~60 cars are registered, staggers the forward sensor for cars far from the
 camera. That buys some headroom, but the real ceiling is the lack of route planning, not
 per-car update cost.
+
+## Scaling pedestrians
+
+Pedestrians only spawn on the sidewalk ring nodes (8 per block), so the tool warns
+(non-blocking) once a **Pedestrian Count** exceeds ~70% of that total — past that point
+the crowd reads as overcrowded, even though `PedestrianAgent` has no gridlock mechanics
+of its own (it only pushes apart from very close neighbours, it never gets permanently
+stuck like a car can).
+
+A **1×N or N×1 grid** has no interior intersections, so it has no zebra crossings or
+traffic lights either — every block's pedestrians stay confined to their own sidewalk
+ring, unable to cross to a neighbouring block. The tool warns about this too when
+**Include Pedestrians** is on.
+
+The pedestrian graph auto-repairs itself against a moved/added obstacle every time you
+enter Play (and via `Tools > City Generator > Rebuild Pedestrian Network` without
+entering Play), using a small physics probe per sidewalk node — but a building or prop
+prefab with **no `Collider`** anywhere in its hierarchy isn't detected by that check.
+It's still avoided at generation time, via the same shared obstacle list every other
+category (lamps, bins, vegetation) is checked against.
 
 ## Render pipeline
 

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-24
+
+### Added
+
+- Autonomous pedestrian network, mirroring the vehicle traffic system: `PedestrianNetwork`
+  (an undirected graph — an 8-node sidewalk ring per block plus a curb/crossing/curb chain at
+  every interior intersection, aligned to the real zebra crossings and matched to the actual
+  `TrafficLightIntersection` in the scene) and `PedestrianAgent`/`PedestrianManager` (walk/wait/
+  idle state machine, ticked centrally like `CarAgent`/`TrafficManager`, with a spatial-grid local
+  separation nudge between nearby NPCs). Configurable from the tool window ("Include Pedestrians",
+  "Pedestrian Count", a percentage-weighted prefab list) exactly like vehicles, with the same
+  three-level pruning (generation-time obstacle avoidance, an `Awake`-time auto-repair pass, and
+  an explicit re-bake via `[ContextMenu]`/`Tools > City Generator > Rebuild Pedestrian Network`).
+  Vehicles now brake for detected pedestrians too, via a `CarAgent.pedestrianMask` and a second
+  forward sensor independent of `vehicleMask` — reusing the existing "vehicle ahead" braking
+  branch rather than a new state. The 12 `DefaultAssets/Prefabs/Characters/` prefabs are the
+  default pedestrian list (~8.33% each), on top of remaining available as Player Prefab candidates.
+- `TrafficNetwork.IsAxisGreen` and `TrafficLightIntersection.EastWestState`/`NorthSouthState`:
+  read an intersection's light state for a given axis without re-scanning the scene for
+  `TrafficLight` instances, so `PedestrianNetwork` can decide when a crossing is safe.
+- `CityGeneratorDistributionUtility.DistributePercentages`: the percentage-to-count distribution
+  logic used by vehicles, extracted into a shared, generic utility so pedestrians reuse it too.
+
+### Changed
+
+- A grid with `gridWidth == 1` or `gridHeight == 1` has no interior intersections, so pedestrians
+  can't cross between blocks — each block's sidewalk ring is isolated. The tool window now warns
+  about this (non-blocking), same as the existing vehicle density warning.
+- The player is now placed on the same Pedestrian layer as NPC pedestrians, so vehicles brake for
+  it exactly like they do for a pedestrian, regardless of whether "Include Pedestrians" is on.
+  Pedestrian NPCs' `BoxCollider` is no longer a trigger, so the player's `CharacterController` now
+  physically collides with them too, matching how it already collides with vehicles (pedestrians
+  themselves are unaffected — `PedestrianAgent` moves by transform and never gets pushed back).
+
+### Known limitations
+
+- A user-supplied building/prop prefab with no `Collider` in its hierarchy isn't detected by the
+  pedestrian network's `Awake`-time auto-repair pruning (`Physics.CheckSphere`-based); it still
+  gets avoided at generation time via the shared obstacle list.
+
 ## [1.3.0] - 2026-08-24
 
 ### Added

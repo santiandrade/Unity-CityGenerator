@@ -59,6 +59,30 @@ namespace CityGenerator.Editor
             EditorUtility.DisplayDialog("City Generator", "Current selection saved as the new default.", "OK");
         }
 
+        /// <summary>
+        /// Recalculates the pedestrian graph against the scene as it currently stands, without
+        /// regenerating the city — the explicit re-bake (level 3 of the pruning described in the
+        /// spec), useful after hand-editing/moving a building. Equivalent to the component's own
+        /// "Rebuild Network" context menu, exposed here too since a generated city's
+        /// PedestrianNetwork is buried inside the City/PedestrianNetwork group.
+        /// </summary>
+        [MenuItem("Tools/City Generator/Rebuild Pedestrian Network")]
+        private static void RebuildPedestrianNetworkMenuItem()
+        {
+            var network = Object.FindFirstObjectByType<PedestrianNetwork>();
+            if (network == null)
+            {
+                EditorUtility.DisplayDialog(
+                    "City Generator",
+                    "No PedestrianNetwork found in the current scene. Generate a city first.",
+                    "OK");
+                return;
+            }
+
+            network.Build();
+            Debug.Log("[City Generator] Pedestrian network rebuilt.");
+        }
+
         private static CityGeneratorWindow FindOpenWindow()
         {
             CityGeneratorWindow[] windows = Resources.FindObjectsOfTypeAll<CityGeneratorWindow>();
@@ -99,6 +123,7 @@ namespace CityGenerator.Editor
             DrawBuildingsSection();
             DrawVegetationSection();
             DrawVehiclesSection();
+            DrawPedestriansSection();
             DrawPropsSection();
 
             EditorGUIUtility.labelWidth = previousLabelWidth;
@@ -205,6 +230,14 @@ namespace CityGenerator.Editor
             string densityWarning = GetVehicleDensityWarning();
             if (densityWarning != null)
                 EditorGUILayout.HelpBox(densityWarning, MessageType.Warning);
+            EditorGUILayout.PropertyField(FindProperty("general.includePedestrians"));
+            EditorGUILayout.PropertyField(FindProperty("general.pedestrianCount"));
+            string pedestrianDensityWarning = GetPedestrianDensityWarning();
+            if (pedestrianDensityWarning != null)
+                EditorGUILayout.HelpBox(pedestrianDensityWarning, MessageType.Warning);
+            string isolatedBlocksWarning = GetIsolatedBlocksWarning();
+            if (isolatedBlocksWarning != null)
+                EditorGUILayout.HelpBox(isolatedBlocksWarning, MessageType.Warning);
             EditorGUILayout.PropertyField(FindProperty("general.playerPrefab"));
             DrawRequiredField(FindProperty("general.inputActions"), "Input Actions (if Player Prefab is set)",
                 isRequired: FindProperty("general.playerPrefab").objectReferenceValue != null);
@@ -241,6 +274,48 @@ namespace CityGenerator.Editor
             return $"{vehicleCount} vehicles is {occupancy:P0} of this grid's {validNodes} spawn points. " +
                    $"Traffic has no route planning, so it tends to gridlock above ~{CityGeneratorConstants.VehicleDensityWarningThreshold:P0} " +
                    $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
+        }
+
+        /// <summary>
+        /// Non-blocking density warning, mirroring <see cref="GetVehicleDensityWarning"/>: pedestrians
+        /// only spawn on Ring nodes (8 per block, none of the crossing/curb nodes), so that count —
+        /// not the network's full node count — is the relevant denominator.
+        /// </summary>
+        private string GetPedestrianDensityWarning()
+        {
+            int gridWidth = FindProperty("general.gridWidth").intValue;
+            int gridHeight = FindProperty("general.gridHeight").intValue;
+            int pedestrianCount = FindProperty("general.pedestrianCount").intValue;
+            if (pedestrianCount <= 0)
+                return null;
+
+            int ringNodeCount = 8 * gridWidth * gridHeight;
+            float occupancy = (float)pedestrianCount / ringNodeCount;
+            if (occupancy <= CityGeneratorConstants.PedestrianCountWarningThreshold)
+                return null;
+
+            int recommendedMax = Mathf.FloorToInt(ringNodeCount * CityGeneratorConstants.PedestrianCountWarningThreshold);
+            return $"{pedestrianCount} pedestrians is {occupancy:P0} of this grid's {ringNodeCount} sidewalk spawn points. " +
+                   $"Above ~{CityGeneratorConstants.PedestrianCountWarningThreshold:P0} the crowd starts reading as overcrowded " +
+                   $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
+        }
+
+        /// <summary>
+        /// A 1xN or Nx1 grid has no interior intersections, so it has no zebra crossings/traffic
+        /// lights either: every block's pedestrian ring ends up isolated from every other one.
+        /// </summary>
+        private string GetIsolatedBlocksWarning()
+        {
+            if (!FindProperty("general.includePedestrians").boolValue)
+                return null;
+
+            int gridWidth = FindProperty("general.gridWidth").intValue;
+            int gridHeight = FindProperty("general.gridHeight").intValue;
+            if (gridWidth > 1 && gridHeight > 1)
+                return null;
+
+            return $"A {gridWidth}x{gridHeight} grid has no interior intersections, so it has no crossings: " +
+                   "every block's pedestrians stay confined to their own sidewalk ring.";
         }
 
         private void DrawGroundSection()
@@ -281,6 +356,13 @@ namespace CityGenerator.Editor
         {
             EditorGUILayout.LabelField("Vehicles", EditorStyles.boldLabel);
             DrawRequiredField(FindProperty("vehicles"), "Vehicles (if Vehicle Count > 0, percentages must sum to 100)", includeChildren: true, isRequired: FindProperty("general.vehicleCount").intValue > 0);
+            EditorGUILayout.Space(8f);
+        }
+
+        private void DrawPedestriansSection()
+        {
+            EditorGUILayout.LabelField("Pedestrians", EditorStyles.boldLabel);
+            DrawRequiredField(FindProperty("pedestrians"), "Pedestrians (if Pedestrian Count > 0, percentages must sum to 100)", includeChildren: true, isRequired: FindProperty("general.pedestrianCount").intValue > 0);
             EditorGUILayout.Space(8f);
         }
 
@@ -393,7 +475,8 @@ namespace CityGenerator.Editor
             Debug.Log(
                 $"[City Generator] Built '{scenePath}': {summary.blockCount} blocks, {summary.buildingCount} buildings, " +
                 $"{propsTotal} props (lamps {summary.lampCount}, bins {summary.binCount}), " +
-                $"{vegetationTotal} vegetation instances, {summary.trafficLightCount} traffic lights, {summary.vehicleCount} vehicles.");
+                $"{vegetationTotal} vegetation instances, {summary.trafficLightCount} traffic lights, " +
+                $"{summary.vehicleCount} vehicles, {summary.pedestrianCount} pedestrians.");
         }
     }
 }

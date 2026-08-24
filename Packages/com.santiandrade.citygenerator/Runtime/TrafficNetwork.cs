@@ -392,6 +392,27 @@ namespace CityGenerator.Runtime
             return hasSignals[intersection];
         }
 
+        /// <summary>
+        /// Whether the given intersection's light is green for the requested axis of travel
+        /// (true for X/east-west, false for Z/north-south). Lets PedestrianNetwork read a
+        /// crossing's light without re-scanning the scene for TrafficLight instances itself.
+        /// </summary>
+        public bool IsAxisGreen(TrafficLightIntersection intersection, bool axisIsX)
+        {
+            return AxisState(intersection, axisIsX) == TrafficLightState.Green;
+        }
+
+        /// <summary>
+        /// Raw light state for the given intersection/axis. PedestrianNetwork.CanCross needs this
+        /// rather than just IsAxisGreen: a pedestrian may only step onto the crossing once traffic
+        /// is fully stopped (Red) — Amber still has cars moving/braking through the intersection,
+        /// so "not green" alone is not safe to cross on.
+        /// </summary>
+        public TrafficLightState AxisState(TrafficLightIntersection intersection, bool axisIsX)
+        {
+            return axisIsX ? intersection.EastWestState : intersection.NorthSouthState;
+        }
+
         public Vector3 IntersectionCentre(int intersection)
         {
             EnsureBuilt();
