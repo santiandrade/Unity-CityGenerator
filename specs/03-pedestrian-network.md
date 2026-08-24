@@ -1,8 +1,9 @@
 # SPEC 03 — Red peatonal (NPCs) para City Generator
 
-> **Estado:** Approved
+> **Estado:** Implementado
 > **Depende de:** SPEC 01 (City Generator Tool), SPEC 02 (Unity Package Distribution)
 > **Fecha:** 2026-08-24
+> **Versión publicada:** `1.4.0`
 > **Objetivo:** Añadir una red peatonal autónoma —NPCs que recorren aceras y cruzan por pasos de cebra semaforizados, con los vehículos frenando ante ellos— a la herramienta City Generator, espejando el sistema de tráfico rodado ya existente.
 
 ## Por qué existe esta spec
@@ -148,24 +149,24 @@ Todo el spawn (elección de prefab, nodo, jitter) usa el `System.Random` que `As
 
 ## Acceptance criteria
 
-- [ ] Los `.cs` nuevos compilan tras `CompilationPipeline.RequestScriptCompilation()` y los tipos resuelven en `Unity_ReadConsole` sin errores.
-- [ ] Generar una ciudad 5×5 con `includePedestrians` activo y ~60 NPCs completa sin errores y regenera `Assets/Scenes/City.unity`.
-- [ ] Con el `PedestrianNetwork` seleccionado y sin Play, los gizmos muestran el anillo cayendo entre edificios y mobiliario, los cruces enganchados a las cebras, y ningún nodo huérfano.
-- [ ] En Play, ningún NPC pisa calzada fuera de una cebra.
-- [ ] En Play, los NPCs esperan en el bordillo y solo cruzan cuando el tráfico de esa calle está en rojo (verificable vía `IsAxisGreen`).
-- [ ] Se producen paradas ociosas y paradas junto a bancos/fuente en una manzana de plaza.
-- [ ] Los NPCs no se atraviesan entre sí (separación local del grid espacial activa).
-- [ ] Al llegar a destino, un NPC replanifica y camina hacia un nuevo destino sin quedarse parado indefinidamente.
-- [ ] Las velocidades por defecto no producen *foot sliding* visible con `CharacterAnimator.controller` sin modificarlo.
-- [ ] Un `CarAgent` que detecta un peatón en su sensor (`pedestrianMask`) frena/para igual que ante un coche por delante, sin nuevo `CurrentStopReason`.
-- [ ] El layer `Pedestrian` se crea automáticamente la primera vez (mismo mecanismo que `Vehicle`); si no hay slot libre, `pedestrianMask` queda en `0` y se registra un aviso en consola, sin bloquear la generación.
-- [ ] El `BoxCollider` de cada peatón generado es `isTrigger = true`: el jugador (`CharacterController`) atraviesa a los NPCs sin colisión física, y el `SphereCastNonAlloc` de `CarAgent` sigue detectándolos.
-- [ ] Moviendo a mano un edificio hasta invadir el anillo y entrando en Play, los nodos afectados se podan (`PrunePlacedObstacles`) y los NPCs los rodean; repitiendo con el botón/menú de re-bake sin entrar en Play se obtiene el mismo resultado.
-- [ ] Perfilando a 60 y 150 NPCs, `Animator.cullingMode = CullCompletely` recorta el coste fuera de cámara y `PedestrianManager.Update` se mantiene plano.
-- [ ] Con rejilla 1×3, la ventana avisa de manzanas aisladas y la generación no se rompe.
-- [ ] `pedestrianCount` a `0` genera la ciudad sin peatones y sin errores.
-- [ ] Una lista de peatones vacía con `pedestrianCount > 0` bloquea la generación en `CityGeneratorValidator`.
-- [ ] Con `includeTraffic` desactivado, los semáforos se siguen generando y los peatones siguen esperando/cruzando correctamente.
+- [x] Los `.cs` nuevos compilan tras `CompilationPipeline.RequestScriptCompilation()` y los tipos resuelven en `Unity_ReadConsole` sin errores.
+- [x] Generar una ciudad 5×5 con `includePedestrians` activo y ~60 NPCs completa sin errores y regenera `Assets/Scenes/City.unity`.
+- [x] Con el `PedestrianNetwork` seleccionado y sin Play, los gizmos muestran el anillo cayendo entre edificios y mobiliario, los cruces enganchados a las cebras, y ningún nodo huérfano.
+- [x] En Play, ningún NPC pisa calzada fuera de una cebra.
+- [x] En Play, los NPCs esperan en el bordillo y solo cruzan cuando el tráfico de esa calle está en rojo (verificable vía `IsAxisGreen`).
+- [x] Se producen paradas ociosas y paradas junto a bancos/fuente en una manzana de plaza.
+- [x] Los NPCs no se atraviesan entre sí (separación local del grid espacial activa).
+- [x] Al llegar a destino, un NPC replanifica y camina hacia un nuevo destino sin quedarse parado indefinidamente.
+- [x] Las velocidades por defecto no producen *foot sliding* visible con `CharacterAnimator.controller` sin modificarlo.
+- [x] Un `CarAgent` que detecta un peatón en su sensor (`pedestrianMask`) frena/para igual que ante un coche por delante, sin nuevo `CurrentStopReason`.
+- [x] El layer `Pedestrian` se crea automáticamente la primera vez (mismo mecanismo que `Vehicle`); si no hay slot libre, `pedestrianMask` queda en `0` y se registra un aviso en consola, sin bloquear la generación.
+- [x] El `BoxCollider` de cada peatón generado se detecta correctamente por el `SphereCastNonAlloc` de `CarAgent`. **Desviación respecto al diseño original:** durante la verificación se decidió `isTrigger = false` en vez de `true` — el jugador (`CharacterController`) ahora colisiona físicamente con los NPCs, igual que ya lo hacía con los vehículos, en vez de atravesarlos; el propio NPC no se ve afectado porque `PedestrianAgent` se mueve fijando `transform.position` directamente. Ver CHANGELOG (sección "Changed" de 1.4.0).
+- [x] Moviendo a mano un edificio hasta invadir el anillo y entrando en Play, los nodos afectados se podan (`PrunePlacedObstacles`) y los NPCs los rodean; repitiendo con el botón/menú de re-bake sin entrar en Play se obtiene el mismo resultado.
+- [x] Perfilando a 60 y 150 NPCs, `Animator.cullingMode = CullCompletely` recorta el coste fuera de cámara y `PedestrianManager.Update` se mantiene plano.
+- [x] Con rejilla 1×3, la ventana avisa de manzanas aisladas y la generación no se rompe.
+- [x] `pedestrianCount` a `0` genera la ciudad sin peatones y sin errores.
+- [x] Una lista de peatones vacía con `pedestrianCount > 0` bloquea la generación en `CityGeneratorValidator`.
+- [x] Con `includeTraffic` desactivado, los semáforos se siguen generando y los peatones siguen esperando/cruzando correctamente.
 
 ## Decisiones tomadas y descartadas
 
