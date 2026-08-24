@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
-
 {
     /// <summary>
     /// Vehicle that travels along the <see cref="TrafficNetwork"/>: follows the lane graph,
