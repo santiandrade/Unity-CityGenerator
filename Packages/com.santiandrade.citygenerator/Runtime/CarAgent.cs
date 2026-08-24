@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
+
 {
     /// <summary>
     /// Vehicle that travels along the <see cref="TrafficNetwork"/>: follows the lane graph,
@@ -139,7 +140,7 @@ namespace CityGenerator.Runtime
         {
             if (network == null)
             {
-                network = FindFirstObjectByType<TrafficNetwork>();
+                network = FindAnyObjectByType<TrafficNetwork>();
             }
 
             if (network == null)
@@ -161,7 +162,7 @@ namespace CityGenerator.Runtime
             // Ticked centrally by TrafficManager rather than through this component's own Update
             // (see the technical review, A.7). Falls back to finding/creating one so a CarAgent
             // dropped into a scene outside the generator still drives.
-            trafficManager = TrafficManager.Instance != null ? TrafficManager.Instance : FindFirstObjectByType<TrafficManager>();
+            trafficManager = TrafficManager.Instance != null ? TrafficManager.Instance : FindAnyObjectByType<TrafficManager>();
             if (trafficManager == null)
             {
                 trafficManager = new GameObject("TrafficManager").AddComponent<TrafficManager>();

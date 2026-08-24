@@ -48,7 +48,6 @@ namespace CityGenerator.Runtime
         // Own copies of the layout geometry (not read from CityGeneratorConstants: that class is
         // Editor-only/internal, and every other Runtime script in the tool already keeps its own
         // copy of the numbers it needs rather than reaching into the Editor assembly).
-        [SerializeField] private float blockHalfSize = 23f;
         [SerializeField] private float streetHalfWidth = 5f;
 
         // BlockHalfSize (23) - PedestrianRingInset (3.5): the ring sits in the gap between the
@@ -145,7 +144,7 @@ namespace CityGenerator.Runtime
 
             if (trafficNetwork == null)
             {
-                trafficNetwork = FindFirstObjectByType<TrafficNetwork>();
+                trafficNetwork = FindAnyObjectByType<TrafficNetwork>();
             }
 
             int blocksX = axesX.Length - 1;
@@ -167,7 +166,7 @@ namespace CityGenerator.Runtime
                 }
             }
 
-            var intersections = FindObjectsByType<TrafficLightIntersection>(FindObjectsSortMode.None);
+            var intersections = FindObjectsByType<TrafficLightIntersection>(FindObjectsInactive.Exclude);
             for (int i = 1; i < axesX.Length - 1; i++)
             {
                 for (int j = 1; j < axesZ.Length - 1; j++)

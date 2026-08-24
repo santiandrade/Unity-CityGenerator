@@ -234,7 +234,7 @@ namespace CityGenerator.Runtime
         {
             int nx = axesX.Length;
             int nz = axesZ.Length;
-            TrafficLight[] lights = FindObjectsByType<TrafficLight>(FindObjectsSortMode.None);
+            TrafficLight[] lights = FindObjectsByType<TrafficLight>(FindObjectsInactive.Exclude);
             hasSignals = new bool[nx * nz];
 
             for (int i = 0; i < nx; i++)

@@ -97,7 +97,7 @@ namespace CityGenerator.Runtime
         {
             if (playerTransform == null)
             {
-                PlayerController player = FindFirstObjectByType<PlayerController>();
+                PlayerController player = FindAnyObjectByType<PlayerController>();
                 if (player == null)
                 {
                     return;

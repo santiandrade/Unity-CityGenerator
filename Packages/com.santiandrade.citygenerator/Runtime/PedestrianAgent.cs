@@ -89,7 +89,7 @@ namespace CityGenerator.Runtime
         {
             if (network == null)
             {
-                network = FindFirstObjectByType<PedestrianNetwork>();
+                network = FindAnyObjectByType<PedestrianNetwork>();
             }
 
             if (network == null)
@@ -122,7 +122,7 @@ namespace CityGenerator.Runtime
             // Ticked centrally by PedestrianManager rather than through this component's own
             // Update, same convention as CarAgent/TrafficManager. Falls back to finding/creating
             // one so a PedestrianAgent dropped into a scene outside the generator still walks.
-            manager = PedestrianManager.Instance != null ? PedestrianManager.Instance : FindFirstObjectByType<PedestrianManager>();
+            manager = PedestrianManager.Instance != null ? PedestrianManager.Instance : FindAnyObjectByType<PedestrianManager>();
             if (manager == null)
             {
                 manager = new GameObject("PedestrianManager").AddComponent<PedestrianManager>();
