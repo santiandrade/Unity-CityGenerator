@@ -66,9 +66,12 @@ git URL using the new tag from the [Releases page](https://github.com/santiandra
   generate pedestrians, so `CarAgent`'s pedestrian sensor can detect them. Same
   fail-closed fallback if every slot is taken — vehicles just won't detect pedestrians
   until you free one up.
-- A `TrafficLight` prefab with a `CityGenerator.Runtime.TrafficLight` component if
-  **Include Traffic** is enabled — the tool validates this and blocks generation
-  otherwise.
+- A `TrafficLight` prefab with a `CityGenerator.Runtime.TrafficLight` component
+  whenever the grid has at least one interior intersection (grid width and height
+  both greater than 1) — the tool validates this and blocks generation otherwise,
+  regardless of whether **Include Traffic** is on: the traffic network and its lights
+  are always generated so crossings stay wired to a real light, even when no vehicles
+  are spawned.
 
 ## Demo content
 
@@ -95,14 +98,16 @@ instances* it generates — but it does expect a few things from what you assign
   neighbour. This is deliberate: sizing your own prefabs to the slot is your
   responsibility, the same as with any other user-supplied asset.
 - **Vehicles and pedestrians**: no `Rigidbody` — both move by transform every frame
-  (`CarAgent`/`PedestrianAgent`). You don't need to add a collider yourself: if your
-  prefab already has one or more `Collider`s anywhere in its hierarchy, the tool keeps
-  them as-is (just forcing `isTrigger` off); if it has none, the tool adds a
-  non-trigger `BoxCollider` to the generated instance, sized from the prefab's own
-  combined renderer bounds. Either way it's what lets vehicles detect each other with a
-  forward `SphereCast` on the `Vehicle` layer, lets vehicles detect pedestrians (and the
-  player) the same way, and lets the player's `CharacterController` physically collide
-  with both. Pedestrians additionally want, if you want walk/idle animation, an
+  (`CarAgent`/`PedestrianAgent`). You don't need to add a collider yourself: the
+  generated instance's root always ends up with one dedicated, non-trigger collider
+  used for sensor detection — an existing collider on the root is reused, or a
+  `BoxCollider` sized from the prefab's own combined renderer bounds is added if the
+  root has none. A collider that only exists deeper in your prefab's hierarchy is left
+  completely untouched (its own layer and `isTrigger` are free for you to use for
+  anything else) — only the root proxy is what lets vehicles detect each other with a
+  forward `SphereCast` on the `Vehicle` layer and lets vehicles detect pedestrians (and
+  the player) the same way; the player's `CharacterController` can still physically
+  collide with any collider anywhere in the prefab. Pedestrians additionally want, if you want walk/idle animation, an
   `Animator` driving `CharacterAnimator.controller`'s `Speed`/`Grounded` parameters (or
   your own controller with the same names) — otherwise they still walk, just without
   animation.
@@ -141,9 +146,10 @@ this repository ships with:
 | `Depth Texture` (URP asset) | On | Needed if you use SSAO or another Renderer Feature that reads scene depth |
 | GPU Resident Drawer | Instanced Drawing | Requires static-flagged geometry (already applied by the tool) and Forward+ rendering |
 
-`targetFrameRate`/`vSyncCount` are **not** in this table on purpose — they're set at
-runtime by `CityGenerator.Runtime.PerformanceBootstrap`, which ships inside the package,
-so a generated city behaves the same in any project without extra configuration.
+`targetFrameRate`/`vSyncCount` are **not** in this table on purpose — as of v2.0.0 the
+package no longer sets them for you (it previously did, at runtime, via
+`CityGenerator.Runtime.PerformanceBootstrap`). Set your own frame rate/VSync preference
+for your project; there's no package-level opt-in replacement.
 
 ## Scaling traffic
 

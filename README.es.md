@@ -71,9 +71,12 @@ vuelve a instalarla desde la git URL usando el tag nuevo de la
   primera vez que generas peatones, para que el sensor de peatones de `CarAgent` pueda
   detectarlos. Mismo fallback fail-closed si no queda ningún slot libre — los vehículos
   simplemente no detectan peatones hasta que liberes uno.
-- Un prefab `TrafficLight` con un componente `CityGenerator.Runtime.TrafficLight` si
-  **Include Traffic** está activado — la herramienta lo valida y bloquea la generación
-  si falta.
+- Un prefab `TrafficLight` con un componente `CityGenerator.Runtime.TrafficLight`
+  siempre que la rejilla tenga al menos una intersección interior (ancho y alto de
+  rejilla ambos mayores que 1) — la herramienta lo valida y bloquea la generación si
+  falta, independientemente de si **Include Traffic** está activado: la red de tráfico
+  y sus semáforos siempre se generan para que los cruces queden conectados a un
+  semáforo real, incluso sin ningún vehículo.
 
 ## Contenido de demostración
 
@@ -102,14 +105,17 @@ La herramienta nunca modifica un asset de prefab —todo lo que cambia lo hace s
   su vecino. Es deliberado: dimensionar tus propios prefabs al slot es tu
   responsabilidad, igual que con cualquier otro asset proporcionado por el usuario.
 - **Vehículos y peatones**: sin `Rigidbody` — ambos se mueven por transform cada frame
-  (`CarAgent`/`PedestrianAgent`). No hace falta que añadas tú el collider: si tu prefab
-  ya trae uno o más `Collider` en cualquier punto de su jerarquía, la herramienta los
-  mantiene tal cual (solo forzando `isTrigger` a desactivado); si no trae ninguno, la
-  herramienta añade un `BoxCollider` sin trigger a la instancia generada, dimensionado a
-  partir de los bounds combinados de los renderers del propio prefab. En ambos casos es
-  lo que permite a los vehículos detectarse entre sí con un `SphereCast` frontal en la
-  layer `Vehicle`, detectar a los peatones (y al jugador) del mismo modo, y que el
-  `CharacterController` del jugador choque físicamente con ambos. Los peatones además
+  (`CarAgent`/`PedestrianAgent`). No hace falta que añadas tú el collider: el root de la
+  instancia generada siempre acaba con un collider propio, sin trigger, dedicado a la
+  detección por sensor — si el root ya trae uno se reutiliza, y si no, se añade un
+  `BoxCollider` dimensionado a partir de los bounds combinados de los renderers del
+  propio prefab. Un collider que solo exista en un hijo de la jerarquía se deja
+  completamente intacto (su propia layer e `isTrigger` quedan libres para lo que
+  quieras usarlos) — solo el proxy del root es lo que permite a los vehículos
+  detectarse entre sí con un `SphereCast` frontal en la layer `Vehicle` y detectar a
+  los peatones (y al jugador) del mismo modo; el `CharacterController` del jugador
+  puede seguir chocando físicamente con cualquier collider del prefab, esté donde esté.
+  Los peatones además
   admiten, si quieres animación de caminar/parado, un `Animator` que controle los
   parámetros `Speed`/`Grounded` de `CharacterAnimator.controller` (o tu propio
   controller con los mismos nombres) — sin él siguen caminando igualmente, solo que sin
@@ -153,10 +159,10 @@ mismo perfil de rendimiento con el que se distribuye este repositorio:
 | `Depth Texture` (asset URP) | On | Necesario si usas SSAO u otra Renderer Feature que lea la profundidad de la escena |
 | GPU Resident Drawer | Instanced Drawing | Requiere geometría marcada como estática (ya aplicado por la herramienta) y renderizado Forward+ |
 
-`targetFrameRate`/`vSyncCount` **no** están en esta tabla a propósito — los fija en
-tiempo de ejecución `CityGenerator.Runtime.PerformanceBootstrap`, que se distribuye
-dentro del package, así que una ciudad generada se comporta igual en cualquier
-proyecto sin configuración adicional.
+`targetFrameRate`/`vSyncCount` **no** están en esta tabla a propósito — desde la v2.0.0
+el package ya no los fija por ti (antes sí lo hacía, en tiempo de ejecución, vía
+`CityGenerator.Runtime.PerformanceBootstrap`). Configura tu propia preferencia de frame
+rate/VSync para tu proyecto; no hay ningún sustituto opt-in a nivel de package.
 
 ## Escalar el tráfico
 
