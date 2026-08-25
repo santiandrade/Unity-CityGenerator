@@ -16,6 +16,13 @@ namespace CityGenerator.Runtime
 
         private readonly Dictionary<(int x, int z), List<PedestrianAgent>> cells = new();
 
+        // The player is on the same Pedestrian layer as every NPC (CityGeneratorSceneBuilder puts
+        // it there regardless of Include Pedestrians -- see CLAUDE.md) and CarAgent's SphereCast
+        // sensor always detected it, but the player is never itself a PedestrianAgent, so it can
+        // never appear in `cells` above. Tracked separately and reported by TryGetPlayerPosition so
+        // CarAgent's grid path can still brake for the player once this grid takes over.
+        private Vector3? playerPosition;
+
         /// <summary>
         /// Set by the last <see cref="Rebuild"/> call: true once there are more pedestrians than
         /// the threshold that makes querying this grid worth it instead of a fresh SphereCast --
@@ -24,7 +31,7 @@ namespace CityGenerator.Runtime
         public bool HasEnoughAgents { get; private set; }
 
         /// <summary>Called once per frame by PedestrianManager, after ticking every agent.</summary>
-        public void Rebuild(IReadOnlyList<PedestrianAgent> agents, int minAgentCountToUse)
+        public void Rebuild(IReadOnlyList<PedestrianAgent> agents, int minAgentCountToUse, Transform player)
         {
             foreach (List<PedestrianAgent> bucket in cells.Values)
                 bucket.Clear();
@@ -40,7 +47,21 @@ namespace CityGenerator.Runtime
                 bucket.Add(agents[i]);
             }
 
+            playerPosition = player != null ? player.position : (Vector3?)null;
             HasEnoughAgents = agents.Count > minAgentCountToUse;
+        }
+
+        /// <summary>True if the player exists in this scene, with its current position.</summary>
+        public bool TryGetPlayerPosition(out Vector3 position)
+        {
+            if (playerPosition.HasValue)
+            {
+                position = playerPosition.Value;
+                return true;
+            }
+
+            position = default;
+            return false;
         }
 
         /// <summary>Appends every pedestrian within <paramref name="radius"/> of <paramref name="position"/> to <paramref name="results"/> (cleared first).</summary>

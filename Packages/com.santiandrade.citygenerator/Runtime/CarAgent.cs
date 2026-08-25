@@ -447,7 +447,10 @@ namespace CityGenerator.Runtime
         /// <summary>
         /// Same intent as the SphereCast fallback above, answered from
         /// <see cref="PedestrianRoadProximityGrid"/> instead: only pedestrians roughly ahead (a
-        /// forward-dot check, mirroring the cast's cone) within sensorRange count.
+        /// forward-dot check, mirroring the cast's cone) within sensorRange count. The player is on
+        /// the same Pedestrian layer as every NPC and the SphereCast sensor always detected it, but
+        /// the player is never itself a PedestrianAgent, so it can never be one of the grid's own
+        /// bucketed entries -- checked separately via TryGetPlayerPosition instead.
         /// </summary>
         private float PedestrianAheadClearanceFromGrid()
         {
@@ -464,6 +467,17 @@ namespace CityGenerator.Runtime
 
                 float gap = distance <= 0.001f ? 0f : distance - minGap;
                 clearance = Mathf.Min(clearance, gap);
+            }
+
+            if (pedestrianRoadProximity.TryGetPlayerPosition(out Vector3 playerPosition))
+            {
+                Vector3 toPlayer = playerPosition - origin;
+                float distance = toPlayer.magnitude;
+                if (distance <= sensorRange && (distance <= 0.001f || Vector3.Dot(toPlayer / distance, transform.forward) >= 0.5f))
+                {
+                    float gap = distance <= 0.001f ? 0f : distance - minGap;
+                    clearance = Mathf.Min(clearance, gap);
+                }
             }
 
             return clearance;

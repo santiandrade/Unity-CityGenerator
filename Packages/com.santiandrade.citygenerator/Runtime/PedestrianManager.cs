@@ -132,7 +132,7 @@ namespace CityGenerator.Runtime
             ApplyLocalSeparation(dt);
             ApplyPlayerAvoidance(dt);
 
-            roadProximityGrid?.Rebuild(agents, staggerMinAgentCount);
+            roadProximityGrid?.Rebuild(agents, staggerMinAgentCount, playerTransform);
 
             frameIndex++;
         }
