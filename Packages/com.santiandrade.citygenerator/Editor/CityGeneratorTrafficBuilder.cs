@@ -37,12 +37,18 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Adds the <see cref="TrafficManager"/> that ticks every generated <see cref="CarAgent"/>
-        /// from one central Update instead of each car's own (see the technical review, A.7).
-        /// Only called when traffic is actually generated.
+        /// from one central Update instead of each car's own (see the technical review, A.7), and
+        /// wires it into <paramref name="network"/> (same GameObject) so CarAgent can resolve it
+        /// via <see cref="TrafficNetwork.Manager"/> instead of a global static Instance. Only
+        /// called when traffic is actually generated.
         /// </summary>
-        public static void AddManagerComponent(Transform trafficNetworkGroup)
+        public static void AddManagerComponent(Transform trafficNetworkGroup, TrafficNetwork network)
         {
-            trafficNetworkGroup.gameObject.AddComponent<TrafficManager>();
+            var manager = trafficNetworkGroup.gameObject.AddComponent<TrafficManager>();
+
+            var serialized = new SerializedObject(network);
+            serialized.FindProperty("manager").objectReferenceValue = manager;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>
@@ -202,9 +208,6 @@ namespace CityGenerator.Editor
                     instance.transform.position = node.Position;
                     instance.transform.rotation = Quaternion.LookRotation(node.Direction, Vector3.up);
 
-                    if (vehicleLayer >= 0)
-                        instance.layer = vehicleLayer;
-
                     CarAgent carAgent = instance.GetComponent<CarAgent>();
                     if (carAgent == null)
                         carAgent = instance.AddComponent<CarAgent>();
@@ -214,7 +217,14 @@ namespace CityGenerator.Editor
                     var serializedAgent = new SerializedObject(carAgent);
                     serializedAgent.FindProperty("network").objectReferenceValue = network;
 
-                    // vehicleMask must match instance.layer exactly, not whatever LayerMask the
+                    // The Vehicle layer is assigned only to the sensor proxy collider's own
+                    // GameObject (the instance root, never the user prefab's own colliders,
+                    // wherever they sit in the hierarchy) — see CityGeneratorColliderUtility.
+                    Collider proxyCollider = CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
+                    if (vehicleLayer >= 0)
+                        proxyCollider.gameObject.layer = vehicleLayer;
+
+                    // vehicleMask must match the proxy's layer exactly, not whatever LayerMask the
                     // prefab happened to be authored with: if the 'Vehicle' layer sits at a
                     // different index in this project, a mask baked for a different index would
                     // make the forward sensor miss every other vehicle. When EnsureVehicleLayerExists
@@ -223,10 +233,8 @@ namespace CityGenerator.Editor
                     // whatever layer the instance happens to sit on, which could just as easily be
                     // shared with unrelated scene geometry. Cars simply don't brake for each other
                     // in that case; they still stop for lights and unsignalled-crossing priority.
-                    serializedAgent.FindProperty("vehicleMask").intValue = vehicleLayer >= 0 ? 1 << instance.layer : 0;
+                    serializedAgent.FindProperty("vehicleMask").intValue = vehicleLayer >= 0 ? 1 << proxyCollider.gameObject.layer : 0;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
-
-                    CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
 
                     placed.Add(instance);
                 }

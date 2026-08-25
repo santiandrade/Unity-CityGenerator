@@ -191,9 +191,16 @@
 }
 
 .cg-validation-panel__item {
-    color: var(--cg-danger);
     font-size: 11px;
     white-space: normal;
+}
+
+.cg-validation-panel__item--error {
+    color: var(--cg-danger);
+}
+
+.cg-validation-panel__item--warning {
+    color: var(--cg-warning);
 }
 
 .cg-result-panel {

@@ -5,6 +5,22 @@ namespace CityGenerator.Runtime
 {
     public enum PedestrianNodeKind { Ring, Curb, Crossing, PointOfInterest }
 
+    /// <summary>Serialized so a point of interest (bench/fountain stop) survives the Awake -> Build()
+    /// cycle: nodes.Clear() wipes the runtime graph every Build(), so POIs must be re-added from
+    /// something serialized, not just left in the in-memory node list.</summary>
+    [System.Serializable]
+    public struct PointOfInterestDescriptor
+    {
+        public Vector3 position;
+        public Vector3 lookAt;
+        // Positions of every node this POI was connected to at registration time (usually one Ring
+        // corner, but a plaza centerpiece loop also connects POI-to-POI). Node indices are not
+        // stable across Build() calls (the node list is rebuilt from scratch), so every connection
+        // is re-resolved by exact node position — deterministic, since node geometry only depends
+        // on settings/grid, not on random.
+        public List<Vector3> connectedPositions;
+    }
+
     /// <summary>An undirected node in the pedestrian graph.</summary>
     public struct PedestrianNode
     {
@@ -70,6 +86,11 @@ namespace CityGenerator.Runtime
         [Tooltip("Looked up in the scene if left empty, same fallback CarAgent uses for its own network reference.")]
         [SerializeField] private TrafficNetwork trafficNetwork;
 
+        [Tooltip("This network's PedestrianManager, on the same GameObject. Set by CityGeneratorPedestrianBuilder.AddManagerComponent. PedestrianAgent resolves its manager through this reference instead of a global static Instance, so multiple cities/networks in the same scene never share (or fight over) a single manager.")]
+        [SerializeField] private PedestrianManager manager;
+
+        public PedestrianManager Manager => manager;
+
         [Header("Obstacle pruning")]
         [Tooltip("Layers Physics.CheckSphere treats as obstacles. Set by CityGeneratorPedestrianBuilder to exclude the Pedestrian layer: without that, a pedestrian standing right on its own spawn node gets detected by this very check the moment PedestrianNetwork.Awake() rebuilds the graph in Play, wrongly marking that node (and any neighbour whose only route ran through it) Blocked.")]
         [SerializeField] private LayerMask obstacleMask = ~0;
@@ -83,9 +104,18 @@ namespace CityGenerator.Runtime
         [Header("Debugging")]
         [SerializeField] private bool drawGraph = true;
 
+        [Header("Points of interest")]
+        [Tooltip("Serialized POI registrations (bench/fountain stops), so they survive the Awake -> Build() cycle in Play. Populated by RegisterPointOfInterest, called by CityGeneratorPedestrianBuilder.RegisterPointsOfInterest.")]
+        [SerializeField] private List<PointOfInterestDescriptor> pointsOfInterest = new();
+
         private static readonly Vector3[] Dirs = { Vector3.right, Vector3.left, Vector3.forward, Vector3.back };
 
         private readonly List<PedestrianNode> nodes = new();
+
+        // Node index -> index into pointsOfInterest, for every currently-live PointOfInterest node.
+        // Rebuilt from scratch every Build(); lets ConnectPointOfInterest find which descriptor (if
+        // any) to extend when a new edge touches a POI node.
+        private readonly Dictionary<int, int> poiDescriptorByNodeIndex = new();
 
         // BFS scratch buffers: sized to nodes.Count once per Build()/AddNode() batch, then reused
         // by every FindPath call without allocating — Unity's single-threaded main loop makes one
@@ -141,6 +171,7 @@ namespace CityGenerator.Runtime
         public void Build()
         {
             nodes.Clear();
+            poiDescriptorByNodeIndex.Clear();
 
             if (trafficNetwork == null)
             {
@@ -175,8 +206,47 @@ namespace CityGenerator.Runtime
                 }
             }
 
+            ReinsertPointsOfInterest();
+
             RebuildBfsBuffers();
             PrunePlacedObstacles();
+        }
+
+        /// <summary>
+        /// Re-adds every previously-registered point of interest (bench/fountain stop) from
+        /// <see cref="pointsOfInterest"/>, in two passes: first every POI node is re-created (so
+        /// every position a connection might target — including another POI's — exists), then
+        /// every recorded connection is re-resolved by exact node position and re-applied via
+        /// <see cref="ConnectPointOfInterest"/>, which also re-populates <see cref="pointsOfInterest"/>
+        /// itself for the next Build() call.
+        /// </summary>
+        private void ReinsertPointsOfInterest()
+        {
+            if (pointsOfInterest.Count == 0)
+            {
+                return;
+            }
+
+            List<PointOfInterestDescriptor> descriptors = new(pointsOfInterest);
+            pointsOfInterest.Clear();
+
+            var reinsertedNodeIndex = new int[descriptors.Count];
+            for (int i = 0; i < descriptors.Count; i++)
+            {
+                reinsertedNodeIndex[i] = RegisterPointOfInterest(descriptors[i].position, descriptors[i].lookAt);
+            }
+
+            for (int i = 0; i < descriptors.Count; i++)
+            {
+                foreach (Vector3 connectedPosition in descriptors[i].connectedPositions)
+                {
+                    int targetIndex = FindNearestNodeAnyKind(connectedPosition);
+                    if (targetIndex >= 0)
+                    {
+                        ConnectPointOfInterest(reinsertedNodeIndex[i], targetIndex);
+                    }
+                }
+            }
         }
 
         private Vector3 BlockCentre(int bi, int bj)
@@ -340,6 +410,61 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
+        /// Adds a PointOfInterest node and connects it to zero or more already-existing nodes,
+        /// persisting a <see cref="PointOfInterestDescriptor"/> so it (and its connections) survive
+        /// a future <see cref="Build"/> call (Play mode, or an explicit re-bake). Called by
+        /// <c>CityGeneratorPedestrianBuilder.RegisterPointsOfInterest</c>.
+        /// </summary>
+        public int RegisterPointOfInterest(Vector3 position, Vector3 lookAt, params int[] connectedNodeIndices)
+        {
+            int nodeIndex = AddNode(position, PedestrianNodeKind.PointOfInterest, lookAt);
+            pointsOfInterest.Add(new PointOfInterestDescriptor
+            {
+                position = position,
+                lookAt = lookAt,
+                connectedPositions = new List<Vector3>()
+            });
+            poiDescriptorByNodeIndex[nodeIndex] = pointsOfInterest.Count - 1;
+
+            foreach (int connectedNodeIndex in connectedNodeIndices)
+            {
+                ConnectPointOfInterest(nodeIndex, connectedNodeIndex);
+            }
+
+            return nodeIndex;
+        }
+
+        /// <summary>
+        /// Same as <see cref="Connect"/>, but also extends either endpoint's
+        /// <see cref="PointOfInterestDescriptor"/> (if it is a registered POI) with the other
+        /// endpoint's position, so this edge is replayed by <see cref="ReinsertPointsOfInterest"/>
+        /// on the next Build(). Use this (not plain <see cref="Connect"/>) for any edge touching a
+        /// POI node, including POI-to-POI edges like a plaza centerpiece's loop.
+        /// </summary>
+        public void ConnectPointOfInterest(int a, int b)
+        {
+            Connect(a, b);
+            AppendPoiConnection(a, b);
+            AppendPoiConnection(b, a);
+        }
+
+        private void AppendPoiConnection(int nodeIndex, int otherIndex)
+        {
+            if (!poiDescriptorByNodeIndex.TryGetValue(nodeIndex, out int descriptorIndex))
+            {
+                return;
+            }
+
+            Vector3 otherPosition = nodes[otherIndex].Position;
+            PointOfInterestDescriptor descriptor = pointsOfInterest[descriptorIndex];
+            if (!descriptor.connectedPositions.Contains(otherPosition))
+            {
+                descriptor.connectedPositions.Add(otherPosition);
+            }
+            pointsOfInterest[descriptorIndex] = descriptor;
+        }
+
+        /// <summary>
         /// Marks a node Blocked (or clears it) without touching its edges — used by the generator
         /// to prune nodes that land inside a user prefab's footprint (the obstacles list), the
         /// same "level 1" pruning every other placed category gets, ahead of PrunePlacedObstacles'
@@ -366,6 +491,25 @@ namespace CityGenerator.Runtime
                     continue;
                 }
 
+                float distance = (nodes[i].Position - position).sqrMagnitude;
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = i;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>Closest node of any kind to a world position, used by <see cref="ReinsertPointsOfInterest"/> to re-resolve a persisted connection (which may target a Ring corner or another POI) by exact position instead of index. Returns -1 if the graph is empty.</summary>
+        private int FindNearestNodeAnyKind(Vector3 position)
+        {
+            int best = -1;
+            float bestDistance = float.MaxValue;
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
                 float distance = (nodes[i].Position - position).sqrMagnitude;
                 if (distance < bestDistance)
                 {

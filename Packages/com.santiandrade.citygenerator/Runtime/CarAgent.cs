@@ -59,10 +59,14 @@ namespace CityGenerator.Runtime
         // Own identifier for crossing reservations; 0 means "crossing free".
         private static int nextCarId = 1;
 
-        // Every vehicle prefab carries a single BoxCollider on its root, so looking up the
-        // CarAgent for a sensor hit by GetComponentInParent every frame, for every hit, for every
-        // car is needless hierarchy walking: register/deregister against the collider's instance
-        // ID instead. Reset on domain-reload-disabled Play sessions too (see ResetCarIdCounter).
+        // Every generated vehicle instance carries exactly one collider on its root — either the
+        // prefab's own, or a proxy added by CityGeneratorColliderUtility.EnsureNonTriggerCollider
+        // when the prefab has none there (even if it has one deeper in its hierarchy: a collider
+        // buried in a child would otherwise never be found here, and never match this instance's
+        // own layer either, making the vehicle invisible to every other car's sensor) — so looking
+        // up the CarAgent for a sensor hit by GetComponentInParent every frame, for every hit, for
+        // every car is needless hierarchy walking: register/deregister against the collider's
+        // instance ID instead. Reset on domain-reload-disabled Play sessions too (see ResetCarIdCounter).
         private static readonly Dictionary<EntityId, CarAgent> ColliderRegistry = new();
 
         private Collider ownCollider;
@@ -122,6 +126,26 @@ namespace CityGenerator.Runtime
             ownCollider = GetComponent<Collider>();
             if (ownCollider != null)
                 ColliderRegistry[ownCollider.GetEntityId()] = this;
+
+            if (network == null)
+            {
+                network = FindAnyObjectByType<TrafficNetwork>();
+            }
+
+            // Ticked centrally by TrafficManager rather than through this component's own Update
+            // (see the technical review, A.7). Resolved through the network (set on the same
+            // GameObject as the manager by CityGeneratorTrafficBuilder.AddManagerComponent)
+            // instead of a global static Instance, so multiple cities/networks coexisting in the
+            // same scene never share, or fight over, a single manager. Falls back to
+            // finding/creating one so a CarAgent dropped into a scene outside the generator still
+            // drives. Register is idempotent (TrafficManager.agents is a HashSet), so re-enabling
+            // an already-registered agent here is harmless.
+            trafficManager = network != null && network.Manager != null ? network.Manager : FindAnyObjectByType<TrafficManager>();
+            if (trafficManager == null)
+            {
+                trafficManager = new GameObject("TrafficManager").AddComponent<TrafficManager>();
+            }
+            trafficManager.Register(this);
         }
 
         private void OnDisable()
@@ -157,16 +181,6 @@ namespace CityGenerator.Runtime
                 enabled = false;
                 return;
             }
-
-            // Ticked centrally by TrafficManager rather than through this component's own Update
-            // (see the technical review, A.7). Falls back to finding/creating one so a CarAgent
-            // dropped into a scene outside the generator still drives.
-            trafficManager = TrafficManager.Instance != null ? TrafficManager.Instance : FindAnyObjectByType<TrafficManager>();
-            if (trafficManager == null)
-            {
-                trafficManager = new GameObject("TrafficManager").AddComponent<TrafficManager>();
-            }
-            trafficManager.Register(this);
         }
 
         /// <summary>
@@ -331,7 +345,11 @@ namespace CityGenerator.Runtime
             {
                 // Discarded by identity, never by distance: a zero-distance hit is
                 // the car's own collider, but also the car already bumper-to-bumper ahead, and
-                // filtering by distance made it invisible and drove into it.
+                // filtering by distance made it invisible and drove into it. A hit collider that
+                // isn't in ColliderRegistry at all (rather than resolving to `this`) can no longer
+                // be a car with its collider buried in a child, out of the sensor's layer mask —
+                // CityGeneratorColliderUtility guarantees every generated vehicle has a root-level,
+                // correctly-layered collider; an unregistered hit here is unrelated scene geometry.
                 if (!ColliderRegistry.TryGetValue(hits[i].collider.GetEntityId(), out CarAgent other) || other == this)
                 {
                     continue;

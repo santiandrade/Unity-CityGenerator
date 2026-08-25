@@ -22,21 +22,11 @@ namespace CityGenerator.Runtime
 
         [SerializeField] private int staggerFrames = 4;
 
-        public static TrafficManager Instance { get; private set; }
-
-        private readonly List<CarAgent> agents = new();
+        // HashSet, not List: Register is called from CarAgent.OnEnable (idempotent by nature —
+        // an agent re-enabled without ever being unregistered must not end up ticked twice), and
+        // membership check is what makes Add a no-op on a duplicate call.
+        private readonly HashSet<CarAgent> agents = new();
         private int frameIndex;
-
-        private void Awake()
-        {
-            Instance = this;
-        }
-
-        private void OnDestroy()
-        {
-            if (Instance == this)
-                Instance = null;
-        }
 
         public void Register(CarAgent agent) => agents.Add(agent);
 
@@ -50,9 +40,8 @@ namespace CityGenerator.Runtime
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
             float sqrStaggerDistance = staggerDistance * staggerDistance;
 
-            for (int i = 0; i < agents.Count; i++)
+            foreach (CarAgent agent in agents)
             {
-                CarAgent agent = agents[i];
                 bool runSensor = true;
 
                 if (cam != null)

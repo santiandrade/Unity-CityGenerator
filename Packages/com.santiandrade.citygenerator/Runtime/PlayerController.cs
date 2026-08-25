@@ -8,6 +8,8 @@ namespace CityGenerator.Runtime
     /// with direction relative to the camera (Mario 64 style).
     /// Requires a CharacterController and an Animator with the
     /// Speed (float), Grounded (bool), Jump (trigger) and VerticalSpeed (float) parameters.
+    /// Only reads the Move/Sprint/Jump actions — never calls Enable()/Disable() on the action
+    /// map itself, since <see cref="PlayerInputAuthority"/> is the map's single owner.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(Animator))]
@@ -78,9 +80,11 @@ namespace CityGenerator.Runtime
             }
         }
 
+        // Does not Enable()/Disable() playerMap itself: PlayerInputAuthority is the single owner
+        // of that action map's lifecycle (see the class-level Input remark), so ThirdPersonCamera
+        // keeps receiving Look even if this component alone is disabled, and vice versa.
         private void OnEnable()
         {
-            playerMap?.Enable();
             if (jumpAction != null)
                 jumpAction.performed += OnJumpPerformed;
         }
@@ -89,7 +93,6 @@ namespace CityGenerator.Runtime
         {
             if (jumpAction != null)
                 jumpAction.performed -= OnJumpPerformed;
-            playerMap?.Disable();
         }
 
         private void OnJumpPerformed(InputAction.CallbackContext ctx)

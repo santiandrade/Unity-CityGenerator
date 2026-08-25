@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace CityGenerator.Editor
 {
@@ -9,11 +10,14 @@ namespace CityGenerator.Editor
         /// <summary>Relative path within <see cref="CityGeneratorSettings"/> (e.g. "ground.roadBasePrefab"), matching the paths <c>CityGeneratorWindow.FindProperty</c> resolves. Used by the window to highlight the offending field/card.</summary>
         public readonly string settingsPath;
         public readonly string message;
+        /// <summary>Non-blocking issues still highlight their card/tab and appear in the validation panel, but never disable the Build buttons.</summary>
+        public readonly bool isWarning;
 
-        public CityGeneratorValidationIssue(string settingsPath, string message)
+        public CityGeneratorValidationIssue(string settingsPath, string message, bool isWarning = false)
         {
             this.settingsPath = settingsPath;
             this.message = message;
+            this.isWarning = isWarning;
         }
     }
 
@@ -44,11 +48,35 @@ namespace CityGenerator.Editor
             if (settings.general.playerPrefab != null && settings.general.inputActions == null)
                 issues.Add(new CityGeneratorValidationIssue("general.inputActions", "General: Input Actions asset is required when Player Prefab is set (otherwise the generated camera silently gets no input)."));
 
-            if (settings.general.includeTraffic)
+            for (int i = 0; i < settings.buildingPrefabs.Count; i++)
+            {
+                GameObject buildingPrefab = settings.buildingPrefabs[i];
+                if (buildingPrefab == null)
+                    issues.Add(new CityGeneratorValidationIssue("buildingPrefabs", $"Buildings: entry {i + 1} is empty and will be skipped.", isWarning: true));
+                else if (buildingPrefab.GetComponentInChildren<Renderer>() == null)
+                    issues.Add(new CityGeneratorValidationIssue("buildingPrefabs", $"Buildings: entry {i + 1} ('{buildingPrefab.name}') has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+            }
+
+            if (settings.props.trafficLightPrefab != null && settings.props.trafficLightPrefab.GetComponentInChildren<Renderer>() == null)
+                issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+            if (settings.props.lampPrefab != null && settings.props.lampPrefab.GetComponentInChildren<Renderer>() == null)
+                issues.Add(new CityGeneratorValidationIssue("props.lampPrefab", "Props: Lamp prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+            if (settings.props.binPrefab != null && settings.props.binPrefab.GetComponentInChildren<Renderer>() == null)
+                issues.Add(new CityGeneratorValidationIssue("props.binPrefab", "Props: Bin prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+            for (int i = 0; i < settings.vegetation.prefabs.Count; i++)
+            {
+                if (settings.vegetation.prefabs[i] == null)
+                    issues.Add(new CityGeneratorValidationIssue("vegetation.prefabs", $"Vegetation: entry {i + 1} is empty and will be skipped.", isWarning: true));
+            }
+
+            if (settings.general.inputActions != null)
+                ValidateInputActions(settings, issues);
+
+            if (settings.general.gridWidth > 1 && settings.general.gridHeight > 1)
             {
                 if (settings.props.trafficLightPrefab == null)
                 {
-                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab is required when Include Traffic is enabled."));
+                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab is required when the grid has at least one interior intersection (Grid Width and Grid Height both greater than 1)."));
                 }
                 else if (settings.props.trafficLightPrefab.GetComponent<Runtime.TrafficLight>() == null)
                 {
@@ -59,7 +87,7 @@ namespace CityGenerator.Editor
             if (settings.vegetation.density > 0f && settings.vegetation.prefabs.Count == 0)
                 issues.Add(new CityGeneratorValidationIssue("vegetation.prefabs", "Vegetation: at least one prefab is required when Density > 0."));
 
-            if (settings.general.vehicleCount > 0)
+            if (settings.general.includeTraffic && settings.general.vehicleCount > 0)
             {
                 if (settings.vehicles.Count == 0)
                 {
@@ -73,6 +101,8 @@ namespace CityGenerator.Editor
                         VehicleEntry entry = settings.vehicles[i];
                         if (entry.prefab == null)
                             issues.Add(new CityGeneratorValidationIssue("vehicles", $"Vehicles: entry {i + 1} is missing its prefab."));
+                        else if (entry.prefab.GetComponentInChildren<Renderer>() == null)
+                            issues.Add(new CityGeneratorValidationIssue("vehicles", $"Vehicles: entry {i + 1} ('{entry.prefab.name}') has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
                         percentageSum += entry.percentage;
                     }
 
@@ -81,7 +111,7 @@ namespace CityGenerator.Editor
                 }
             }
 
-            if (settings.general.pedestrianCount > 0)
+            if (settings.general.includePedestrians && settings.general.pedestrianCount > 0)
             {
                 if (settings.pedestrians.Count == 0)
                 {
@@ -95,6 +125,8 @@ namespace CityGenerator.Editor
                         PedestrianEntry entry = settings.pedestrians[i];
                         if (entry.prefab == null)
                             issues.Add(new CityGeneratorValidationIssue("pedestrians", $"Pedestrians: entry {i + 1} is missing its prefab."));
+                        else if (entry.prefab.GetComponentInChildren<Renderer>() == null)
+                            issues.Add(new CityGeneratorValidationIssue("pedestrians", $"Pedestrians: entry {i + 1} ('{entry.prefab.name}') has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
                         percentageSum += entry.percentage;
                     }
 
@@ -105,6 +137,28 @@ namespace CityGenerator.Editor
 
             if (settings.player.walkSpeed > settings.player.runSpeed)
                 issues.Add(new CityGeneratorValidationIssue("player.runSpeed", "Player: Run Speed must be greater than or equal to Walk Speed."));
+            if (settings.player.walkSpeed <= 0f || settings.player.runSpeed <= 0f)
+                issues.Add(new CityGeneratorValidationIssue("player.walkSpeed", "Player: Walk Speed and Run Speed must both be greater than zero (a zero speed divides by zero in the animation blend tree)."));
+            else if (Mathf.Approximately(settings.player.walkSpeed, settings.player.runSpeed))
+                issues.Add(new CityGeneratorValidationIssue("player.walkSpeed", "Player: Walk Speed and Run Speed must be different (equal values collapse the animation blend tree's walk/run range)."));
+
+            if (settings.pedestrianBehaviour.walkReferenceSpeed <= 0f || settings.pedestrianBehaviour.runReferenceSpeed <= 0f)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.walkReferenceSpeed", "Pedestrians: Walk Reference Speed and Run Reference Speed must both be greater than zero (a zero speed divides by zero in the animation blend tree)."));
+            else if (Mathf.Approximately(settings.pedestrianBehaviour.walkReferenceSpeed, settings.pedestrianBehaviour.runReferenceSpeed))
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.walkReferenceSpeed", "Pedestrians: Walk Reference Speed and Run Reference Speed must be different (equal values collapse the animation blend tree's walk/run range)."));
+
+            if (settings.player.controllerHeight <= 0f)
+                issues.Add(new CityGeneratorValidationIssue("player.controllerHeight", "Player: Controller Height must be greater than zero."));
+            if (settings.player.controllerRadius <= 0f)
+                issues.Add(new CityGeneratorValidationIssue("player.controllerRadius", "Player: Controller Radius must be greater than zero."));
+            if (settings.player.controllerStepOffset < 0f)
+                issues.Add(new CityGeneratorValidationIssue("player.controllerStepOffset", "Player: Controller Step Offset must not be negative."));
+            if (settings.player.controllerSkinWidth < 0f)
+                issues.Add(new CityGeneratorValidationIssue("player.controllerSkinWidth", "Player: Controller Skin Width must not be negative."));
+            if (settings.player.controllerStepOffset >= settings.player.controllerHeight)
+                issues.Add(new CityGeneratorValidationIssue("player.controllerStepOffset", "Player: Controller Step Offset must be smaller than Controller Height."));
+            if (settings.player.controllerSkinWidth >= settings.player.controllerRadius)
+                issues.Add(new CityGeneratorValidationIssue("player.controllerSkinWidth", "Player: Controller Skin Width must be smaller than Controller Radius."));
 
             if (settings.camera.minPitch >= settings.camera.maxPitch)
                 issues.Add(new CityGeneratorValidationIssue("camera.maxPitch", "Camera: Max Pitch must be greater than Min Pitch."));
@@ -116,15 +170,68 @@ namespace CityGenerator.Editor
             if (settings.pedestrianBehaviour.poiStopDurationMin > settings.pedestrianBehaviour.poiStopDurationMax)
                 issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMax", "Pedestrians: POI Stop Duration Max must be greater than or equal to POI Stop Duration Min."));
 
-            return issues.Count == 0;
+            if (settings.pedestrianBehaviour.arriveRadius < 0f)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.arriveRadius", "Pedestrians: Arrive Radius must not be negative."));
+            if (settings.pedestrianBehaviour.idleStopDurationMin < 0f)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.idleStopDurationMin", "Pedestrians: Idle Stop Duration Min must not be negative."));
+            if (settings.pedestrianBehaviour.idleStopDurationMax < 0f)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.idleStopDurationMax", "Pedestrians: Idle Stop Duration Max must not be negative."));
+            if (settings.pedestrianBehaviour.poiStopDurationMin < 0f)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMin", "Pedestrians: POI Stop Duration Min must not be negative."));
+            if (settings.pedestrianBehaviour.poiStopDurationMax < 0f)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMax", "Pedestrians: POI Stop Duration Max must not be negative."));
+
+            if (settings.crowd.separationCellSize < 0f)
+                issues.Add(new CityGeneratorValidationIssue("crowd.separationCellSize", "Crowd: Separation Cell Size must not be negative."));
+            if (settings.crowd.separationRadius < 0f)
+                issues.Add(new CityGeneratorValidationIssue("crowd.separationRadius", "Crowd: Separation Radius must not be negative."));
+            if (settings.crowd.playerAvoidanceRadius < 0f)
+                issues.Add(new CityGeneratorValidationIssue("crowd.playerAvoidanceRadius", "Crowd: Player Avoidance Radius must not be negative."));
+            if (settings.crowd.staggerDistance < 0f)
+                issues.Add(new CityGeneratorValidationIssue("crowd.staggerDistance", "Crowd: Stagger Distance must not be negative."));
+
+            return !issues.Exists(issue => !issue.isWarning);
+        }
+
+        /// <summary>Item 10 gap 5: confirms the Move/Sprint/Jump/Look action names configured under Player > Input Actions actually exist in the assigned asset's action map, with the expected control type — a typo here otherwise fails silently at runtime (the action is just never found).</summary>
+        private static void ValidateInputActions(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
+        {
+            InputActionAsset asset = settings.general.inputActions;
+            InputActionMap map = asset.FindActionMap(settings.player.actionMapName);
+            if (map == null)
+            {
+                issues.Add(new CityGeneratorValidationIssue("general.inputActions", $"General: Input Actions asset has no '{settings.player.actionMapName}' action map."));
+                return;
+            }
+
+            ValidateInputAction(map, settings.player.moveActionName, InputActionType.Value, "player.moveActionName", "Move", issues);
+            ValidateInputAction(map, settings.player.sprintActionName, InputActionType.Button, "player.sprintActionName", "Sprint", issues);
+            ValidateInputAction(map, settings.player.jumpActionName, InputActionType.Button, "player.jumpActionName", "Jump", issues);
+            ValidateInputAction(map, settings.player.lookActionName, InputActionType.Value, "player.lookActionName", "Look", issues);
+        }
+
+        private static void ValidateInputAction(InputActionMap map, string actionName, InputActionType expectedType, string settingsPath, string label, List<CityGeneratorValidationIssue> issues)
+        {
+            InputAction action = map.FindAction(actionName);
+            if (action == null)
+            {
+                issues.Add(new CityGeneratorValidationIssue(settingsPath, $"General: {label} action '{actionName}' was not found in the '{map.name}' action map."));
+                return;
+            }
+
+            if (action.type != expectedType)
+                issues.Add(new CityGeneratorValidationIssue(settingsPath, $"General: {label} action '{actionName}' is a {action.type} action, expected {expectedType}."));
         }
 
         public static bool Validate(CityGeneratorSettings settings, out List<string> errors)
         {
             bool valid = ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
-            errors = new List<string>(issues.Count);
+            errors = new List<string>();
             foreach (CityGeneratorValidationIssue issue in issues)
-                errors.Add(issue.message);
+            {
+                if (!issue.isWarning)
+                    errors.Add(issue.message);
+            }
             return valid;
         }
     }

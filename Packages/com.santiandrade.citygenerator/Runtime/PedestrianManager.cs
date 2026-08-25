@@ -38,8 +38,6 @@ namespace CityGenerator.Runtime
 
         [SerializeField] private float playerAvoidanceStrength = 6f;
 
-        public static PedestrianManager Instance { get; private set; }
-
         private readonly List<PedestrianAgent> agents = new();
         private readonly Dictionary<Vector2Int, List<PedestrianAgent>> grid = new();
         private int frameIndex;
@@ -49,18 +47,16 @@ namespace CityGenerator.Runtime
         // would find nothing. Cached once found since it never changes afterwards.
         private Transform playerTransform;
 
-        private void Awake()
+        // Contains-guarded rather than an unconditional Add: Register is called from
+        // PedestrianAgent.OnEnable, so a re-enabled agent that was never Unregister-ed (SetActive
+        // toggled without ever going through OnDisable in between isn't possible, but a defensive
+        // guard here costs nothing and keeps the same idempotence guarantee TrafficManager's
+        // HashSet gives CarAgent) must not end up ticked twice in the same frame.
+        public void Register(PedestrianAgent agent)
         {
-            Instance = this;
+            if (!agents.Contains(agent))
+                agents.Add(agent);
         }
-
-        private void OnDestroy()
-        {
-            if (Instance == this)
-                Instance = null;
-        }
-
-        public void Register(PedestrianAgent agent) => agents.Add(agent);
 
         public void Unregister(PedestrianAgent agent) => agents.Remove(agent);
 

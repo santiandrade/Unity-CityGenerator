@@ -27,7 +27,10 @@ namespace CityGenerator.Editor
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
         private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Light, camera and player are left untouched.";
 
-        [SerializeField] private CityGeneratorSettings settings = new();
+        // internal, not private: CityGeneratorSetDefaultsWindow (Assets/Editor/, outside the
+        // package, in Assembly-CSharp-Editor) reads this to implement "Set Current Selection As
+        // Default" — see Editor/AssemblyInfo.cs's InternalsVisibleTo.
+        [SerializeField] internal CityGeneratorSettings settings = new();
         [SerializeField] private bool defaultsInitialized;
 
         private SerializedObject serializedWindow;
@@ -89,38 +92,6 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
-        /// Captures whatever is currently assigned in the open window and writes it back as the
-        /// tool's new default (source files under the package's own Editor/ folder), so the next
-        /// window and "Reset to Defaults" both open with it. Requires an already-open window
-        /// rather than opening one itself: creating a fresh one just to save its empty/default
-        /// state as the new default would be self-defeating.
-        /// </summary>
-        [MenuItem("Tools/City Generator/Set Current Selection As Default")]
-        private static void SetCurrentSelectionAsDefaultMenuItem()
-        {
-            CityGeneratorWindow window = FindOpenWindow();
-            if (window == null)
-            {
-                EditorUtility.DisplayDialog(
-                    "City Generator",
-                    "Open the City Generator window first (Tools > City Generator > Open) so there is a current selection to save.",
-                    "OK");
-                return;
-            }
-
-            bool confirmed = EditorUtility.DisplayDialog(
-                "City Generator - Set Current Selection As Default",
-                "This overwrites the tool's default settings (prefabs, counts, densities...) with what is currently assigned in the open City Generator window, by editing the package's own source files. This cannot be undone with Ctrl+Z.",
-                "Save as Default",
-                "Cancel");
-            if (!confirmed)
-                return;
-
-            CityGeneratorDefaultAssetsWriter.SaveCurrentAsDefault(window.settings);
-            EditorUtility.DisplayDialog("City Generator", "Current selection saved as the new default.", "OK");
-        }
-
-        /// <summary>
         /// Recalculates the pedestrian graph against the scene as it currently stands, without
         /// regenerating the city — the explicit re-bake (level 3 of the pruning described in the
         /// spec), useful after hand-editing/moving a building. Equivalent to the component's own
@@ -142,12 +113,6 @@ namespace CityGenerator.Editor
 
             network.Build();
             Debug.Log("[City Generator] Pedestrian network rebuilt.");
-        }
-
-        private static CityGeneratorWindow FindOpenWindow()
-        {
-            CityGeneratorWindow[] windows = Resources.FindObjectsOfTypeAll<CityGeneratorWindow>();
-            return windows.Length > 0 ? windows[0] : null;
         }
 
         // Runs once per window instance (not on every domain reload's OnEnable, since
@@ -628,6 +593,7 @@ namespace CityGenerator.Editor
             {
                 var label = new Label(issue.message);
                 label.AddToClassList("cg-validation-panel__item");
+                label.AddToClassList(issue.isWarning ? "cg-validation-panel__item--warning" : "cg-validation-panel__item--error");
                 validationPanel.Add(label);
 
                 // Exact-path aliases (e.g. general.playerPrefab -> the Player card) take priority
@@ -662,10 +628,16 @@ namespace CityGenerator.Editor
             tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
             tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
 
-            bool valid = issues.Count == 0;
+            int blockingCount = 0;
+            foreach (CityGeneratorValidationIssue issue in issues)
+            {
+                if (!issue.isWarning)
+                    blockingCount++;
+            }
+            bool valid = blockingCount == 0;
             buildNewSceneButton.SetEnabled(valid);
             rebuildCurrentSceneButton.SetEnabled(valid);
-            string problemSuffix = valid ? string.Empty : $" Disabled: {issues.Count} problem(s) to fix — see below.";
+            string problemSuffix = valid ? string.Empty : $" Disabled: {blockingCount} problem(s) to fix — see below.";
             buildNewSceneButton.tooltip = BuildNewSceneButtonTooltip + problemSuffix;
             rebuildCurrentSceneButton.tooltip = RebuildCurrentSceneButtonTooltip + problemSuffix;
         }
@@ -807,7 +779,7 @@ namespace CityGenerator.Editor
 
             bool confirmed = EditorUtility.DisplayDialog(
                 "City Generator - Re-Build City",
-                "This will delete the \"City\" object in the current scene and regenerate it with the current configuration. The light, volume, camera and player are left untouched.",
+                "This will regenerate the city in the current scene with the current configuration. The light, volume, camera and player are left untouched. If generation fails partway through, the existing city is left intact.",
                 "Confirm",
                 "Cancel");
             if (!confirmed)
@@ -823,7 +795,7 @@ namespace CityGenerator.Editor
             catch (System.Exception exception)
             {
                 Debug.LogError("[City Generator] Generation failed: " + exception);
-                ShowResult(null, default, success: false, exception.Message);
+                ShowResult(null, default, success: false, exception.Message + " The previous city has not been lost — it is still in the scene.");
             }
             finally
             {
