@@ -90,6 +90,30 @@ namespace CityGenerator.Runtime
             hasAnimatorController = animator.runtimeAnimatorController != null;
         }
 
+        private void OnEnable()
+        {
+            if (network == null)
+            {
+                network = FindAnyObjectByType<PedestrianNetwork>();
+            }
+
+            // Ticked centrally by PedestrianManager rather than through this component's own
+            // Update, same convention as CarAgent/TrafficManager. Resolved through the network
+            // (set on the same GameObject as the manager by
+            // CityGeneratorPedestrianBuilder.AddManagerComponent) instead of a global static
+            // Instance, so multiple cities/networks coexisting in the same scene never share, or
+            // fight over, a single manager. Falls back to finding/creating one so a
+            // PedestrianAgent dropped into a scene outside the generator still walks. Register is
+            // idempotent (contains-checked), so re-enabling an already-registered agent here is
+            // harmless.
+            manager = network != null && network.Manager != null ? network.Manager : FindAnyObjectByType<PedestrianManager>();
+            if (manager == null)
+            {
+                manager = new GameObject("PedestrianManager").AddComponent<PedestrianManager>();
+            }
+            manager.Register(this);
+        }
+
         private void Start()
         {
             if (network == null)
@@ -123,16 +147,6 @@ namespace CityGenerator.Runtime
             }
 
             PlanNewDestination();
-
-            // Ticked centrally by PedestrianManager rather than through this component's own
-            // Update, same convention as CarAgent/TrafficManager. Falls back to finding/creating
-            // one so a PedestrianAgent dropped into a scene outside the generator still walks.
-            manager = PedestrianManager.Instance != null ? PedestrianManager.Instance : FindAnyObjectByType<PedestrianManager>();
-            if (manager == null)
-            {
-                manager = new GameObject("PedestrianManager").AddComponent<PedestrianManager>();
-            }
-            manager.Register(this);
         }
 
         private void OnDisable()

@@ -53,8 +53,12 @@ namespace CityGenerator.Editor
             return axes;
         }
 
-        /// <summary>Adds the PedestrianManager that ticks every generated PedestrianAgent from one central Update, configured from <paramref name="settings"/>. Only called when pedestrians are actually generated.</summary>
-        public static void AddManagerComponent(Transform pedestrianNetworkGroup, CrowdSettings settings)
+        /// <summary>Adds the PedestrianManager that ticks every generated PedestrianAgent from one
+        /// central Update, configured from <paramref name="settings"/>, and wires it into
+        /// <paramref name="network"/> (same GameObject) so PedestrianAgent can resolve it via
+        /// <see cref="PedestrianNetwork.Manager"/> instead of a global static Instance. Only called
+        /// when pedestrians are actually generated.</summary>
+        public static void AddManagerComponent(Transform pedestrianNetworkGroup, PedestrianNetwork network, CrowdSettings settings)
         {
             PedestrianManager manager = pedestrianNetworkGroup.gameObject.AddComponent<PedestrianManager>();
 
@@ -68,6 +72,10 @@ namespace CityGenerator.Editor
             serialized.FindProperty("playerAvoidanceRadius").floatValue = settings.playerAvoidanceRadius;
             serialized.FindProperty("playerAvoidanceStrength").floatValue = settings.playerAvoidanceStrength;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            var networkSerialized = new SerializedObject(network);
+            networkSerialized.FindProperty("manager").objectReferenceValue = manager;
+            networkSerialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>
@@ -150,9 +158,6 @@ namespace CityGenerator.Editor
                             instance.transform.rotation = Quaternion.LookRotation(facing.normalized, Vector3.up);
                     }
 
-                    if (pedestrianLayer >= 0)
-                        instance.layer = pedestrianLayer;
-
                     PedestrianAgent agent = instance.GetComponent<PedestrianAgent>();
                     if (agent == null)
                         agent = instance.AddComponent<PedestrianAgent>();
@@ -178,7 +183,12 @@ namespace CityGenerator.Editor
                     if (animator != null)
                         animator.cullingMode = AnimatorCullingMode.CullCompletely;
 
-                    CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
+                    // The Pedestrian layer is assigned only to the sensor proxy collider's own
+                    // GameObject (the instance root, never the user prefab's own colliders,
+                    // wherever they sit in the hierarchy) — see CityGeneratorColliderUtility.
+                    Collider proxyCollider = CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
+                    if (pedestrianLayer >= 0)
+                        proxyCollider.gameObject.layer = pedestrianLayer;
 
                     placed.Add(instance);
                 }
@@ -236,12 +246,10 @@ namespace CityGenerator.Editor
                         Vector2 offset = BenchOffsets[i];
                         Vector3 benchPos = block.center + new Vector3(offset.x, CityGeneratorConstants.GroundDatumY, offset.y);
 
-                        int poi = network.AddNode(benchPos, PedestrianNodeKind.PointOfInterest, block.center);
                         int corner = network.FindNearestNode(benchPos, PedestrianNodeKind.Ring);
-                        if (corner >= 0)
-                            network.Connect(poi, corner);
-
-                        benchNodes[i] = poi;
+                        benchNodes[i] = corner >= 0
+                            ? network.RegisterPointOfInterest(benchPos, block.center, corner)
+                            : network.RegisterPointOfInterest(benchPos, block.center);
                     }
                 }
 
@@ -252,16 +260,16 @@ namespace CityGenerator.Editor
                     {
                         Vector2 offset = CenterpieceRingOffsets[i];
                         Vector3 pos = block.center + new Vector3(offset.x, CityGeneratorConstants.GroundDatumY, offset.y);
-                        ringNodes[i] = network.AddNode(pos, PedestrianNodeKind.PointOfInterest, block.center);
+                        ringNodes[i] = network.RegisterPointOfInterest(pos, block.center);
                     }
 
                     for (int i = 0; i < ringNodes.Length; i++)
-                        network.Connect(ringNodes[i], ringNodes[(i + 1) % ringNodes.Length]);
+                        network.ConnectPointOfInterest(ringNodes[i], ringNodes[(i + 1) % ringNodes.Length]);
 
                     if (benchNodes != null)
                     {
                         for (int i = 0; i < ringNodes.Length; i++)
-                            network.Connect(ringNodes[i], benchNodes[i]);
+                            network.ConnectPointOfInterest(ringNodes[i], benchNodes[i]);
                     }
                 }
             }

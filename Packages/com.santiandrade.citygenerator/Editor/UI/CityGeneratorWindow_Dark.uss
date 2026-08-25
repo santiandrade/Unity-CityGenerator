@@ -11,5 +11,6 @@
     --cg-accent-text: #ffffff;
     --cg-danger: #e05252;
     --cg-danger-bg: rgba(224, 82, 82, 0.12);
+    --cg-warning: #d9a441;
     --cg-success: #6abf69;
 }

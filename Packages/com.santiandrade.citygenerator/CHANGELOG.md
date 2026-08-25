@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-25
+
+### Changed
+
+- **Breaking:** removed `PerformanceBootstrap` (the `[RuntimeInitializeOnLoadMethod]` that forced
+  `vSyncCount = 0`/`targetFrameRate = 60` on any scene in a project consuming this package). No
+  opt-in replacement is provided; a consuming project that relied on this implicit behaviour
+  should set its own frame rate/VSync preference.
+- "Re-Build City in Current Scene" is now transactional: the new city is built under a temporary
+  root and only replaces the previous one (found via the new `CityGeneratorRoot` marker, not by
+  GameObject name) once generation finishes without error, undoable in a single Ctrl+Z. If
+  generation fails partway through, the previous city is left completely intact and the error is
+  shown in the window's result panel.
+- The generated sensor collider on vehicle/pedestrian instances (`CityGeneratorColliderUtility`)
+  is now always added to the instance root (reusing one already there) instead of leaving a
+  user prefab's collider wherever it happens to sit in the hierarchy — a collider only present on
+  a child was previously invisible to `CarAgent`'s/other agents' layer-filtered sensors.
+- `TrafficManager`/`PedestrianManager` are no longer scene-global singletons (`Instance` removed):
+  `CarAgent`/`PedestrianAgent` resolve their manager through `TrafficNetwork.Manager`/
+  `PedestrianNetwork.Manager` instead, so multiple generated cities coexisting in the same scene
+  no longer fight over a single manager.
+- Player input is now owned by a single new `PlayerInputAuthority` component (added to the
+  generated Player instance alongside `PlayerController`); `PlayerController` and
+  `ThirdPersonCamera` no longer each call `Enable()`/`Disable()` on the shared action map.
+  `ThirdPersonCamera` now also restores cursor lock state/visibility in `OnDisable`.
+- Validation (`CityGeneratorValidator`) now catches several previously-silent misconfigurations
+  (zero/equal walk-run speeds, negative radii/durations, a typo'd input action name, an
+  inconsistent `CharacterController` tuning, `Include Traffic` no longer gates the Traffic Light
+  requirement — grid geometry does) and warns (without blocking generation) about empty prefab
+  list entries and prefabs with no `Renderer` in their hierarchy.
+- A plaza's `PointOfInterest` nodes (bench/fountain stops) now survive the Awake -> Build() cycle
+  in Play and an explicit `Tools > City Generator > Rebuild Pedestrian Network` re-bake, instead of
+  disappearing the moment the pedestrian network graph rebuilds.
+- `Tools > City Generator > Set Current Selection As Default` moved from the package's
+  `CityGeneratorWindow` to this repo's own `Assets/Editor/CityGeneratorSetDefaultsWindow.cs` —
+  dev-repo-only tooling that has nothing to do once the package is installed elsewhere.
+
 ## [1.6.0] - 2026-08-25
 
 ### Added

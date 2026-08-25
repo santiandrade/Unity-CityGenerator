@@ -57,10 +57,15 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
-        /// Deletes the "City" root object in the currently active scene (if any) and regenerates
-        /// it from <paramref name="settings"/>. Everything else in the scene (light, volume,
-        /// camera, player) is left untouched. Does not save the scene: the caller leaves that to
-        /// the usual Editor "unsaved changes" flow.
+        /// Regenerates the city in the currently active scene from <paramref name="settings"/>,
+        /// transactionally: the new city is built under a temporary root first, and the previous
+        /// one (found by <see cref="CityGeneratorRoot"/>, not by name) is only destroyed once
+        /// generation finishes without throwing. If <see cref="CityGeneratorContentAssembler.Assemble"/>
+        /// throws, the failed temporary root is destroyed, the previous city is left completely
+        /// intact, and the exception is rethrown for the caller (<c>CityGeneratorWindow</c>) to
+        /// report. Everything else in the scene (light, volume, camera, player) is left untouched.
+        /// Does not save the scene: the caller leaves that to the usual Editor "unsaved changes"
+        /// flow.
         /// </summary>
         public static CityBuildSummary RebuildInActiveScene(CityGeneratorSettings settings)
         {
@@ -72,18 +77,39 @@ namespace CityGenerator.Editor
         {
             Scene scene = EditorSceneManager.GetActiveScene();
 
+            var cityRootGO = new GameObject("City (generating)");
+            SceneManager.MoveGameObjectToScene(cityRootGO, scene);
+
+            CityBuildSummary summary;
+            try
+            {
+                summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform, onProgress);
+            }
+            catch
+            {
+                Object.DestroyImmediate(cityRootGO);
+                throw;
+            }
+
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Rebuild City");
+
             foreach (GameObject root in scene.GetRootGameObjects())
             {
-                if (root.name == "City")
+                if (root == cityRootGO)
+                    continue;
+                if (root.GetComponent<CityGeneratorRoot>() != null)
                 {
-                    Object.DestroyImmediate(root);
+                    Undo.DestroyObjectImmediate(root);
                     break;
                 }
             }
 
-            var cityRootGO = new GameObject("City");
-            SceneManager.MoveGameObjectToScene(cityRootGO, scene);
-            CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform, onProgress);
+            Undo.RegisterCreatedObjectUndo(cityRootGO, "Rebuild City");
+            Undo.RecordObject(cityRootGO, "Rebuild City");
+            cityRootGO.name = "City";
+
+            Undo.CollapseUndoOperations(undoGroup);
 
             EditorSceneManager.MarkSceneDirty(scene);
             return summary;
@@ -121,6 +147,14 @@ namespace CityGenerator.Editor
             var playerController = player.GetComponent<PlayerController>();
             if (playerController == null)
                 playerController = player.AddComponent<PlayerController>();
+
+            var inputAuthority = player.GetComponent<PlayerInputAuthority>();
+            if (inputAuthority == null)
+                inputAuthority = player.AddComponent<PlayerInputAuthority>();
+            var authoritySerialized = new SerializedObject(inputAuthority);
+            authoritySerialized.FindProperty("inputActions").objectReferenceValue = inputActions;
+            authoritySerialized.FindProperty("actionMapName").stringValue = settings.actionMapName;
+            authoritySerialized.ApplyModifiedPropertiesWithoutUndo();
 
             var serialized = new SerializedObject(playerController);
             serialized.FindProperty("inputActions").objectReferenceValue = inputActions;

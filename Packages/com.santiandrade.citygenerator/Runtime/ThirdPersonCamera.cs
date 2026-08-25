@@ -6,6 +6,8 @@ namespace CityGenerator.Runtime
     /// <summary>
     /// Mario-64-style third-person orbit camera: orbits around a
     /// pivot point above the target, with smoothing and collision against the environment.
+    /// Only reads the Look action — never calls Enable()/Disable() on the action map itself,
+    /// since <see cref="PlayerInputAuthority"/> is the map's single owner.
     /// </summary>
     public class ThirdPersonCamera : MonoBehaviour
     {
@@ -73,9 +75,11 @@ namespace CityGenerator.Runtime
             }
         }
 
+        // Does not Enable()/Disable() playerMap itself: PlayerInputAuthority is the single owner
+        // of that action map's lifecycle, so PlayerController keeps receiving Move/Sprint/Jump
+        // even if this component alone is disabled, and vice versa.
         private void OnEnable()
         {
-            playerMap?.Enable();
             if (lockCursor)
             {
                 Cursor.lockState = CursorLockMode.Locked;
@@ -83,9 +87,15 @@ namespace CityGenerator.Runtime
             }
         }
 
+        // Previously absent: leaving Play (or disabling this component by hand) left the cursor
+        // locked/hidden, stranding it over whatever UI or other window regained focus next.
         private void OnDisable()
         {
-            playerMap?.Disable();
+            if (lockCursor)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
         }
 
         private void LateUpdate()

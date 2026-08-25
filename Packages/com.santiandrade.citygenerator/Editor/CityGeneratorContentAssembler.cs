@@ -59,6 +59,11 @@ namespace CityGenerator.Editor
         {
             void Report(string phase, float fraction) => onProgress?.Invoke(phase, fraction);
 
+            // Added first, before any builder runs, so a temporary root left behind by a failed
+            // rebuild (see CityGeneratorSceneBuilder.RebuildInActiveScene) is still identifiable.
+            if (cityRoot.GetComponent<CityGeneratorRoot>() == null)
+                cityRoot.gameObject.AddComponent<CityGeneratorRoot>();
+
             var random = settings.general.useCustomSeed
                 ? new System.Random(settings.general.seed)
                 : new System.Random();
@@ -132,7 +137,7 @@ namespace CityGenerator.Editor
             if (settings.general.includeTraffic)
             {
                 Report("Vehicles", 0.7f);
-                CityGeneratorTrafficBuilder.AddManagerComponent(trafficNetworkGroup);
+                CityGeneratorTrafficBuilder.AddManagerComponent(trafficNetworkGroup, network);
                 vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random);
                 // Independent of includePedestrians: the player (placed by CityGeneratorSceneBuilder
                 // on the same layer) needs vehicles to detect it too.
@@ -151,7 +156,7 @@ namespace CityGenerator.Editor
             if (settings.general.includePedestrians)
             {
                 Report("Pedestrians", 0.88f);
-                CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup, settings.crowd);
+                CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup, pedestrianNetwork, settings.crowd);
                 pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random, settings.pedestrianBehaviour);
             }
 

@@ -58,6 +58,12 @@ namespace CityGenerator.Runtime
         [Tooltip("Penalizes exits that keep the vehicle circling the perimeter streets.")]
         [SerializeField] private float borderPenalty = 0.35f;
 
+        [Header("References")]
+        [Tooltip("This network's TrafficManager, on the same GameObject. Set by CityGeneratorTrafficBuilder.AddManagerComponent. CarAgent resolves its manager through this reference instead of a global static Instance, so multiple cities/networks in the same scene never share (or fight over) a single manager.")]
+        [SerializeField] private TrafficManager manager;
+
+        public TrafficManager Manager => manager;
+
         [Tooltip("Time after which an unsignalled crossing's priority is released if its owner hasn't passed.")]
         [SerializeField] private float reservationTimeout = 4f;
 
