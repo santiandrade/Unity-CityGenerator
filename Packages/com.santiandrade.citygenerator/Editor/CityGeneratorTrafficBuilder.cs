@@ -45,9 +45,11 @@ namespace CityGenerator.Editor
         public static void AddManagerComponent(Transform trafficNetworkGroup, TrafficNetwork network)
         {
             var manager = trafficNetworkGroup.gameObject.AddComponent<TrafficManager>();
+            var laneOccupancy = trafficNetworkGroup.gameObject.AddComponent<TrafficLaneOccupancy>();
 
             var serialized = new SerializedObject(network);
             serialized.FindProperty("manager").objectReferenceValue = manager;
+            serialized.FindProperty("laneOccupancy").objectReferenceValue = laneOccupancy;
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 

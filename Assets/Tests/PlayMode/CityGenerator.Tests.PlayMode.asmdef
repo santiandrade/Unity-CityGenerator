@@ -1,0 +1,24 @@
+{
+    "name": "CityGenerator.Tests.PlayMode",
+    "rootNamespace": "CityGenerator.Tests.PlayMode",
+    "references": [
+        "CityGenerator.Runtime",
+        "CityGenerator.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

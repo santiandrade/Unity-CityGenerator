@@ -31,6 +31,12 @@ namespace CityGenerator.Editor
         private readonly Dictionary<GameObject, Rect> rects = new();
         private readonly Dictionary<GameObject, GameObject> availableProbes = new();
 
+        // Auxiliary index over the obstacles list threaded through a whole generation run (item
+        // 7): never the source of truth, just a derived structure kept in sync with it via
+        // SyncSpatialHash, so it can never disagree with what the list itself contains.
+        private readonly CityGeneratorSpatialHash spatialHash = new(CityGeneratorConstants.BlockSize);
+        private int indexedObstacleCount;
+
         public Rect GetRect(GameObject instance)
         {
             if (rects.TryGetValue(instance, out Rect cached))
@@ -41,6 +47,25 @@ namespace CityGenerator.Editor
             rects[instance] = rect;
             return rect;
         }
+
+        /// <summary>
+        /// Inserts every obstacle appended to <paramref name="obstacles"/> since the last call into
+        /// the spatial hash. Cheap to call before every overlap check: since obstacles are only
+        /// ever appended (never removed/reordered) across a whole generation run, this only ever
+        /// does work for the entries actually added since the last sync.
+        /// </summary>
+        public void SyncSpatialHash(List<GameObject> obstacles)
+        {
+            for (int i = indexedObstacleCount; i < obstacles.Count; i++)
+            {
+                GameObject obstacle = obstacles[i];
+                if (obstacle != null)
+                    spatialHash.Insert(GetRect(obstacle));
+            }
+            indexedObstacleCount = obstacles.Count;
+        }
+
+        public bool SpatialHashOverlaps(Rect candidate) => spatialHash.Overlaps(candidate);
 
         public GameObject BorrowProbe(GameObject prefab, Transform parent, PlacementCandidate candidate)
         {
@@ -133,18 +158,13 @@ namespace CityGenerator.Editor
 
         private static bool OverlapsAny(GameObject instance, List<GameObject> others, ObstacleCache cache)
         {
+            // `instance` (the probe being tested) is never itself a member of `others`: it's only
+            // ever appended to the shared obstacles list *after* being accepted, at which point the
+            // next candidate borrows a fresh probe instead of reusing this one -- so, unlike the
+            // pre-item-7 linear scan, no self-exclusion check is needed here.
+            cache.SyncSpatialHash(others);
             Rect rectA = cache.GetRect(instance);
-
-            foreach (GameObject other in others)
-            {
-                if (other == instance)
-                    continue;
-
-                if (rectA.Overlaps(cache.GetRect(other)))
-                    return true;
-            }
-
-            return false;
+            return cache.SpatialHashOverlaps(rectA);
         }
     }
 }

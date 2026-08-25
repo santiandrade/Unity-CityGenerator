@@ -1,0 +1,26 @@
+{
+    "name": "CityGenerator.Tests.EditMode",
+    "rootNamespace": "CityGenerator.Tests.EditMode",
+    "references": [
+        "CityGenerator.Runtime",
+        "CityGenerator.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -55,6 +55,12 @@ namespace CityGenerator.Runtime
 
         private readonly RaycastHit[] hits = new RaycastHit[16];
         private readonly RaycastHit[] pedestrianHits = new RaycastHit[16];
+        // Resolved lazily on first use (not OnEnable): a generated vehicle's OnEnable fires during
+        // generation itself, before CityGeneratorPedestrianBuilder has created this GameObject --
+        // vehicles are built first. By the time Play actually starts and the sensor first runs, the
+        // full scene (including this) exists.
+        private PedestrianRoadProximityGrid pedestrianRoadProximity;
+        private readonly List<PedestrianAgent> pedestrianQueryResults = new();
 
         // Own identifier for crossing reservations; 0 means "crossing free".
         private static int nextCarId = 1;
@@ -72,6 +78,10 @@ namespace CityGenerator.Runtime
         private Collider ownCollider;
         private TrafficManager trafficManager;
         private int targetNode = -1;
+        // Node the vehicle most recently departed from -- together with targetNode, identifies the
+        // directed lane segment it currently occupies in TrafficNetwork.LaneOccupancy. -1 before
+        // the first segment is known (nothing to report as "departed from" yet).
+        private int fromNode = -1;
         private int reservedIntersection = -1;
         private int carId;
         private float speed;
@@ -157,6 +167,8 @@ namespace CityGenerator.Runtime
                 trafficManager.Unregister(this);
                 trafficManager = null;
             }
+            if (network != null && network.LaneOccupancy != null && targetNode >= 0)
+                network.LaneOccupancy.Leave(this, fromNode, targetNode);
         }
 
         private void Start()
@@ -181,6 +193,8 @@ namespace CityGenerator.Runtime
                 enabled = false;
                 return;
             }
+
+            network.LaneOccupancy?.Enter(this, fromNode, targetNode);
         }
 
         /// <summary>
@@ -328,9 +342,24 @@ namespace CityGenerator.Runtime
             return mustStop ? toStopLine : float.MaxValue;
         }
 
-        /// <summary>Clear distance to the car ahead, minus the minimum gap.</summary>
+        /// <summary>
+        /// Clear distance to the car ahead, minus the minimum gap. Tries
+        /// <see cref="TrafficNetwork.LaneOccupancy"/> first for the common "another car ahead on
+        /// this same lane segment" case (item 8, stage 3) -- cheap, no physics query -- and only
+        /// falls back to the SphereCast sensor below when it has no answer (empty/absent segment,
+        /// a car about to turn, or genuine cross-traffic at a crossing, none of which the index
+        /// attempts to resolve). The two opposing-traffic deadlock rules below only ever fire from
+        /// the SphereCast path: cars sharing one directed lane segment share the same heading by
+        /// construction, so they can never be "head-on" to each other.
+        /// </summary>
         private float VehicleAheadClearance()
         {
+            if (network.LaneOccupancy != null && network.LaneOccupancy.TryGetCarAhead(this, fromNode, targetNode, out CarAgent laneAhead))
+            {
+                float laneDistance = Vector3.Distance(transform.position, laneAhead.transform.position);
+                return laneDistance <= 0.001f ? 0f : laneDistance - minGap;
+            }
+
             Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
             int count = Physics.SphereCastNonAlloc(origin, sensorRadius, transform.forward, hits,
                 sensorRange, vehicleMask, QueryTriggerInteraction.Ignore);
@@ -386,6 +415,16 @@ namespace CityGenerator.Runtime
         /// </summary>
         private float PedestrianAheadClearance()
         {
+            if (pedestrianRoadProximity == null)
+                pedestrianRoadProximity = FindAnyObjectByType<PedestrianRoadProximityGrid>();
+
+            // Item 8, stage 4: once the pedestrian count justifies it, query the shared proximity
+            // grid instead of casting -- falls back to the SphereCast below whenever the grid
+            // doesn't exist (no PedestrianManager in the scene, e.g. Include Pedestrians off) or
+            // hasn't reported enough agents yet.
+            if (pedestrianRoadProximity != null && pedestrianRoadProximity.HasEnoughAgents)
+                return PedestrianAheadClearanceFromGrid();
+
             Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
             int count = Physics.SphereCastNonAlloc(origin, sensorRadius, transform.forward, pedestrianHits,
                 sensorRange, pedestrianMask, QueryTriggerInteraction.Collide);
@@ -399,6 +438,31 @@ namespace CityGenerator.Runtime
             for (int i = 0; i < count; i++)
             {
                 float gap = pedestrianHits[i].distance <= 0.001f ? 0f : pedestrianHits[i].distance - minGap;
+                clearance = Mathf.Min(clearance, gap);
+            }
+
+            return clearance;
+        }
+
+        /// <summary>
+        /// Same intent as the SphereCast fallback above, answered from
+        /// <see cref="PedestrianRoadProximityGrid"/> instead: only pedestrians roughly ahead (a
+        /// forward-dot check, mirroring the cast's cone) within sensorRange count.
+        /// </summary>
+        private float PedestrianAheadClearanceFromGrid()
+        {
+            Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
+            pedestrianRoadProximity.QueryNear(origin, sensorRange, pedestrianQueryResults);
+
+            float clearance = float.MaxValue;
+            for (int i = 0; i < pedestrianQueryResults.Count; i++)
+            {
+                Vector3 toPedestrian = pedestrianQueryResults[i].transform.position - origin;
+                float distance = toPedestrian.magnitude;
+                if (distance > 0.001f && Vector3.Dot(toPedestrian / distance, transform.forward) < 0.5f)
+                    continue;
+
+                float gap = distance <= 0.001f ? 0f : distance - minGap;
                 clearance = Mathf.Min(clearance, gap);
             }
 
@@ -472,7 +536,10 @@ namespace CityGenerator.Runtime
 
             if (next >= 0)
             {
+                network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+                fromNode = targetNode;
                 targetNode = next;
+                network.LaneOccupancy?.Enter(this, fromNode, targetNode);
             }
         }
 

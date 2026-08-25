@@ -34,6 +34,9 @@ namespace CityGenerator.Runtime
 
         private void Update()
         {
+            if (agents.Count == 0)
+                return;
+
             float dt = Time.deltaTime;
             bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
             Camera cam = staggeringActive ? Camera.main : null;
@@ -53,6 +56,18 @@ namespace CityGenerator.Runtime
 
                 agent.Tick(dt, runSensor);
             }
+
+            // CarAgent moves every car by writing transform.position directly (no Rigidbody), and
+            // its forward sensor queries the physics scene in the same frame. With
+            // DynamicsManager.m_AutoSyncTransforms off (the project default), the physics scene
+            // only sees those moves at the next FixedUpdate, so at 60+ FPS the sensor reads
+            // positions up to one frame stale — enough error for cars to miss each other on
+            // corners. One sync here, after every CarAgent has ticked, is cheaper than turning
+            // auto-sync back on (which would sync on every single query instead of once per
+            // frame). Only called when there's at least one agent (the early return above), and
+            // moved here from TrafficNetwork.LateUpdate so a scene with a TrafficNetwork but zero
+            // registered CarAgents never pays for it at all.
+            Physics.SyncTransforms();
 
             frameIndex++;
         }

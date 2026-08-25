@@ -7,3 +7,12 @@ using System.Runtime.CompilerServices;
 // internal/private exactly as before: this is the one visibility change needed for the moved
 // "Set Current Selection As Default" command to keep working.
 [assembly: InternalsVisibleTo("Assembly-CSharp-Editor")]
+
+// SPEC 05: lets Assets/Tests/{EditMode,PlayMode,Performance} (this repo's own dev tooling,
+// outside the package, same convention as Assembly-CSharp-Editor above) exercise the internal
+// generation classes (CityGeneratorGrid, CityGeneratorDistributionUtility, CityGeneratorValidator,
+// CityGeneratorPlacementEngine, CityGeneratorSpatialHash, ...) directly instead of through
+// reflection.
+[assembly: InternalsVisibleTo("CityGenerator.Tests.EditMode")]
+[assembly: InternalsVisibleTo("CityGenerator.Tests.PlayMode")]
+[assembly: InternalsVisibleTo("CityGenerator.Tests.Performance")]

@@ -64,6 +64,11 @@ namespace CityGenerator.Runtime
 
         public TrafficManager Manager => manager;
 
+        [Tooltip("This network's TrafficLaneOccupancy, on the same GameObject as Manager. Set by CityGeneratorTrafficBuilder.AddManagerComponent. CarAgent consults it first for the 'car ahead in the same lane segment' case before falling back to its SphereCast sensor.")]
+        [SerializeField] private TrafficLaneOccupancy laneOccupancy;
+
+        public TrafficLaneOccupancy LaneOccupancy => laneOccupancy;
+
         [Tooltip("Time after which an unsignalled crossing's priority is released if its owner hasn't passed.")]
         [SerializeField] private float reservationTimeout = 4f;
 
@@ -112,19 +117,6 @@ namespace CityGenerator.Runtime
         private void Awake()
         {
             Build();
-        }
-
-        // CarAgent moves every car by writing transform.position directly (no Rigidbody), and its
-        // forward sensor queries the physics scene in the same frame. With
-        // DynamicsManager.m_AutoSyncTransforms off (the project default), the physics scene only
-        // sees those moves at the next FixedUpdate, so at 60+ FPS the sensor reads positions up to
-        // one frame stale — enough error for cars to miss each other on corners. One sync here,
-        // after every CarAgent's Update has run, is cheaper than turning auto-sync back on (which
-        // would sync on every single query instead of once per frame) and, being in the tool's own
-        // code rather than a project setting, travels with the package if it's copied elsewhere.
-        private void LateUpdate()
-        {
-            Physics.SyncTransforms();
         }
 
         /// <summary>
