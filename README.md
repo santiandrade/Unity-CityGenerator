@@ -36,18 +36,17 @@ example, `...citygenerator#v1.0.1` for that exact version.
 
 ## Updating
 
-Unity does **not** offer an "Update" button for packages installed from a git URL — that
-button only exists for packages that come from a registry (a scoped registry / OpenUPM),
-which this package is not published to. When you install by git URL, the Package Manager
-resolves and locks the current commit in `Packages/packages-lock.json`; it never checks
-the remote again on its own.
+If you installed **without** a `#vX.Y.Z` tag (tracking the tip of the default branch),
+Package Manager can detect and apply updates for you: open **Package Manager > your
+installed "City Generator" entry > Manage**, and click **Update** if it's offered. This
+re-resolves the git URL and replaces the commit locked in `Packages/packages-lock.json`
+with whatever is currently on the default branch — no need to remove and reinstall.
 
-To update, reinstall the package: **Package Manager > your installed "City Generator"
-entry > remove it**, then install again from git URL. If you installed with a `#vX.Y.Z`
-tag, use the new tag from the [Releases page](https://github.com/santiandrade/Unity-CityGenerator/releases) to pin the new version. If you installed
-without a tag, reinstalling the same untagged URL re-resolves to whatever is on the
-default branch now. Either way, this replaces the commit locked in
-`Packages/packages-lock.json`.
+If you installed **with** a `#vX.Y.Z` tag pinned to a specific release, Package Manager
+does not offer an automatic update to a newer tag — the **Update** button only tracks the
+same ref you installed from. To move to a new release, reinstall the package: **Package
+Manager > your installed "City Generator" entry > remove it**, then install again from
+git URL using the new tag from the [Releases page](https://github.com/santiandrade/Unity-CityGenerator/releases).
 
 ## Requirements
 

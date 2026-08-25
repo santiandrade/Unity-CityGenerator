@@ -38,18 +38,19 @@ tag de la [página de Releases](https://github.com/santiandrade/Unity-CityGenera
 
 ## Actualizar
 
-Unity **no** ofrece un botón "Update" para los packages instalados por git URL — ese
-botón solo existe para packages que vienen de un registro (un scoped registry / OpenUPM),
-y este package no está publicado en ninguno. Al instalar por git URL, el Package Manager
-resuelve y fija el commit actual en `Packages/packages-lock.json`; nunca vuelve a
-consultar el remoto por su cuenta.
+Si instalaste el package **sin** tag `#vX.Y.Z` (siguiendo la punta de la rama por
+defecto), Package Manager puede detectar y aplicar la actualización por ti: abre
+**Package Manager > tu entrada instalada de "City Generator" > Manage**, y pulsa
+**Update** si aparece disponible. Esto vuelve a resolver la git URL y sustituye el commit
+fijado en `Packages/packages-lock.json` por lo que haya ahora en la rama por defecto, sin
+necesidad de eliminar y reinstalar.
 
-Para actualizar, reinstala el package: en **Package Manager**, elimina tu entrada
-instalada de "City Generator" y vuelve a instalarla desde la git URL. Si la instalaste
-con un tag `#vX.Y.Z`, usa el tag nuevo de la [página de Releases](https://github.com/santiandrade/Unity-CityGenerator/releases)
-para fijar la versión nueva. Si la instalaste sin tag, reinstalar la misma URL sin tag
-vuelve a resolver a lo que haya ahora en la rama por defecto. En ambos casos, esto
-sustituye el commit fijado en `Packages/packages-lock.json`.
+Si la instalaste **con** un tag `#vX.Y.Z` fijado a una versión concreta, Package Manager
+no ofrece una actualización automática a un tag nuevo — el botón **Update** solo sigue la
+misma referencia con la que instalaste. Para pasar a una versión nueva, reinstala el
+package: en **Package Manager**, elimina tu entrada instalada de "City Generator" y
+vuelve a instalarla desde la git URL usando el tag nuevo de la
+[página de Releases](https://github.com/santiandrade/Unity-CityGenerator/releases).
 
 ## Requisitos
 
