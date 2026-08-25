@@ -53,8 +53,12 @@ namespace CityGenerator.Runtime
         [Tooltip("Seconds a car keeps pushing through once it starts breaking a deadlock.")]
         [SerializeField] private float deadlockBreakDuration = 4f;
 
-        private readonly RaycastHit[] hits = new RaycastHit[16];
         private readonly RaycastHit[] pedestrianHits = new RaycastHit[16];
+        // Sized generously above the old SphereCast sensor's 16: VehicleAheadClearance now scans
+        // every vehicle within the full sensorRange of this car's own position (see its comment),
+        // which in a dense jam can genuinely have more than 16 vehicles in range at once.
+        private readonly Collider[] overlaps = new Collider[32];
+        private readonly Collider[] pedestrianOverlaps = new Collider[16];
         // Resolved lazily on first use (not OnEnable): a generated vehicle's OnEnable fires during
         // generation itself, before CityGeneratorPedestrianBuilder has created this GameObject --
         // vehicles are built first. By the time Play actually starts and the sensor first runs, the
@@ -121,6 +125,10 @@ namespace CityGenerator.Runtime
         /// <summary>Seconds it has been continuously stopped for.</summary>
         public float StoppedTime => stoppedTime;
         public StopReason CurrentStopReason => stopReason;
+        /// <summary>Root-level proxy collider assigned by CityGeneratorColliderUtility, read by
+        /// another CarAgent's <see cref="VehicleAheadClearance"/> lane-occupancy fast path to
+        /// measure real surface distance instead of raw center-to-center distance.</summary>
+        public Collider OwnCollider => ownCollider;
 
         // Counter reset for Play sessions with Domain Reload disabled, where a static field
         // otherwise keeps growing across sessions and breaks the carId tie-break in IsDeadlockedWith.
@@ -354,56 +362,114 @@ namespace CityGenerator.Runtime
         /// </summary>
         private float VehicleAheadClearance()
         {
-            if (network.LaneOccupancy != null && network.LaneOccupancy.TryGetCarAhead(this, fromNode, targetNode, out CarAgent laneAhead))
+            // The direction actually used to decide "ahead" everywhere below, in place of
+            // transform.forward: mid-corner, RotateTowards keeps this car's heading lagging behind
+            // its actual path for the whole turn, so two cars rounding the same corner a few metres
+            // apart can have noticeably different transform.forward -- enough that a projection
+            // using either car's live heading puts the other one "behind" it, even head-on into its
+            // rear bumper. The vector to this car's own target node follows the path, not the lag,
+            // so it stays reliable through the turn.
+            TrafficNetwork.Node targetNodeInfo = network.GetNode(targetNode);
+            Vector3 towardTarget = targetNodeInfo.Position - transform.position;
+            towardTarget.y = 0f;
+            towardTarget = towardTarget.sqrMagnitude > 0.0001f ? towardTarget.normalized : transform.forward;
+
+            if (network.LaneOccupancy != null && network.LaneOccupancy.TryGetCarAhead(this, fromNode, targetNode, towardTarget, out CarAgent laneAhead))
             {
-                float laneDistance = Vector3.Distance(transform.position, laneAhead.transform.position);
+                // Measured the same way the SphereCast below measures it -- from the sensor
+                // origin (2.2m ahead of this car's centre) to the other car's actual collider
+                // surface -- not centre-to-centre. Centre-to-centre ignored both cars' own length,
+                // so a queue converging on the same lane segment settled with `minGap` between
+                // centres while their (2.5-3m long) bodies still overlapped by a couple of metres:
+                // a real pile-up, not just a visual one. Falls back to centre-to-centre only if the
+                // other car has no collider yet (shouldn't happen for a generated vehicle, but the
+                // proxy collider is assigned by the generator, not guaranteed by this component).
+                Vector3 laneOrigin = transform.position + Vector3.up * 0.9f + towardTarget * 2.2f;
+                float laneDistance = laneAhead.OwnCollider != null
+                    ? Vector3.Distance(laneOrigin, laneAhead.OwnCollider.ClosestPoint(laneOrigin))
+                    : Vector3.Distance(transform.position, laneAhead.transform.position);
                 return laneDistance <= 0.001f ? 0f : laneDistance - minGap;
             }
 
-            Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
-            int count = Physics.SphereCastNonAlloc(origin, sensorRadius, transform.forward, hits,
-                sensorRange, vehicleMask, QueryTriggerInteraction.Ignore);
+            // OverlapSphere centred on this car's own position, not on a point offset ahead of it --
+            // a SphereCast (or an OverlapSphere at that offset point) has a blind spot for any
+            // vehicle whose body spans past the offset point without its surface actually touching
+            // the small sensor sphere there, which a long vehicle (a Truck/Garbage-Truck a couple
+            // of metres ahead) triggers easily: the cast/overlap finds nothing, this car never
+            // brakes, and it drives straight into it. Scanning from the car's own centre out to the
+            // full sensorRange has no such gap; forward/lateral projection below re-applies the same
+            // narrow forward cone a directional cast gave for free, so a car in an adjacent lane
+            // still isn't mistaken for one ahead in this one.
+            Vector3 egoPosition = transform.position;
+            Vector3 origin = egoPosition + Vector3.up * 0.9f + towardTarget * 2.2f;
+            int count = Physics.OverlapSphereNonAlloc(egoPosition + Vector3.up * 0.9f, sensorRange, overlaps,
+                vehicleMask, QueryTriggerInteraction.Ignore);
 
-            if (count == hits.Length)
+            if (count == overlaps.Length)
             {
-                Debug.LogWarning($"{name}: forward sensor hit its {hits.Length}-collider limit; the closest vehicle may be missing from this frame's results.", this);
+                Debug.LogWarning($"{name}: forward sensor hit its {overlaps.Length}-collider limit; the closest vehicle may be missing from this frame's results.", this);
             }
 
             float clearance = float.MaxValue;
             for (int i = 0; i < count; i++)
             {
-                // Discarded by identity, never by distance: a zero-distance hit is
-                // the car's own collider, but also the car already bumper-to-bumper ahead, and
-                // filtering by distance made it invisible and drove into it. A hit collider that
-                // isn't in ColliderRegistry at all (rather than resolving to `this`) can no longer
-                // be a car with its collider buried in a child, out of the sensor's layer mask —
-                // CityGeneratorColliderUtility guarantees every generated vehicle has a root-level,
-                // correctly-layered collider; an unregistered hit here is unrelated scene geometry.
-                if (!ColliderRegistry.TryGetValue(hits[i].collider.GetEntityId(), out CarAgent other) || other == this)
+                Collider collider = overlaps[i];
+                Vector3 offset = collider.transform.position - egoPosition;
+                float along = Vector3.Dot(offset, towardTarget);
+                if (along <= 0f)
                 {
                     continue;
                 }
 
-                // Only head-on obstacles can deadlock: regular traffic never produces one
-                // (opposing lanes are separated by laneOffset), so this cannot fire on a queue.
-                if (Vector3.Dot(transform.forward, other.transform.forward) < -0.3f)
+                Vector3 lateral = offset - along * towardTarget;
+                if (lateral.sqrMagnitude > sensorRadius * sensorRadius)
                 {
-                    if (IsDeadlockedWith(other))
-                    {
-                        breakingDeadlockUntil = Time.time + deadlockBreakDuration;
-                    }
-
-                    if (Time.time < breakingDeadlockUntil)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
-                float gap = hits[i].distance <= 0.001f ? 0f : hits[i].distance - minGap;
-                clearance = Mathf.Min(clearance, gap);
+                float distance = Vector3.Distance(origin, collider.ClosestPoint(origin));
+                clearance = ProcessVehicleCollider(collider, distance, clearance);
             }
 
             return clearance;
+        }
+
+        /// <summary>
+        /// Shared by the SphereCast sweep and its OverlapSphere fallback in
+        /// <see cref="VehicleAheadClearance"/>: resolves a hit collider to the other <see cref="CarAgent"/>,
+        /// applies the head-on deadlock rule, and folds its gap into <paramref name="clearance"/>.
+        /// </summary>
+        private float ProcessVehicleCollider(Collider collider, float distance, float clearance)
+        {
+            // Discarded by identity, never by distance: a zero-distance hit is
+            // the car's own collider, but also the car already bumper-to-bumper ahead, and
+            // filtering by distance made it invisible and drove into it. A hit collider that
+            // isn't in ColliderRegistry at all (rather than resolving to `this`) can no longer
+            // be a car with its collider buried in a child, out of the sensor's layer mask —
+            // CityGeneratorColliderUtility guarantees every generated vehicle has a root-level,
+            // correctly-layered collider; an unregistered hit here is unrelated scene geometry.
+            if (!ColliderRegistry.TryGetValue(collider.GetEntityId(), out CarAgent other) || other == this)
+            {
+                return clearance;
+            }
+
+            // Only head-on obstacles can deadlock: regular traffic never produces one
+            // (opposing lanes are separated by laneOffset), so this cannot fire on a queue.
+            if (Vector3.Dot(transform.forward, other.transform.forward) < -0.3f)
+            {
+                if (IsDeadlockedWith(other))
+                {
+                    breakingDeadlockUntil = Time.time + deadlockBreakDuration;
+                }
+
+                if (Time.time < breakingDeadlockUntil)
+                {
+                    return clearance;
+                }
+            }
+
+            float gap = distance <= 0.001f ? 0f : distance - minGap;
+            return Mathf.Min(clearance, gap);
         }
 
         /// <summary>
@@ -441,6 +507,15 @@ namespace CityGenerator.Runtime
                 clearance = Mathf.Min(clearance, gap);
             }
 
+            // See the `overlaps` field comment on VehicleAheadClearance: catches a pedestrian (or
+            // the player, on the same layer) already flush against the sensor origin, which the
+            // sweep above silently misses.
+            if (Physics.OverlapSphereNonAlloc(origin, sensorRadius, pedestrianOverlaps, pedestrianMask,
+                    QueryTriggerInteraction.Collide) > 0)
+            {
+                clearance = 0f;
+            }
+
             return clearance;
         }
 
@@ -457,30 +532,57 @@ namespace CityGenerator.Runtime
             Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
             pedestrianRoadProximity.QueryNear(origin, sensorRange, pedestrianQueryResults);
 
+            // The "ahead" cone is measured from this car's own centre, not from `origin`: origin
+            // already sits 2.2m ahead of centre, so a pedestrian closer than that to the car (the
+            // exact "standing right at the bumper" case) projects *behind* origin along forward,
+            // scoring a negative dot and getting filtered out as "not ahead" -- never detected, no
+            // matter how close. Distance/gap still uses `origin`, matching the SphereCast fallback's
+            // calibration of minGap.
+            Vector3 carPosition = transform.position;
             float clearance = float.MaxValue;
             for (int i = 0; i < pedestrianQueryResults.Count; i++)
             {
-                Vector3 toPedestrian = pedestrianQueryResults[i].transform.position - origin;
-                float distance = toPedestrian.magnitude;
-                if (distance > 0.001f && Vector3.Dot(toPedestrian / distance, transform.forward) < 0.5f)
+                if (!IsPedestrianInPath(pedestrianQueryResults[i].transform.position, carPosition, out float distance))
                     continue;
 
                 float gap = distance <= 0.001f ? 0f : distance - minGap;
                 clearance = Mathf.Min(clearance, gap);
             }
 
-            if (pedestrianRoadProximity.TryGetPlayerPosition(out Vector3 playerPosition))
+            if (pedestrianRoadProximity.TryGetPlayerPosition(out Vector3 playerPosition)
+                && IsPedestrianInPath(playerPosition, carPosition, out float playerDistance))
             {
-                Vector3 toPlayer = playerPosition - origin;
-                float distance = toPlayer.magnitude;
-                if (distance <= sensorRange && (distance <= 0.001f || Vector3.Dot(toPlayer / distance, transform.forward) >= 0.5f))
-                {
-                    float gap = distance <= 0.001f ? 0f : distance - minGap;
-                    clearance = Mathf.Min(clearance, gap);
-                }
+                float gap = playerDistance <= 0.001f ? 0f : playerDistance - minGap;
+                clearance = Mathf.Min(clearance, gap);
             }
 
             return clearance;
+
+            bool IsPedestrianInPath(Vector3 pedestrianPosition, Vector3 egoPosition, out float distanceFromOrigin)
+            {
+                distanceFromOrigin = 0f;
+                Vector3 fromCar = pedestrianPosition - egoPosition;
+                if (fromCar.sqrMagnitude > 0.001f)
+                {
+                    // Lateral cutoff on top of the forward cone: without it, a pedestrian standing
+                    // still on the sidewalk kerb -- never stepping onto the road -- reads as "ahead"
+                    // for several metres of approach (a wide cone reaches far to the side at range)
+                    // and the car brakes hard for someone who was never in its way. PedestrianNetwork
+                    // places a kerb roughly one lane-width-and-a-bit out from this car's own lane
+                    // centre; 1.6m keeps a pedestrian already in or stepping into this lane covered
+                    // while excluding one still waiting at the kerb.
+                    Vector3 direction = fromCar.normalized;
+                    if (Vector3.Dot(direction, transform.forward) < 0.5f)
+                        return false;
+
+                    Vector3 lateral = fromCar - Vector3.Dot(fromCar, transform.forward) * transform.forward;
+                    if (lateral.sqrMagnitude > 1.6f * 1.6f)
+                        return false;
+                }
+
+                distanceFromOrigin = Vector3.Distance(pedestrianPosition, origin);
+                return distanceFromOrigin <= sensorRange;
+            }
         }
 
         /// <summary>
