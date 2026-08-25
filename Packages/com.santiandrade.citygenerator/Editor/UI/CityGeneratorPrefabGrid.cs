@@ -30,6 +30,7 @@ namespace CityGenerator.Editor.UI
             Add(tilesContainer);
 
             addField = new ObjectField { objectType = typeof(GameObject), allowSceneObjects = false };
+            addField.tooltip = "Assign a prefab here to add it to the list below.";
             addField.AddToClassList("cg-prefab-grid__add-field");
             addField.RegisterValueChangedCallback(OnAddFieldChanged);
             Add(addField);
@@ -74,6 +75,7 @@ namespace CityGenerator.Editor.UI
 
                 var tile = new VisualElement();
                 tile.AddToClassList("cg-prefab-grid__tile");
+                tile.tooltip = prefab != null ? prefab.name : "(missing prefab)";
 
                 var preview = new VisualElement();
                 preview.AddToClassList("cg-prefab-grid__preview");
@@ -91,7 +93,7 @@ namespace CityGenerator.Editor.UI
                 label.AddToClassList("cg-prefab-grid__label");
                 tile.Add(label);
 
-                var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×" };
+                var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×", tooltip = "Remove this prefab from the list." };
                 removeButton.AddToClassList("cg-prefab-grid__remove");
                 tile.Add(removeButton);
 

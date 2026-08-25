@@ -75,27 +75,8 @@ namespace CityGenerator.Editor
         // gridlocked from the first frame. 0.4 keeps a margin below the observed good case.
         public const float VehicleDensityWarningThreshold = 0.4f;
 
-        // Default CharacterController/PlayerController configuration applied by
-        // CityGeneratorSceneBuilder to whichever character prefab is assigned as Player Prefab,
-        // so every DefaultAssets/Prefabs/Characters/ model can stay a clean, generation-agnostic
-        // model+Animator prefab instead of each carrying its own baked movement setup.
-        public const float PlayerControllerHeight = 0.72f;
-        public const float PlayerControllerRadius = 0.2f;
-        public const float PlayerControllerSlopeLimit = 45f;
-        public const float PlayerControllerStepOffset = 0.2f;
-        public const float PlayerControllerSkinWidth = 0.02f;
-        public const float PlayerControllerMinMoveDistance = 0.001f;
-        public static readonly UnityEngine.Vector3 PlayerControllerCenter = new(0f, 0.4f, 0f);
-
-        public const string PlayerActionMapName = "Player";
-        public const string PlayerMoveActionName = "Move";
-        public const string PlayerJumpActionName = "Jump";
-        public const string PlayerSprintActionName = "Sprint";
-        public const float PlayerWalkSpeed = 4f;
-        public const float PlayerRunSpeed = 8f;
-        public const float PlayerRotationSmoothTime = 0.1f;
-        public const float PlayerGravity = -20f;
-        public const float PlayerJumpHeight = 1.2f;
+        // CharacterController/PlayerController tuning is now user-configurable (CityGeneratorSettings.player,
+        // Player tab in CityGeneratorWindow), applied by CityGeneratorSceneBuilder.ConfigurePlayer.
 
         public const string PedestrianLayerName = "Pedestrian";
 
@@ -110,42 +91,10 @@ namespace CityGenerator.Editor
         // two datums while walking a crosswalk arm.
         public const float PedestrianRoadY = 0f;
 
-        // Per-instance lateral offset from the path centreline (perpendicular to travel
-        // direction), so a group of pedestrians walking the same ring segment doesn't render as
-        // a single file line.
-        public const float PedestrianLaneJitter = 0.4f;
-
-        // Calibration anchors, not a pedestrian's own pace: CharacterAnimator.controller's
-        // Locomotion blend tree reaches Speed = 0.5 at PlayerWalkSpeed and Speed = 1 at
-        // PlayerRunSpeed (see PlayerController's normalizedSpeed mapping). PedestrianAgent scales
-        // its Speed parameter proportionally to its actual pace against these two anchors, so any
-        // pace in between (or beyond) still lines up with the blend tree instead of foot-sliding.
-        public const float PedestrianWalkReferenceSpeed = PlayerWalkSpeed;
-        public const float PedestrianRunReferenceSpeed = PlayerRunSpeed;
-
-        // Most pedestrians stroll at half PlayerWalkSpeed: at the full reference speed the walk
-        // cycle reads as a brisk power-walk rather than a casual stroll.
-        public const float PedestrianPaceFraction = 0.5f;
-
-        // Fraction of pedestrians that jog/run (simulating exercise or running late) at
-        // PedestrianRunReferenceSpeed instead of the usual stroll.
-        public const float PedestrianRunnerChance = 0.15f;
-
-        // +-10% per-instance speed jitter, same convention as CarAgent's +-6% maxSpeed jitter,
-        // so a spawned crowd doesn't move in mechanical lockstep.
-        public const float PedestrianSpeedJitter = 0.1f;
-
-        // Chance, on reaching a destination, of idling in place for a few seconds instead of
-        // immediately picking a new one -- keeps pedestrians from reading as being on rails
-        // between two fixed points.
-        public const float PedestrianIdleStopChance = 0.3f;
-        public const float PedestrianIdleStopDurationMin = 2f;
-        public const float PedestrianIdleStopDurationMax = 6f;
-
-        // Longer stop range used at a PointOfInterest node (bench/fountain), where lingering
-        // reads as sitting/resting rather than a random street pause.
-        public const float PedestrianPoiStopDurationMin = 5f;
-        public const float PedestrianPoiStopDurationMax = 15f;
+        // Pedestrian pace, jitter, stop behaviour and the animation reference speeds are now
+        // user-configurable (CityGeneratorSettings.pedestrianBehaviour, Pedestrians tab in
+        // CityGeneratorWindow), applied per-instance by CityGeneratorPedestrianBuilder.BuildPedestrians.
+        // PedestrianManager's crowd/staggering tuning lives in CityGeneratorSettings.crowd instead.
 
         // PedestrianAgent has no jam/gridlock mechanics of its own -- crowding only shows up as
         // local separation (PedestrianManager's boids-style grid), never a stopped agent -- so a

@@ -8,6 +8,12 @@ An Editor tool for Unity that procedurally generates a city — roads, sidewalks
 markings, buildings, plazas, street furniture, traffic lights, autonomous traffic and
 pedestrians — into a new or existing scene. Open it from **Tools > City Generator > Open**.
 
+The window is split into three tabs: **City** (grid, ground, buildings, plazas, vehicles,
+props), **Player** (Player Prefab, movement, `CharacterController` and camera tuning) and
+**Pedestrians** (the pedestrian prefab list, plus their walk/idle behaviour and crowd
+tuning) — everything is editable from the window, nothing requires touching the package's
+code.
+
 It ships as the embedded package `com.santiandrade.citygenerator`, installable directly
 from a git URL, with a full set of demo prefabs included so the window is ready to
 generate a city the moment you install it.

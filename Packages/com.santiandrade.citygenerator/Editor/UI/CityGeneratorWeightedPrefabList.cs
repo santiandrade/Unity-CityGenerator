@@ -50,15 +50,17 @@ namespace CityGenerator.Editor.UI
             AddToClassList("cg-weighted-list");
 
             stackedBar = new VisualElement();
+            stackedBar.tooltip = "Live split of the configured percentages across entries.";
             stackedBar.AddToClassList("cg-weighted-list__bar");
             Add(stackedBar);
 
             var totalsRow = new VisualElement();
             totalsRow.AddToClassList("cg-weighted-list__totals-row");
             totalLabel = new Label();
+            totalLabel.tooltip = "Sum of every entry's percentage below — must equal 100 for generation to be valid.";
             totalLabel.AddToClassList("cg-weighted-list__total");
             totalsRow.Add(totalLabel);
-            normalizeButton = new Button(Normalize) { text = "Normalize to 100%" };
+            normalizeButton = new Button(Normalize) { text = "Normalize to 100%", tooltip = "Rescale every non-zero percentage proportionally so the total is exactly 100." };
             normalizeButton.AddToClassList("cg-weighted-list__normalize");
             totalsRow.Add(normalizeButton);
             Add(totalsRow);
@@ -68,6 +70,7 @@ namespace CityGenerator.Editor.UI
             Add(rowsContainer);
 
             addField = new ObjectField { objectType = typeof(GameObject), allowSceneObjects = false };
+            addField.tooltip = "Assign a prefab here to add it to the list, at 0%.";
             addField.AddToClassList("cg-weighted-list__add-field");
             addField.RegisterValueChangedCallback(OnAddFieldChanged);
             Add(addField);
@@ -144,22 +147,23 @@ namespace CityGenerator.Editor.UI
                 row.Add(preview);
 
                 var label = new Label(prefab != null ? prefab.name : "(missing prefab)");
+                label.tooltip = prefab != null ? prefab.name : "(missing prefab)";
                 label.AddToClassList("cg-weighted-list__label");
                 row.Add(label);
 
-                var slider = new Slider(0f, 100f) { value = percentage };
+                var slider = new Slider(0f, 100f) { value = percentage, tooltip = "Share of the total count spawned from this prefab." };
                 slider.AddToClassList("cg-weighted-list__slider");
                 slider.RegisterValueChangedCallback(evt => SetPercentage(capturedIndex, evt.newValue));
                 row.Add(slider);
                 sliders.Add(slider);
 
-                var percentageField = new FloatField { value = percentage };
+                var percentageField = new FloatField { value = percentage, tooltip = "Share of the total count spawned from this prefab." };
                 percentageField.AddToClassList("cg-weighted-list__percentage-field");
                 percentageField.RegisterValueChangedCallback(evt => SetPercentage(capturedIndex, evt.newValue));
                 row.Add(percentageField);
                 percentageFields.Add(percentageField);
 
-                var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×" };
+                var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×", tooltip = "Remove this entry from the list." };
                 removeButton.AddToClassList("cg-weighted-list__remove");
                 row.Add(removeButton);
 

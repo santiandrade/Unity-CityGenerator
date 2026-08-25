@@ -16,6 +16,39 @@
     -unity-background-scale-mode: scale-to-fit;
 }
 
+/* ---------- Tabs ---------- */
+
+.cg-tabs {
+    flex-shrink: 0;
+    flex-direction: row;
+    background-color: var(--cg-surface-alt);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--cg-border);
+}
+
+.cg-tabs__tab {
+    flex-grow: 1;
+    -unity-text-align: middle-center;
+    padding: 6px 4px;
+    color: var(--cg-text-muted);
+    -unity-font-style: bold;
+    border-bottom-width: 2px;
+    border-bottom-color: transparent;
+}
+
+.cg-tabs__tab:hover {
+    color: var(--cg-text);
+}
+
+.cg-tabs__tab--selected {
+    color: var(--cg-text);
+    border-bottom-color: var(--cg-accent);
+}
+
+.cg-tabs__tab--error {
+    color: var(--cg-danger);
+}
+
 /* ---------- Scroll / cards ---------- */
 
 .cg-scroll {

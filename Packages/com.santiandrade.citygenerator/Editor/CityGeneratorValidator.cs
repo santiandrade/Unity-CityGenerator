@@ -103,6 +103,19 @@ namespace CityGenerator.Editor
                 }
             }
 
+            if (settings.player.walkSpeed > settings.player.runSpeed)
+                issues.Add(new CityGeneratorValidationIssue("player.runSpeed", "Player: Run Speed must be greater than or equal to Walk Speed."));
+
+            if (settings.camera.minPitch >= settings.camera.maxPitch)
+                issues.Add(new CityGeneratorValidationIssue("camera.maxPitch", "Camera: Max Pitch must be greater than Min Pitch."));
+            if (settings.camera.minDistance > settings.camera.distance)
+                issues.Add(new CityGeneratorValidationIssue("camera.distance", "Camera: Distance must be greater than or equal to Min Distance."));
+
+            if (settings.pedestrianBehaviour.idleStopDurationMin > settings.pedestrianBehaviour.idleStopDurationMax)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.idleStopDurationMax", "Pedestrians: Idle Stop Duration Max must be greater than or equal to Idle Stop Duration Min."));
+            if (settings.pedestrianBehaviour.poiStopDurationMin > settings.pedestrianBehaviour.poiStopDurationMax)
+                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMax", "Pedestrians: POI Stop Duration Max must be greater than or equal to POI Stop Duration Min."));
+
             return issues.Count == 0;
         }
 

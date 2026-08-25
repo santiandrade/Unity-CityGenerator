@@ -20,20 +20,39 @@ namespace CityGenerator.Editor
         private const string UssLightPath = UiFolder + "CityGeneratorWindow_Light.uss";
         private const string ThumbnailPath = "Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png";
 
+        private const string TabCity = "city";
+        private const string TabPlayer = "player";
+        private const string TabPedestrians = "pedestrians";
+
+        private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
+        private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Light, camera and player are left untouched.";
+
         [SerializeField] private CityGeneratorSettings settings = new();
         [SerializeField] private bool defaultsInitialized;
 
         private SerializedObject serializedWindow;
 
-        // Populated by BuildUi; consulted by Revalidate to mark a card/field as the source of a
-        // validation issue, and to size badges/summaries live as the user edits.
+        // Populated by BuildUi; consulted by RefreshValidation to mark a card/field/tab as the
+        // source of a validation issue, and to size badges/summaries live as the user edits.
+        // Keyed by settings segment (e.g. "props") as the fallback resolution, plus an exact-path
+        // override (e.g. "general.playerPrefab") for fields that were moved to a card whose own
+        // segment differs from theirs (general.playerPrefab/inputActions now live in the Player card).
         private readonly Dictionary<string, CityGeneratorCard> cardsBySettingsSegment = new();
+        private readonly Dictionary<string, CityGeneratorCard> cardsByExactPath = new();
+        private readonly Dictionary<string, string> tabIdBySettingsSegment = new();
+        private readonly Dictionary<string, string> tabIdByExactPath = new();
         private readonly List<RequiredRow> requiredRows = new();
         private CityGeneratorCard generalCard;
         private CityGeneratorCard buildingsCard;
         private CityGeneratorCard vegetationCard;
         private CityGeneratorCard vehiclesCard;
         private CityGeneratorCard pedestriansCard;
+        private CityGeneratorCard playerCard;
+        private CityGeneratorCard cameraCard;
+        private CityGeneratorCard pedestrianBehaviourCard;
+        private CityGeneratorCard crowdCard;
+        private CityGeneratorTabBar tabBar;
+        private HelpBox referenceSpeedMismatchWarning;
         private CityGeneratorGridPreview gridPreview;
         private Label gridPreviewCaption;
         private Label summaryLine;
@@ -158,6 +177,9 @@ namespace CityGenerator.Editor
             rootVisualElement.Unbind();
             rootVisualElement.Clear();
             cardsBySettingsSegment.Clear();
+            cardsByExactPath.Clear();
+            tabIdBySettingsSegment.Clear();
+            tabIdByExactPath.Clear();
             requiredRows.Clear();
 
             var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(UxmlPath);
@@ -177,19 +199,37 @@ namespace CityGenerator.Editor
             serializedWindow = new SerializedObject(this);
 
             BuildBanner();
-            VisualElement cardsContainer = rootVisualElement.Q<VisualElement>("cg-cards");
-            BuildGeneralCard(cardsContainer);
-            BuildGroundCard(cardsContainer);
-            BuildPlazaCard(cardsContainer);
-            BuildBuildingsCard(cardsContainer);
-            BuildVegetationCard(cardsContainer);
-            BuildVehiclesCard(cardsContainer);
-            BuildPedestriansCard(cardsContainer);
-            BuildPropsCard(cardsContainer);
+
+            VisualElement tabsContainer = rootVisualElement.Q<VisualElement>("cg-tabs");
+            VisualElement cityContainer = rootVisualElement.Q<VisualElement>("cg-cards-city");
+            VisualElement playerContainer = rootVisualElement.Q<VisualElement>("cg-cards-player");
+            VisualElement pedestriansContainer = rootVisualElement.Q<VisualElement>("cg-cards-pedestrians");
+
+            tabBar = new CityGeneratorTabBar(tabsContainer);
+            tabBar.AddTab(TabCity, "City", cityContainer);
+            tabBar.AddTab(TabPlayer, "Player", playerContainer);
+            tabBar.AddTab(TabPedestrians, "Pedestrians", pedestriansContainer);
+
+            BuildGeneralCard(cityContainer);
+            BuildGroundCard(cityContainer);
+            BuildPlazaCard(cityContainer);
+            BuildBuildingsCard(cityContainer);
+            BuildVegetationCard(cityContainer);
+            BuildVehiclesCard(cityContainer);
+            BuildPropsCard(cityContainer);
+
+            BuildPlayerCard(playerContainer);
+            BuildCameraCard(playerContainer);
+
+            BuildPedestriansCard(pedestriansContainer);
+            BuildPedestrianBehaviourCard(pedestriansContainer);
+            BuildCrowdCard(pedestriansContainer);
+
             BuildFooter();
 
             rootVisualElement.Bind(serializedWindow);
             rootVisualElement.TrackSerializedObjectValue(serializedWindow, _ => RefreshDynamicUi());
+            tabBar.RestoreSelection(TabCity);
             RefreshDynamicUi();
         }
 
@@ -225,7 +265,7 @@ namespace CityGenerator.Editor
 
         private void BuildGeneralCard(VisualElement parent)
         {
-            generalCard = AddCard(parent, "general", "General Options", "d_SceneAsset Icon", defaultExpanded: true);
+            generalCard = AddCard(parent, "general", "General Options", "d_SceneAsset Icon", defaultExpanded: true, TabCity);
             VisualElement content = generalCard.ContentContainer;
 
             gridPreview = new CityGeneratorGridPreview();
@@ -261,10 +301,6 @@ namespace CityGenerator.Editor
             isolatedBlocksWarning.style.display = DisplayStyle.None;
             content.Add(isolatedBlocksWarning);
 
-            content.Add(CreateField("general.playerPrefab"));
-            AddRequiredField(content, "general.inputActions", "Input Actions (if Player Prefab is set)",
-                () => FindProperty("general.playerPrefab").objectReferenceValue != null);
-
             content.Add(CreateField("general.useCustomSeed", "Custom Seed"));
             PropertyField seedField = CreateField("general.seed", "Seed");
             content.Add(seedField);
@@ -275,7 +311,7 @@ namespace CityGenerator.Editor
 
         private void BuildGroundCard(VisualElement parent)
         {
-            CityGeneratorCard card = AddCard(parent, "ground", "Ground", "d_Terrain Icon", defaultExpanded: false);
+            CityGeneratorCard card = AddCard(parent, "ground", "Ground", "d_Terrain Icon", defaultExpanded: false, TabCity);
             AddRequiredField(card.ContentContainer, "ground.roadBasePrefab", "Road Base Prefab", () => true);
             AddRequiredField(card.ContentContainer, "ground.sidewalkPrefab", "Sidewalk Prefab", () => true);
             AddRequiredField(card.ContentContainer, "ground.roadLinePrefab", "Road Line Prefab", () => true);
@@ -284,7 +320,7 @@ namespace CityGenerator.Editor
 
         private void BuildPlazaCard(VisualElement parent)
         {
-            CityGeneratorCard card = AddCard(parent, "plaza", "Plazas", "d_Prefab Icon", defaultExpanded: false);
+            CityGeneratorCard card = AddCard(parent, "plaza", "Plazas", "d_Prefab Icon", defaultExpanded: false, TabCity);
             card.ContentContainer.Add(CreateField("plaza.centerpiecePrefab"));
             AddRequiredField(card.ContentContainer, "plaza.lawnPrefab", "Lawn Prefab (if any plaza block is selected)",
                 () => FindProperty("general.plazaCells").arraySize > 0);
@@ -293,7 +329,7 @@ namespace CityGenerator.Editor
 
         private void BuildBuildingsCard(VisualElement parent)
         {
-            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", "d_BoxCollider Icon", defaultExpanded: false);
+            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", "d_BoxCollider Icon", defaultExpanded: false, TabCity);
             var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
             grid.Bind(FindProperty("buildingPrefabs"));
             buildingsCard.ContentContainer.Add(grid);
@@ -301,7 +337,7 @@ namespace CityGenerator.Editor
 
         private void BuildVegetationCard(VisualElement parent)
         {
-            vegetationCard = AddCard(parent, "vegetation", "Vegetation", "d_tree_icon", defaultExpanded: false);
+            vegetationCard = AddCard(parent, "vegetation", "Vegetation", "d_tree_icon", defaultExpanded: false, TabCity);
             var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
             grid.Bind(FindProperty("vegetation.prefabs"));
             vegetationCard.ContentContainer.Add(grid);
@@ -310,7 +346,7 @@ namespace CityGenerator.Editor
 
         private void BuildVehiclesCard(VisualElement parent)
         {
-            vehiclesCard = AddCard(parent, "vehicles", "Vehicles", "d_WheelCollider Icon", defaultExpanded: false);
+            vehiclesCard = AddCard(parent, "vehicles", "Vehicles", "d_WheelCollider Icon", defaultExpanded: false, TabCity);
             var list = new CityGeneratorWeightedPrefabList(RefreshDynamicUi);
             list.Bind(FindProperty("vehicles"));
             vehiclesCard.ContentContainer.Add(list);
@@ -318,7 +354,7 @@ namespace CityGenerator.Editor
 
         private void BuildPedestriansCard(VisualElement parent)
         {
-            pedestriansCard = AddCard(parent, "pedestrians", "Pedestrians", "d_Avatar Icon", defaultExpanded: false);
+            pedestriansCard = AddCard(parent, "pedestrians", "Pedestrians", "d_Avatar Icon", defaultExpanded: true, TabPedestrians);
             var list = new CityGeneratorWeightedPrefabList(RefreshDynamicUi);
             list.Bind(FindProperty("pedestrians"));
             pedestriansCard.ContentContainer.Add(list);
@@ -326,13 +362,104 @@ namespace CityGenerator.Editor
 
         private void BuildPropsCard(VisualElement parent)
         {
-            CityGeneratorCard card = AddCard(parent, "props", "Props", "d_Light Icon", defaultExpanded: false);
+            CityGeneratorCard card = AddCard(parent, "props", "Props", "d_Light Icon", defaultExpanded: false, TabCity);
             AddRequiredField(card.ContentContainer, "props.trafficLightPrefab", "Traffic Light Prefab (if Include Traffic)",
                 () => FindProperty("general.includeTraffic").boolValue);
             card.ContentContainer.Add(CreateField("props.lampPrefab"));
             card.ContentContainer.Add(CreateField("props.lampDensity"));
             card.ContentContainer.Add(CreateField("props.binPrefab"));
             card.ContentContainer.Add(CreateField("props.binDensity"));
+        }
+
+        private void BuildPlayerCard(VisualElement parent)
+        {
+            playerCard = AddCard(parent, "player", "Player", "d_CharacterController Icon", defaultExpanded: true, TabPlayer);
+            VisualElement content = playerCard.ContentContainer;
+
+            content.Add(CreateField("general.playerPrefab", "Player Prefab"));
+            AddRequiredField(content, "general.inputActions", "Input Actions (if Player Prefab is set)",
+                () => FindProperty("general.playerPrefab").objectReferenceValue != null);
+            RegisterCardPathAlias("general.playerPrefab", playerCard, TabPlayer);
+            RegisterCardPathAlias("general.inputActions", playerCard, TabPlayer);
+
+            content.Add(CreateField("player.walkSpeed"));
+            content.Add(CreateField("player.runSpeed"));
+            content.Add(CreateField("player.rotationSmoothTime"));
+            content.Add(CreateField("player.gravity"));
+            content.Add(CreateField("player.jumpHeight"));
+
+            content.Add(CreateField("player.controllerHeight"));
+            content.Add(CreateField("player.controllerRadius"));
+            content.Add(CreateField("player.controllerCenter"));
+            content.Add(CreateField("player.controllerSlopeLimit"));
+            content.Add(CreateField("player.controllerStepOffset"));
+            content.Add(CreateField("player.controllerSkinWidth"));
+            content.Add(CreateField("player.controllerMinMoveDistance"));
+
+            content.Add(CreateField("player.actionMapName"));
+            content.Add(CreateField("player.moveActionName"));
+            content.Add(CreateField("player.jumpActionName"));
+            content.Add(CreateField("player.sprintActionName"));
+            content.Add(CreateField("player.lookActionName"));
+        }
+
+        private void BuildCameraCard(VisualElement parent)
+        {
+            cameraCard = AddCard(parent, "camera", "Camera", "d_Camera Icon", defaultExpanded: false, TabPlayer);
+            VisualElement content = cameraCard.ContentContainer;
+
+            content.Add(CreateField("camera.fieldOfView"));
+            content.Add(CreateField("camera.verticalOffset"));
+            content.Add(CreateField("camera.horizontalOffset"));
+            content.Add(CreateField("camera.distance"));
+            content.Add(CreateField("camera.minDistance"));
+            content.Add(CreateField("camera.sensitivity"));
+            content.Add(CreateField("camera.minPitch"));
+            content.Add(CreateField("camera.maxPitch"));
+            content.Add(CreateField("camera.followSmoothTime"));
+            content.Add(CreateField("camera.collisionMask"));
+            content.Add(CreateField("camera.collisionRadius"));
+            content.Add(CreateField("camera.lockCursor"));
+        }
+
+        private void BuildPedestrianBehaviourCard(VisualElement parent)
+        {
+            pedestrianBehaviourCard = AddCard(parent, "pedestrianBehaviour", "Behaviour", "d_AnimatorController Icon", defaultExpanded: false, TabPedestrians);
+            VisualElement content = pedestrianBehaviourCard.ContentContainer;
+
+            content.Add(CreateField("pedestrianBehaviour.walkReferenceSpeed"));
+            content.Add(CreateField("pedestrianBehaviour.runReferenceSpeed"));
+            referenceSpeedMismatchWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            referenceSpeedMismatchWarning.style.display = DisplayStyle.None;
+            content.Add(referenceSpeedMismatchWarning);
+
+            content.Add(CreateField("pedestrianBehaviour.paceFraction"));
+            content.Add(CreateField("pedestrianBehaviour.runnerChance"));
+            content.Add(CreateField("pedestrianBehaviour.speedJitter"));
+            content.Add(CreateField("pedestrianBehaviour.lateralJitter"));
+            content.Add(CreateField("pedestrianBehaviour.rotationSpeed"));
+            content.Add(CreateField("pedestrianBehaviour.arriveRadius"));
+
+            content.Add(CreateField("pedestrianBehaviour.idleStopChance"));
+            content.Add(CreateField("pedestrianBehaviour.idleStopDurationMin"));
+            content.Add(CreateField("pedestrianBehaviour.idleStopDurationMax"));
+            content.Add(CreateField("pedestrianBehaviour.poiStopDurationMin"));
+            content.Add(CreateField("pedestrianBehaviour.poiStopDurationMax"));
+        }
+
+        private void BuildCrowdCard(VisualElement parent)
+        {
+            crowdCard = AddCard(parent, "crowd", "Crowd", "d_NavMeshAgent Icon", defaultExpanded: false, TabPedestrians);
+            VisualElement content = crowdCard.ContentContainer;
+
+            content.Add(CreateField("crowd.separationCellSize"));
+            content.Add(CreateField("crowd.separationRadius"));
+            content.Add(CreateField("crowd.separationStrength"));
+            content.Add(CreateField("crowd.playerAvoidanceRadius"));
+            content.Add(CreateField("crowd.playerAvoidanceStrength"));
+            content.Add(CreateField("crowd.staggerMinAgentCount"));
+            content.Add(CreateField("crowd.staggerDistance"));
+            content.Add(CreateField("crowd.staggerFrames"));
         }
 
         private void BuildFooter()
@@ -342,21 +469,38 @@ namespace CityGenerator.Editor
             resultPanel.style.display = DisplayStyle.None;
 
             buildNewSceneButton = rootVisualElement.Q<Button>("cg-build-new-scene-button");
+            buildNewSceneButton.tooltip = BuildNewSceneButtonTooltip;
             buildNewSceneButton.clicked += BuildCityInNewScene;
 
             rebuildCurrentSceneButton = rootVisualElement.Q<Button>("cg-rebuild-current-scene-button");
+            rebuildCurrentSceneButton.tooltip = RebuildCurrentSceneButtonTooltip;
             rebuildCurrentSceneButton.clicked += RebuildCityInCurrentScene;
 
             var resetButton = rootVisualElement.Q<Button>("cg-reset-defaults-button");
+            resetButton.tooltip = "Discard every change and restore the tool's shipped default settings.";
             resetButton.clicked += ResetToDefaults;
         }
 
-        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded)
+        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId)
         {
             var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded);
             parent.Add(card);
             cardsBySettingsSegment[settingsSegment] = card;
+            tabIdBySettingsSegment[settingsSegment] = tabId;
             return card;
+        }
+
+        /// <summary>
+        /// Points an exact settings path at a card/tab other than the one its own top-level
+        /// segment would resolve to — used for fields that were relocated to a different card
+        /// (e.g. <c>general.playerPrefab</c>/<c>general.inputActions</c> now live in the Player
+        /// card even though they're still serialized under <c>GeneralSettings</c>). Consulted by
+        /// <see cref="RefreshValidation"/> before falling back to the segment-based lookup.
+        /// </summary>
+        private void RegisterCardPathAlias(string exactPath, CityGeneratorCard card, string tabId)
+        {
+            cardsByExactPath[exactPath] = card;
+            tabIdByExactPath[exactPath] = tabId;
         }
 
         private PropertyField CreateField(string relativePath, string label = null)
@@ -369,7 +513,7 @@ namespace CityGenerator.Editor
 
         private VisualElement CreateIntSlider(SerializedProperty property, string label, int min, int max)
         {
-            var slider = new SliderInt(label, min, max) { value = property.intValue, showInputField = true };
+            var slider = new SliderInt(label, min, max) { value = property.intValue, showInputField = true, tooltip = property.tooltip };
             slider.AddToClassList("cg-field-row");
             slider.RegisterValueChangedCallback(evt =>
             {
@@ -428,6 +572,15 @@ namespace CityGenerator.Editor
             vehiclesCard.SetBadge($"{FindProperty("vehicles").arraySize} entries");
             pedestriansCard.SetBadge($"{FindProperty("pedestrians").arraySize} entries");
 
+            float walkSpeed = FindProperty("player.walkSpeed").floatValue;
+            float runSpeed = FindProperty("player.runSpeed").floatValue;
+            playerCard.SetBadge($"{walkSpeed:0.#} / {runSpeed:0.#} m/s");
+            cameraCard.SetBadge($"FOV {FindProperty("camera.fieldOfView").floatValue:0}°");
+
+            float paceFraction = FindProperty("pedestrianBehaviour.paceFraction").floatValue;
+            pedestrianBehaviourCard.SetBadge($"{paceFraction:P0} pace");
+            crowdCard.SetBadge($"{FindProperty("crowd.staggerMinAgentCount").intValue}+ staggered");
+
             gridPreview.SetGrid(gridWidth, gridHeight);
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
             int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
@@ -442,6 +595,7 @@ namespace CityGenerator.Editor
             SetWarning(vehicleDensityWarning, GetVehicleDensityWarning());
             SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());
             SetWarning(isolatedBlocksWarning, GetIsolatedBlocksWarning());
+            SetWarning(referenceSpeedMismatchWarning, GetReferenceSpeedMismatchWarning());
 
             foreach (RequiredRow row in requiredRows)
             {
@@ -467,6 +621,7 @@ namespace CityGenerator.Editor
 
             foreach (CityGeneratorCard card in cardsBySettingsSegment.Values)
                 card.SetHasError(false);
+            var tabsWithErrors = new HashSet<string>();
 
             validationPanel.Clear();
             foreach (CityGeneratorValidationIssue issue in issues)
@@ -475,18 +630,44 @@ namespace CityGenerator.Editor
                 label.AddToClassList("cg-validation-panel__item");
                 validationPanel.Add(label);
 
-                int dotIndex = issue.settingsPath.IndexOf('.');
-                string segment = dotIndex >= 0 ? issue.settingsPath.Substring(0, dotIndex) : issue.settingsPath;
-                if (cardsBySettingsSegment.TryGetValue(segment, out CityGeneratorCard card))
-                    card.SetHasError(true);
+                // Exact-path aliases (e.g. general.playerPrefab -> the Player card) take priority
+                // over the segment-based lookup, so a relocated field still lights up the card and
+                // tab it now visually lives in, not the one its settings segment would suggest.
+                if (cardsByExactPath.TryGetValue(issue.settingsPath, out CityGeneratorCard aliasedCard))
+                {
+                    aliasedCard.SetHasError(true);
+                }
+                else
+                {
+                    int dotIndex = issue.settingsPath.IndexOf('.');
+                    string segment = dotIndex >= 0 ? issue.settingsPath.Substring(0, dotIndex) : issue.settingsPath;
+                    if (cardsBySettingsSegment.TryGetValue(segment, out CityGeneratorCard card))
+                        card.SetHasError(true);
+                }
+
+                if (tabIdByExactPath.TryGetValue(issue.settingsPath, out string aliasedTabId))
+                {
+                    tabsWithErrors.Add(aliasedTabId);
+                }
+                else
+                {
+                    int dotIndex = issue.settingsPath.IndexOf('.');
+                    string segment = dotIndex >= 0 ? issue.settingsPath.Substring(0, dotIndex) : issue.settingsPath;
+                    if (tabIdBySettingsSegment.TryGetValue(segment, out string tabId))
+                        tabsWithErrors.Add(tabId);
+                }
             }
+
+            tabBar.SetHasError(TabCity, tabsWithErrors.Contains(TabCity));
+            tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
+            tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
 
             bool valid = issues.Count == 0;
             buildNewSceneButton.SetEnabled(valid);
             rebuildCurrentSceneButton.SetEnabled(valid);
-            string tooltip = valid ? string.Empty : $"{issues.Count} problem(s) to fix — see below.";
-            buildNewSceneButton.tooltip = tooltip;
-            rebuildCurrentSceneButton.tooltip = tooltip;
+            string problemSuffix = valid ? string.Empty : $" Disabled: {issues.Count} problem(s) to fix — see below.";
+            buildNewSceneButton.tooltip = BuildNewSceneButtonTooltip + problemSuffix;
+            rebuildCurrentSceneButton.tooltip = RebuildCurrentSceneButtonTooltip + problemSuffix;
         }
 
         /// <summary>
@@ -554,6 +735,26 @@ namespace CityGenerator.Editor
 
             return $"A {gridWidth}x{gridHeight} grid has no interior intersections, so it has no crossings: " +
                    "every block's pedestrians stay confined to their own sidewalk ring.";
+        }
+
+        /// <summary>
+        /// Non-blocking warning: Behaviour > Walk/Run Reference Speed are calibration anchors for
+        /// CharacterAnimator.controller's Locomotion blend tree, and must match Player > Walk/Run
+        /// Speed (see CityGeneratorSettings.PedestrianBehaviourSettings) or pedestrians foot-slide.
+        /// </summary>
+        private string GetReferenceSpeedMismatchWarning()
+        {
+            float playerWalkSpeed = FindProperty("player.walkSpeed").floatValue;
+            float playerRunSpeed = FindProperty("player.runSpeed").floatValue;
+            float walkReferenceSpeed = FindProperty("pedestrianBehaviour.walkReferenceSpeed").floatValue;
+            float runReferenceSpeed = FindProperty("pedestrianBehaviour.runReferenceSpeed").floatValue;
+
+            if (Mathf.Approximately(playerWalkSpeed, walkReferenceSpeed) && Mathf.Approximately(playerRunSpeed, runReferenceSpeed))
+                return null;
+
+            return $"Walk/Run Reference Speed ({walkReferenceSpeed:0.##}/{runReferenceSpeed:0.##}) no longer match Player > Walk/Run Speed " +
+                   $"({playerWalkSpeed:0.##}/{playerRunSpeed:0.##}). CharacterAnimator.controller's Locomotion blend tree is calibrated " +
+                   "against these, so pedestrians will foot-slide until they're aligned again.";
         }
 
         private void ResetToDefaults()
@@ -665,7 +866,7 @@ namespace CityGenerator.Editor
             if (!string.IsNullOrEmpty(scenePath))
             {
                 var pingButton = new Button(() => EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath)))
-                    { text = "Ping Scene" };
+                    { text = "Ping Scene", tooltip = "Highlight the generated scene asset in the Project window." };
                 resultPanel.Add(pingButton);
             }
         }

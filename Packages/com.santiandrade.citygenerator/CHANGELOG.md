@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The City Generator window now has three tabs — **City**, **Player** and **Pedestrians** —
+  instead of a single scrolling list of cards. The Player tab exposes the Player Prefab/Input
+  Actions fields plus a new **Player** card (movement, `CharacterController` tuning, input action
+  names) and **Camera** card (`ThirdPersonCamera` orbit/collision tuning, field of view). The
+  Pedestrians tab keeps the existing weighted prefab list and adds a **Behaviour** card (pace,
+  jitter, stop durations, animation reference speeds) and a **Crowd** card (`PedestrianManager`
+  separation/avoidance/performance staggering). All of these were previously hardcoded in
+  `CityGeneratorConstants` or left at the runtime scripts' own C# defaults, invisible from the
+  window.
+- Every field in the window now has a tooltip explaining what it does, so the tool is
+  self-documenting without needing to read the source.
+
+### Changed
+
+- Player and pedestrian tuning is now applied unconditionally to the generated instance, never to
+  the prefab asset: even a Player Prefab or pedestrian prefab that already carries its own
+  `PlayerController`/`CharacterController`/`PedestrianAgent` gets its values overwritten with
+  whatever the window's Player/Pedestrians tabs specify, so the tool's settings are always the
+  single source of truth for what ends up in the generated scene.
+
 ## [1.5.1] - 2026-08-25
 
 ### Fixed

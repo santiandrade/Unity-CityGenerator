@@ -39,11 +39,11 @@ namespace CityGenerator.Editor
                     player = (GameObject)PrefabUtility.InstantiatePrefab(settings.general.playerPrefab, scene);
                     player.name = "Player";
                     player.transform.position = summary.playerSpawnPosition;
-                    EnsurePlayerComponents(player, settings.general.inputActions);
+                    ConfigurePlayer(player, settings.general.inputActions, settings.player);
                     AssignPedestrianLayer(player);
                 }
 
-                CreateMainCamera(scene, player, settings.general.inputActions);
+                CreateMainCamera(scene, player, settings.general.inputActions, settings.player.actionMapName, settings.player.lookActionName, settings.camera);
 
                 string scenePath = GetNextFreeScenePath();
                 EditorSceneManager.SaveScene(scene, scenePath);
@@ -101,38 +101,39 @@ namespace CityGenerator.Editor
 
         // Lets any character model be assigned as Player Prefab, not just one already set up for
         // it: DefaultAssets/Prefabs/Characters/ models stay clean (just their Animator), and
-        // CharacterController/PlayerController are added here, with hardcoded default values,
-        // whenever the assigned prefab doesn't already carry them.
-        private static void EnsurePlayerComponents(GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions)
+        // CharacterController/PlayerController are added here whenever the assigned prefab
+        // doesn't already carry them. The tuning itself is applied unconditionally, on the
+        // instance only (never on the prefab asset): the Player tab in CityGeneratorWindow is
+        // the single source of truth, even for a prefab that ships its own baked tuning.
+        private static void ConfigurePlayer(GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions, PlayerSettings settings)
         {
-            if (player.GetComponent<CharacterController>() == null)
-            {
-                var characterController = player.AddComponent<CharacterController>();
-                characterController.height = CityGeneratorConstants.PlayerControllerHeight;
-                characterController.radius = CityGeneratorConstants.PlayerControllerRadius;
-                characterController.slopeLimit = CityGeneratorConstants.PlayerControllerSlopeLimit;
-                characterController.stepOffset = CityGeneratorConstants.PlayerControllerStepOffset;
-                characterController.skinWidth = CityGeneratorConstants.PlayerControllerSkinWidth;
-                characterController.minMoveDistance = CityGeneratorConstants.PlayerControllerMinMoveDistance;
-                characterController.center = CityGeneratorConstants.PlayerControllerCenter;
-            }
+            var characterController = player.GetComponent<CharacterController>();
+            if (characterController == null)
+                characterController = player.AddComponent<CharacterController>();
+            characterController.height = settings.controllerHeight;
+            characterController.radius = settings.controllerRadius;
+            characterController.slopeLimit = settings.controllerSlopeLimit;
+            characterController.stepOffset = settings.controllerStepOffset;
+            characterController.skinWidth = settings.controllerSkinWidth;
+            characterController.minMoveDistance = settings.controllerMinMoveDistance;
+            characterController.center = settings.controllerCenter;
 
-            if (player.GetComponent<PlayerController>() == null)
-            {
-                var playerController = player.AddComponent<PlayerController>();
-                var serialized = new SerializedObject(playerController);
-                serialized.FindProperty("inputActions").objectReferenceValue = inputActions;
-                serialized.FindProperty("actionMapName").stringValue = CityGeneratorConstants.PlayerActionMapName;
-                serialized.FindProperty("moveActionName").stringValue = CityGeneratorConstants.PlayerMoveActionName;
-                serialized.FindProperty("jumpActionName").stringValue = CityGeneratorConstants.PlayerJumpActionName;
-                serialized.FindProperty("sprintActionName").stringValue = CityGeneratorConstants.PlayerSprintActionName;
-                serialized.FindProperty("walkSpeed").floatValue = CityGeneratorConstants.PlayerWalkSpeed;
-                serialized.FindProperty("runSpeed").floatValue = CityGeneratorConstants.PlayerRunSpeed;
-                serialized.FindProperty("rotationSmoothTime").floatValue = CityGeneratorConstants.PlayerRotationSmoothTime;
-                serialized.FindProperty("gravity").floatValue = CityGeneratorConstants.PlayerGravity;
-                serialized.FindProperty("jumpHeight").floatValue = CityGeneratorConstants.PlayerJumpHeight;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-            }
+            var playerController = player.GetComponent<PlayerController>();
+            if (playerController == null)
+                playerController = player.AddComponent<PlayerController>();
+
+            var serialized = new SerializedObject(playerController);
+            serialized.FindProperty("inputActions").objectReferenceValue = inputActions;
+            serialized.FindProperty("actionMapName").stringValue = settings.actionMapName;
+            serialized.FindProperty("moveActionName").stringValue = settings.moveActionName;
+            serialized.FindProperty("jumpActionName").stringValue = settings.jumpActionName;
+            serialized.FindProperty("sprintActionName").stringValue = settings.sprintActionName;
+            serialized.FindProperty("walkSpeed").floatValue = settings.walkSpeed;
+            serialized.FindProperty("runSpeed").floatValue = settings.runSpeed;
+            serialized.FindProperty("rotationSmoothTime").floatValue = settings.rotationSmoothTime;
+            serialized.FindProperty("gravity").floatValue = settings.gravity;
+            serialized.FindProperty("jumpHeight").floatValue = settings.jumpHeight;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // Puts the player on the same layer CityGeneratorPedestrianBuilder uses for NPC
@@ -149,21 +150,34 @@ namespace CityGenerator.Editor
                 player.layer = pedestrianLayer;
         }
 
-        private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions)
+        private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions, string actionMapName, string lookActionName, CameraSettings settings)
         {
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
             SceneManager.MoveGameObjectToScene(cameraGO, scene);
             cameraGO.transform.position = new Vector3(36f, 28f, -36f);
             cameraGO.transform.rotation = Quaternion.Euler(27f, -45f, 0f);
             var camera = cameraGO.AddComponent<Camera>();
-            camera.fieldOfView = 45f;
+            camera.fieldOfView = settings.fieldOfView;
             cameraGO.AddComponent<AudioListener>();
             var thirdPersonCamera = cameraGO.AddComponent<ThirdPersonCamera>();
 
             var cameraSerialized = new SerializedObject(thirdPersonCamera);
             cameraSerialized.FindProperty("inputActions").objectReferenceValue = inputActions;
+            cameraSerialized.FindProperty("actionMapName").stringValue = actionMapName;
+            cameraSerialized.FindProperty("lookActionName").stringValue = lookActionName;
             if (player != null)
                 cameraSerialized.FindProperty("target").objectReferenceValue = player.transform;
+            cameraSerialized.FindProperty("verticalOffset").floatValue = settings.verticalOffset;
+            cameraSerialized.FindProperty("horizontalOffset").floatValue = settings.horizontalOffset;
+            cameraSerialized.FindProperty("distance").floatValue = settings.distance;
+            cameraSerialized.FindProperty("minDistance").floatValue = settings.minDistance;
+            cameraSerialized.FindProperty("sensitivity").floatValue = settings.sensitivity;
+            cameraSerialized.FindProperty("minPitch").floatValue = settings.minPitch;
+            cameraSerialized.FindProperty("maxPitch").floatValue = settings.maxPitch;
+            cameraSerialized.FindProperty("followSmoothTime").floatValue = settings.followSmoothTime;
+            cameraSerialized.FindProperty("collisionMask").intValue = settings.collisionMask.value;
+            cameraSerialized.FindProperty("collisionRadius").floatValue = settings.collisionRadius;
+            cameraSerialized.FindProperty("lockCursor").boolValue = settings.lockCursor;
             cameraSerialized.ApplyModifiedPropertiesWithoutUndo();
 
             if (player == null)

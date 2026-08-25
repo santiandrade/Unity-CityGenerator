@@ -225,6 +225,65 @@ namespace CityGenerator.Editor
             source = ReplaceField(source, "density", FormatFloat(settings.vegetation.density) + "f");
             source = ReplaceField(source, "lampDensity", FormatFloat(settings.props.lampDensity) + "f");
             source = ReplaceField(source, "binDensity", FormatFloat(settings.props.binDensity) + "f");
+
+            PlayerSettings player = settings.player;
+            source = ReplaceField(source, "walkSpeed", FormatFloat(player.walkSpeed) + "f");
+            source = ReplaceField(source, "runSpeed", FormatFloat(player.runSpeed) + "f");
+            source = ReplaceField(source, "rotationSmoothTime", FormatFloat(player.rotationSmoothTime) + "f");
+            source = ReplaceField(source, "gravity", FormatFloat(player.gravity) + "f");
+            source = ReplaceField(source, "jumpHeight", FormatFloat(player.jumpHeight) + "f");
+            source = ReplaceField(source, "controllerHeight", FormatFloat(player.controllerHeight) + "f");
+            source = ReplaceField(source, "controllerRadius", FormatFloat(player.controllerRadius) + "f");
+            source = ReplaceVector3Field(source, "controllerCenter", player.controllerCenter);
+            source = ReplaceField(source, "controllerSlopeLimit", FormatFloat(player.controllerSlopeLimit) + "f");
+            source = ReplaceField(source, "controllerStepOffset", FormatFloat(player.controllerStepOffset) + "f");
+            source = ReplaceField(source, "controllerSkinWidth", FormatFloat(player.controllerSkinWidth) + "f");
+            source = ReplaceField(source, "controllerMinMoveDistance", FormatFloat(player.controllerMinMoveDistance) + "f");
+            source = ReplaceStringField(source, "actionMapName", player.actionMapName);
+            source = ReplaceStringField(source, "moveActionName", player.moveActionName);
+            source = ReplaceStringField(source, "jumpActionName", player.jumpActionName);
+            source = ReplaceStringField(source, "sprintActionName", player.sprintActionName);
+            source = ReplaceStringField(source, "lookActionName", player.lookActionName);
+
+            CameraSettings camera = settings.camera;
+            source = ReplaceField(source, "fieldOfView", FormatFloat(camera.fieldOfView) + "f");
+            source = ReplaceField(source, "verticalOffset", FormatFloat(camera.verticalOffset) + "f");
+            source = ReplaceField(source, "horizontalOffset", FormatFloat(camera.horizontalOffset) + "f");
+            source = ReplaceField(source, "distance", FormatFloat(camera.distance) + "f");
+            source = ReplaceField(source, "minDistance", FormatFloat(camera.minDistance) + "f");
+            source = ReplaceField(source, "sensitivity", FormatFloat(camera.sensitivity) + "f");
+            source = ReplaceField(source, "minPitch", FormatFloat(camera.minPitch) + "f");
+            source = ReplaceField(source, "maxPitch", FormatFloat(camera.maxPitch) + "f");
+            source = ReplaceField(source, "followSmoothTime", FormatFloat(camera.followSmoothTime) + "f");
+            source = ReplaceLayerMaskField(source, "collisionMask", camera.collisionMask);
+            source = ReplaceField(source, "collisionRadius", FormatFloat(camera.collisionRadius) + "f");
+            source = ReplaceField(source, "lockCursor", camera.lockCursor ? "true" : "false");
+
+            PedestrianBehaviourSettings behaviour = settings.pedestrianBehaviour;
+            source = ReplaceField(source, "walkReferenceSpeed", FormatFloat(behaviour.walkReferenceSpeed) + "f");
+            source = ReplaceField(source, "runReferenceSpeed", FormatFloat(behaviour.runReferenceSpeed) + "f");
+            source = ReplaceField(source, "paceFraction", FormatFloat(behaviour.paceFraction) + "f");
+            source = ReplaceField(source, "runnerChance", FormatFloat(behaviour.runnerChance) + "f");
+            source = ReplaceField(source, "speedJitter", FormatFloat(behaviour.speedJitter) + "f");
+            source = ReplaceField(source, "lateralJitter", FormatFloat(behaviour.lateralJitter) + "f");
+            source = ReplaceField(source, "rotationSpeed", FormatFloat(behaviour.rotationSpeed) + "f");
+            source = ReplaceField(source, "arriveRadius", FormatFloat(behaviour.arriveRadius) + "f");
+            source = ReplaceField(source, "idleStopChance", FormatFloat(behaviour.idleStopChance) + "f");
+            source = ReplaceField(source, "idleStopDurationMin", FormatFloat(behaviour.idleStopDurationMin) + "f");
+            source = ReplaceField(source, "idleStopDurationMax", FormatFloat(behaviour.idleStopDurationMax) + "f");
+            source = ReplaceField(source, "poiStopDurationMin", FormatFloat(behaviour.poiStopDurationMin) + "f");
+            source = ReplaceField(source, "poiStopDurationMax", FormatFloat(behaviour.poiStopDurationMax) + "f");
+
+            CrowdSettings crowd = settings.crowd;
+            source = ReplaceField(source, "separationCellSize", FormatFloat(crowd.separationCellSize) + "f");
+            source = ReplaceField(source, "separationRadius", FormatFloat(crowd.separationRadius) + "f");
+            source = ReplaceField(source, "separationStrength", FormatFloat(crowd.separationStrength) + "f");
+            source = ReplaceField(source, "playerAvoidanceRadius", FormatFloat(crowd.playerAvoidanceRadius) + "f");
+            source = ReplaceField(source, "playerAvoidanceStrength", FormatFloat(crowd.playerAvoidanceStrength) + "f");
+            source = ReplaceField(source, "staggerMinAgentCount", crowd.staggerMinAgentCount.ToString(CultureInfo.InvariantCulture));
+            source = ReplaceField(source, "staggerDistance", FormatFloat(crowd.staggerDistance) + "f");
+            source = ReplaceField(source, "staggerFrames", crowd.staggerFrames.ToString(CultureInfo.InvariantCulture));
+
             return source;
         }
 
@@ -234,6 +293,27 @@ namespace CityGenerator.Editor
         {
             string pattern = $@"(public\s+(?:int|bool|float)\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
             return Regex.Replace(source, pattern, m => m.Groups[1].Value + newLiteral + ";");
+        }
+
+        private static string ReplaceStringField(string source, string fieldName, string newValue)
+        {
+            string pattern = $@"(public\s+string\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
+            return Regex.Replace(source, pattern, m => m.Groups[1].Value + "\"" + Escape(newValue) + "\";");
+        }
+
+        // LayerMask has an implicit int conversion both ways, so a bare int literal compiles fine
+        // as a field initializer (mirrors how the type is declared: "public LayerMask x = ~0;").
+        private static string ReplaceLayerMaskField(string source, string fieldName, LayerMask newValue)
+        {
+            string pattern = $@"(public\s+LayerMask\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
+            return Regex.Replace(source, pattern, m => m.Groups[1].Value + newValue.value + ";");
+        }
+
+        private static string ReplaceVector3Field(string source, string fieldName, Vector3 newValue)
+        {
+            string pattern = $@"(public\s+Vector3\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
+            string literal = $"new({FormatFloat(newValue.x)}f, {FormatFloat(newValue.y)}f, {FormatFloat(newValue.z)}f)";
+            return Regex.Replace(source, pattern, m => m.Groups[1].Value + literal + ";");
         }
     }
 }

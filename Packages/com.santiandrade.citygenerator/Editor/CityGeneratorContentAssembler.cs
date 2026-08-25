@@ -151,8 +151,8 @@ namespace CityGenerator.Editor
             if (settings.general.includePedestrians)
             {
                 Report("Pedestrians", 0.88f);
-                CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup);
-                pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random);
+                CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup, settings.crowd);
+                pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random, settings.pedestrianBehaviour);
             }
 
             // Every group except Vehicles/Pedestrians is 100% static geometry once generated:

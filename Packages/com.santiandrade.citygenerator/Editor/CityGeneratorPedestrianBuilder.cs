@@ -53,10 +53,21 @@ namespace CityGenerator.Editor
             return axes;
         }
 
-        /// <summary>Adds the PedestrianManager that ticks every generated PedestrianAgent from one central Update. Only called when pedestrians are actually generated.</summary>
-        public static void AddManagerComponent(Transform pedestrianNetworkGroup)
+        /// <summary>Adds the PedestrianManager that ticks every generated PedestrianAgent from one central Update, configured from <paramref name="settings"/>. Only called when pedestrians are actually generated.</summary>
+        public static void AddManagerComponent(Transform pedestrianNetworkGroup, CrowdSettings settings)
         {
-            pedestrianNetworkGroup.gameObject.AddComponent<PedestrianManager>();
+            PedestrianManager manager = pedestrianNetworkGroup.gameObject.AddComponent<PedestrianManager>();
+
+            var serialized = new SerializedObject(manager);
+            serialized.FindProperty("staggerMinAgentCount").intValue = settings.staggerMinAgentCount;
+            serialized.FindProperty("staggerDistance").floatValue = settings.staggerDistance;
+            serialized.FindProperty("staggerFrames").intValue = settings.staggerFrames;
+            serialized.FindProperty("cellSize").floatValue = settings.separationCellSize;
+            serialized.FindProperty("separationRadius").floatValue = settings.separationRadius;
+            serialized.FindProperty("separationStrength").floatValue = settings.separationStrength;
+            serialized.FindProperty("playerAvoidanceRadius").floatValue = settings.playerAvoidanceRadius;
+            serialized.FindProperty("playerAvoidanceStrength").floatValue = settings.playerAvoidanceStrength;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>
@@ -89,7 +100,7 @@ namespace CityGenerator.Editor
         /// <paramref name="pedestrians"/> by their configured percentage, spawning each one at a
         /// distinct (shuffled) Ring node — mirrors <see cref="CityGeneratorTrafficBuilder.BuildVehicles"/>.
         /// </summary>
-        public static List<GameObject> BuildPedestrians(List<PedestrianEntry> pedestrians, int pedestrianCount, PedestrianNetwork network, Transform pedestriansGroup, System.Random random)
+        public static List<GameObject> BuildPedestrians(List<PedestrianEntry> pedestrians, int pedestrianCount, PedestrianNetwork network, Transform pedestriansGroup, System.Random random, PedestrianBehaviourSettings behaviour)
         {
             var placed = new List<GameObject>();
             if (pedestrianCount <= 0 || pedestrians.Count == 0 || network == null)
@@ -148,6 +159,19 @@ namespace CityGenerator.Editor
 
                     var serializedAgent = new SerializedObject(agent);
                     serializedAgent.FindProperty("network").objectReferenceValue = network;
+                    serializedAgent.FindProperty("walkReferenceSpeed").floatValue = behaviour.walkReferenceSpeed;
+                    serializedAgent.FindProperty("runReferenceSpeed").floatValue = behaviour.runReferenceSpeed;
+                    serializedAgent.FindProperty("paceFraction").floatValue = behaviour.paceFraction;
+                    serializedAgent.FindProperty("runnerChance").floatValue = behaviour.runnerChance;
+                    serializedAgent.FindProperty("speedJitter").floatValue = behaviour.speedJitter;
+                    serializedAgent.FindProperty("lateralJitter").floatValue = behaviour.lateralJitter;
+                    serializedAgent.FindProperty("rotationSpeed").floatValue = behaviour.rotationSpeed;
+                    serializedAgent.FindProperty("arriveRadius").floatValue = behaviour.arriveRadius;
+                    serializedAgent.FindProperty("idleStopChance").floatValue = behaviour.idleStopChance;
+                    serializedAgent.FindProperty("idleStopDurationMin").floatValue = behaviour.idleStopDurationMin;
+                    serializedAgent.FindProperty("idleStopDurationMax").floatValue = behaviour.idleStopDurationMax;
+                    serializedAgent.FindProperty("poiStopDurationMin").floatValue = behaviour.poiStopDurationMin;
+                    serializedAgent.FindProperty("poiStopDurationMax").floatValue = behaviour.poiStopDurationMax;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
                     Animator animator = instance.GetComponent<Animator>();

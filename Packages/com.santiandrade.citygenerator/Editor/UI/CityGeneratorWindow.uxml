@@ -2,8 +2,12 @@
     <engine:VisualElement name="cg-root" class="cg-root">
         <engine:VisualElement name="cg-banner" class="cg-banner" />
 
+        <engine:VisualElement name="cg-tabs" class="cg-tabs" />
+
         <engine:ScrollView name="cg-scroll" class="cg-scroll">
-            <engine:VisualElement name="cg-cards" class="cg-cards" />
+            <engine:VisualElement name="cg-cards-city" class="cg-cards" />
+            <engine:VisualElement name="cg-cards-player" class="cg-cards" />
+            <engine:VisualElement name="cg-cards-pedestrians" class="cg-cards" />
         </engine:ScrollView>
 
         <engine:VisualElement name="cg-footer" class="cg-footer">
