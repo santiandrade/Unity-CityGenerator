@@ -13,6 +13,13 @@ namespace CityGenerator.Editor.UI
     /// single-selection <see cref="CityGeneratorGridPreview"/> for picking the block/quadrant),
     /// mirroring how each row of <see cref="CityGeneratorWeightedPrefabList"/> is self-contained —
     /// there is no shared "which entry am I editing" state to keep in sync.
+    ///
+    /// Rows are constructed with plain controls (TextField/ObjectField/Toggle/EnumField) that read
+    /// and write their SerializedProperty directly, instead of <c>PropertyField</c>: rows are added
+    /// to the tree well after <c>CityGeneratorWindow</c>'s one-time <c>rootVisualElement.Bind(...)</c>
+    /// call (they're created on demand, when the user clicks "+ Add Custom Place"), and a
+    /// <c>PropertyField</c> constructed at that point never picks up a binding — it renders with no
+    /// content at all. Same reasoning as <see cref="CityGeneratorPrefabGrid"/>/<see cref="CityGeneratorWeightedPrefabList"/>.
     /// </summary>
     internal class CityGeneratorCustomPlaceList : VisualElement
     {
@@ -87,35 +94,44 @@ namespace CityGenerator.Editor.UI
                 SerializedProperty entry = listProperty.GetArrayElementAtIndex(i);
                 int capturedIndex = i;
 
+                SerializedProperty titleProperty = entry.FindPropertyRelative("title");
+                SerializedProperty prefabProperty = entry.FindPropertyRelative("prefab");
+                SerializedProperty isPointOfInterestProperty = entry.FindPropertyRelative("isPointOfInterest");
+                SerializedProperty occupiesFullBlockProperty = entry.FindPropertyRelative("occupiesFullBlock");
+                SerializedProperty facingProperty = entry.FindPropertyRelative("facing");
+
                 var row = new VisualElement();
                 row.AddToClassList("cg-custom-place-list__row");
 
                 var header = new VisualElement();
                 header.AddToClassList("cg-custom-place-list__row-header");
-                var titleField = new PropertyField(entry.FindPropertyRelative("title"), "Title");
+                var titleField = new TextField("Title") { value = titleProperty.stringValue };
                 titleField.AddToClassList("cg-field-row");
+                titleField.RegisterValueChangedCallback(evt => SetString(titleProperty, evt.newValue));
                 header.Add(titleField);
                 var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×", tooltip = "Remove this entry from the list." };
                 removeButton.AddToClassList("cg-custom-place-list__remove");
                 header.Add(removeButton);
                 row.Add(header);
 
-                var prefabField = new PropertyField(entry.FindPropertyRelative("prefab"), "Prefab");
+                var prefabField = new ObjectField("Prefab") { objectType = typeof(GameObject), allowSceneObjects = false, value = prefabProperty.objectReferenceValue };
                 prefabField.AddToClassList("cg-field-row");
+                prefabField.RegisterValueChangedCallback(evt => SetObjectReference(prefabProperty, evt.newValue));
                 row.Add(prefabField);
 
-                var poiField = new PropertyField(entry.FindPropertyRelative("isPointOfInterest"), "Is Point Of Interest");
+                var poiField = new Toggle("Is Point Of Interest") { value = isPointOfInterestProperty.boolValue };
                 poiField.AddToClassList("cg-field-row");
                 poiField.tooltip = "Reserved for a future minimap/POI system. No functional effect yet.";
+                poiField.RegisterValueChangedCallback(evt => SetBool(isPointOfInterestProperty, evt.newValue));
                 row.Add(poiField);
 
-                SerializedProperty occupiesFullBlockProperty = entry.FindPropertyRelative("occupiesFullBlock");
-                var occupiesField = new PropertyField(occupiesFullBlockProperty, "Occupies Full Block");
+                var occupiesField = new Toggle("Occupies Full Block") { value = occupiesFullBlockProperty.boolValue };
                 occupiesField.AddToClassList("cg-field-row");
                 row.Add(occupiesField);
 
-                var facingField = new PropertyField(entry.FindPropertyRelative("facing"), "Facing");
+                var facingField = new EnumField("Facing", (CustomPlaceFacing)facingProperty.enumValueIndex);
                 facingField.AddToClassList("cg-field-row");
+                facingField.RegisterValueChangedCallback(evt => SetEnum(facingProperty, (CustomPlaceFacing)evt.newValue));
                 row.Add(facingField);
 
                 var preview = new CityGeneratorGridPreview();
@@ -131,7 +147,11 @@ namespace CityGenerator.Editor.UI
 
                 // Occupying the full block hides the quadrant highlight in this same picker, so it
                 // must repaint the moment that toggle flips, not just on the next full Rebuild.
-                occupiesField.TrackPropertyValue(occupiesFullBlockProperty, _ => preview.Refresh());
+                occupiesField.RegisterValueChangedCallback(evt =>
+                {
+                    SetBool(occupiesFullBlockProperty, evt.newValue);
+                    preview.Refresh();
+                });
 
                 var hint = new Label("Click a block above to place this entry; click a corner to pick a quadrant (ignored when occupying the full block).");
                 hint.AddToClassList("cg-grid-preview__caption");
@@ -139,6 +159,38 @@ namespace CityGenerator.Editor.UI
 
                 rowsContainer.Add(row);
             }
+        }
+
+        private void SetString(SerializedProperty property, string value)
+        {
+            property.serializedObject.Update();
+            property.stringValue = value;
+            property.serializedObject.ApplyModifiedProperties();
+            onChanged?.Invoke();
+        }
+
+        private void SetBool(SerializedProperty property, bool value)
+        {
+            property.serializedObject.Update();
+            property.boolValue = value;
+            property.serializedObject.ApplyModifiedProperties();
+            onChanged?.Invoke();
+        }
+
+        private void SetObjectReference(SerializedProperty property, UnityEngine.Object value)
+        {
+            property.serializedObject.Update();
+            property.objectReferenceValue = value;
+            property.serializedObject.ApplyModifiedProperties();
+            onChanged?.Invoke();
+        }
+
+        private void SetEnum(SerializedProperty property, CustomPlaceFacing value)
+        {
+            property.serializedObject.Update();
+            property.enumValueIndex = (int)value;
+            property.serializedObject.ApplyModifiedProperties();
+            onChanged?.Invoke();
         }
 
         private void RemoveEntryAt(int index)
