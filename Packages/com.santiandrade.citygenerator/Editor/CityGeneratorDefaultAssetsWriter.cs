@@ -271,8 +271,6 @@ namespace CityGenerator.Editor
             source = ReplaceField(source, "idleStopChance", FormatFloat(behaviour.idleStopChance) + "f");
             source = ReplaceField(source, "idleStopDurationMin", FormatFloat(behaviour.idleStopDurationMin) + "f");
             source = ReplaceField(source, "idleStopDurationMax", FormatFloat(behaviour.idleStopDurationMax) + "f");
-            source = ReplaceField(source, "poiStopDurationMin", FormatFloat(behaviour.poiStopDurationMin) + "f");
-            source = ReplaceField(source, "poiStopDurationMax", FormatFloat(behaviour.poiStopDurationMax) + "f");
 
             CrowdSettings crowd = settings.crowd;
             source = ReplaceField(source, "separationCellSize", FormatFloat(crowd.separationCellSize) + "f");

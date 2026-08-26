@@ -12,25 +12,6 @@ namespace CityGenerator.Editor
     /// </summary>
     internal static class CityGeneratorPedestrianBuilder
     {
-        // Same diagonal arrangement as CityGeneratorPlazaBuilder's own BenchOffsets (not shared
-        // directly: that field is private, and duplicating four Vector2 literals built from the
-        // same public constant is cheaper than exposing internal layout details across builders).
-        private static readonly Vector2[] BenchOffsets =
-        {
-            new(CityGeneratorConstants.PlazaBenchRadius, CityGeneratorConstants.PlazaBenchRadius),
-            new(CityGeneratorConstants.PlazaBenchRadius, -CityGeneratorConstants.PlazaBenchRadius),
-            new(-CityGeneratorConstants.PlazaBenchRadius, -CityGeneratorConstants.PlazaBenchRadius),
-            new(-CityGeneratorConstants.PlazaBenchRadius, CityGeneratorConstants.PlazaBenchRadius),
-        };
-
-        private static readonly Vector2[] CenterpieceRingOffsets =
-        {
-            new(CityGeneratorConstants.PlazaCenterpieceRingRadius, CityGeneratorConstants.PlazaCenterpieceRingRadius),
-            new(CityGeneratorConstants.PlazaCenterpieceRingRadius, -CityGeneratorConstants.PlazaCenterpieceRingRadius),
-            new(-CityGeneratorConstants.PlazaCenterpieceRingRadius, -CityGeneratorConstants.PlazaCenterpieceRingRadius),
-            new(-CityGeneratorConstants.PlazaCenterpieceRingRadius, CityGeneratorConstants.PlazaCenterpieceRingRadius),
-        };
-
         /// <summary>
         /// Adds the <see cref="PedestrianNetwork"/> component to the "PedestrianNetwork" group and
         /// sets its axes, mirroring <see cref="CityGeneratorTrafficBuilder.AddNetworkComponent"/>.
@@ -180,8 +161,6 @@ namespace CityGenerator.Editor
                     serializedAgent.FindProperty("idleStopChance").floatValue = behaviour.idleStopChance;
                     serializedAgent.FindProperty("idleStopDurationMin").floatValue = behaviour.idleStopDurationMin;
                     serializedAgent.FindProperty("idleStopDurationMax").floatValue = behaviour.idleStopDurationMax;
-                    serializedAgent.FindProperty("poiStopDurationMin").floatValue = behaviour.poiStopDurationMin;
-                    serializedAgent.FindProperty("poiStopDurationMax").floatValue = behaviour.poiStopDurationMax;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
                     Animator animator = instance.GetComponent<Animator>();
@@ -222,61 +201,6 @@ namespace CityGenerator.Editor
                 var serialized = new SerializedObject(carAgent);
                 serialized.FindProperty("pedestrianMask").intValue = mask;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
-            }
-        }
-
-        /// <summary>
-        /// Adds a bench-radial + short centerpiece-loop of PointOfInterest nodes to every plaza
-        /// block, wired into the already-built ring: 4 nodes near the benches (LookAt the block
-        /// centre, matching how the bench itself faces inward), each linked to the ring corner in
-        /// its own diagonal and to the corresponding node of a short loop around the centerpiece —
-        /// mirrors CityGeneratorPlazaBuilder's own bench/centerpiece placement.
-        /// </summary>
-        public static void RegisterPointsOfInterest(PedestrianNetwork network, PlazaSettings plazaSettings, IReadOnlyList<BlockCell> blocks)
-        {
-            if (plazaSettings.benchPrefab == null && plazaSettings.centerpiecePrefab == null)
-                return;
-
-            foreach (BlockCell block in blocks)
-            {
-                if (!block.isPlaza)
-                    continue;
-
-                int[] benchNodes = null;
-                if (plazaSettings.benchPrefab != null)
-                {
-                    benchNodes = new int[BenchOffsets.Length];
-                    for (int i = 0; i < BenchOffsets.Length; i++)
-                    {
-                        Vector2 offset = BenchOffsets[i];
-                        Vector3 benchPos = block.center + new Vector3(offset.x, CityGeneratorConstants.GroundDatumY, offset.y);
-
-                        int corner = network.FindNearestNode(benchPos, PedestrianNodeKind.Ring);
-                        benchNodes[i] = corner >= 0
-                            ? network.RegisterPointOfInterest(benchPos, block.center, corner)
-                            : network.RegisterPointOfInterest(benchPos, block.center);
-                    }
-                }
-
-                if (plazaSettings.centerpiecePrefab != null)
-                {
-                    var ringNodes = new int[CenterpieceRingOffsets.Length];
-                    for (int i = 0; i < CenterpieceRingOffsets.Length; i++)
-                    {
-                        Vector2 offset = CenterpieceRingOffsets[i];
-                        Vector3 pos = block.center + new Vector3(offset.x, CityGeneratorConstants.GroundDatumY, offset.y);
-                        ringNodes[i] = network.RegisterPointOfInterest(pos, block.center);
-                    }
-
-                    for (int i = 0; i < ringNodes.Length; i++)
-                        network.ConnectPointOfInterest(ringNodes[i], ringNodes[(i + 1) % ringNodes.Length]);
-
-                    if (benchNodes != null)
-                    {
-                        for (int i = 0; i < ringNodes.Length; i++)
-                            network.ConnectPointOfInterest(ringNodes[i], benchNodes[i]);
-                    }
-                }
             }
         }
 

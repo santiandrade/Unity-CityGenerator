@@ -73,6 +73,7 @@ namespace CityGenerator.Editor
             Transform roads = GetOrCreateGroup(cityRoot, "Roads");
             Transform sidewalks = GetOrCreateGroup(cityRoot, "Sidewalks");
             Transform roadMarkings = GetOrCreateGroup(cityRoot, "RoadMarkings");
+            Transform customPlaces = GetOrCreateGroup(cityRoot, "CustomPlaces");
             Transform buildings = GetOrCreateGroup(cityRoot, "Buildings");
             Transform trafficLights = GetOrCreateGroup(cityRoot, "TrafficLights");
             Transform streetLights = GetOrCreateGroup(cityRoot, "StreetLights");
@@ -92,8 +93,12 @@ namespace CityGenerator.Editor
             CityGeneratorGroundBuilder.BuildSidewalks(settings.ground.sidewalkPrefab, sidewalks, blocks);
             CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
 
+            Report("Custom places", 0.2f);
+            (List<GameObject> builtCustomPlaces, HashSet<(int gridX, int gridY, int slot)> reservedSlots) =
+                CityGeneratorCustomPlaceBuilder.BuildCustomPlaces(settings.customPlaces, blocks, customPlaces);
+
             Report("Buildings", 0.25f);
-            List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random);
+            List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random, reservedSlots);
 
             // Street furniture avoids buildings/plaza content, the plaza lawns, and each other via
             // one shared, growing obstacle list threaded through every category in turn; the cache
@@ -101,10 +106,12 @@ namespace CityGenerator.Editor
             // reuses one probe instance per prefab to test rejected candidates without an
             // Instantiate/DestroyImmediate pair each time.
             var cache = new ObstacleCache();
-            var obstacles = new List<GameObject>(builtBuildings);
+            var obstacles = new List<GameObject>(builtCustomPlaces);
+            obstacles.AddRange(builtBuildings);
             // Mirrors `obstacles` but leaves out ground cover (plaza lawns) that the player is
             // meant to be able to stand on; used only to pick its spawn position below.
-            var playerAvoidObstacles = new List<GameObject>(builtBuildings);
+            var playerAvoidObstacles = new List<GameObject>(builtCustomPlaces);
+            playerAvoidObstacles.AddRange(builtBuildings);
 
             Report("Plazas", 0.35f);
             List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, cache, out List<GameObject> plazaLawns);
@@ -150,7 +157,6 @@ namespace CityGenerator.Editor
             PedestrianNetwork pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight);
             pedestrianNetwork.Build();
             CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
-            CityGeneratorPedestrianBuilder.RegisterPointsOfInterest(pedestrianNetwork, settings.plaza, blocks);
 
             List<GameObject> pedestrianInstances = new();
             if (settings.general.includePedestrians)
@@ -168,6 +174,7 @@ namespace CityGenerator.Editor
             MarkStatic(roads);
             MarkStatic(sidewalks);
             MarkStatic(roadMarkings);
+            MarkStatic(customPlaces);
             MarkStatic(buildings);
             MarkStatic(plaza);
             MarkStatic(trees);

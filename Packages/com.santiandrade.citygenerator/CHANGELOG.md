@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Custom Places**: a new "Custom Places" tab lets you define manually-placed entries (title,
+  prefab, a block/quadrant chosen from a per-entry grid picker, and a fixed 90-degree orientation)
+  that are instantiated instead of a random building at that position. A whole-block entry excludes
+  all 4 corners of its block from the random building distribution; a quarter-block entry excludes
+  only its own corner. Every Custom Place participates in the same shared obstacle list as other
+  placed content, so props/vegetation never overlap it. Validated the same way as every other list
+  in the tool: missing title/prefab, no position assigned, a plaza-block target, or a slot conflict
+  between two entries all block generation with an inline error.
+
+### Removed
+
+- The pedestrian network's Point of Interest machinery (`PedestrianNodeKind.PointOfInterest`,
+  `PointOfInterestDescriptor`, `RegisterPointOfInterest`/`ConnectPointOfInterest`, and the
+  bench/centerpiece POI registration previously done by `CityGeneratorPedestrianBuilder`) has been
+  removed entirely. Pedestrians no longer walk to and linger at benches/the plaza centerpiece —
+  those props are still generated exactly as before, just no longer wired into the pedestrian
+  graph. `PedestrianBehaviourSettings.poiStopDurationMin`/`poiStopDurationMax` were removed along
+  with it.
+
 ## [2.1.0] - 2026-08-26
 
 ### Added

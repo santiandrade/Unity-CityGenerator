@@ -23,6 +23,7 @@ namespace CityGenerator.Editor
         private const string TabCity = "city";
         private const string TabPlayer = "player";
         private const string TabPedestrians = "pedestrians";
+        private const string TabCustomPlaces = "customplaces";
 
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
         private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Light, camera and player are left untouched.";
@@ -54,6 +55,8 @@ namespace CityGenerator.Editor
         private CityGeneratorCard cameraCard;
         private CityGeneratorCard pedestrianBehaviourCard;
         private CityGeneratorCard crowdCard;
+        private CityGeneratorCard customPlacesCard;
+        private CityGeneratorCustomPlaceList customPlaceList;
         private CityGeneratorTabBar tabBar;
         private HelpBox referenceSpeedMismatchWarning;
         private CityGeneratorGridPreview gridPreview;
@@ -169,11 +172,13 @@ namespace CityGenerator.Editor
             VisualElement cityContainer = rootVisualElement.Q<VisualElement>("cg-cards-city");
             VisualElement playerContainer = rootVisualElement.Q<VisualElement>("cg-cards-player");
             VisualElement pedestriansContainer = rootVisualElement.Q<VisualElement>("cg-cards-pedestrians");
+            VisualElement customPlacesContainer = rootVisualElement.Q<VisualElement>("cg-cards-customplaces");
 
             tabBar = new CityGeneratorTabBar(tabsContainer);
             tabBar.AddTab(TabCity, "City", cityContainer);
             tabBar.AddTab(TabPlayer, "Player", playerContainer);
             tabBar.AddTab(TabPedestrians, "Pedestrians", pedestriansContainer);
+            tabBar.AddTab(TabCustomPlaces, "Custom Places", customPlacesContainer);
 
             BuildGeneralCard(cityContainer);
             BuildGroundCard(cityContainer);
@@ -189,6 +194,8 @@ namespace CityGenerator.Editor
             BuildPedestriansCard(pedestriansContainer);
             BuildPedestrianBehaviourCard(pedestriansContainer);
             BuildCrowdCard(pedestriansContainer);
+
+            BuildCustomPlacesCard(customPlacesContainer);
 
             BuildFooter();
 
@@ -408,8 +415,6 @@ namespace CityGenerator.Editor
             content.Add(CreateField("pedestrianBehaviour.idleStopChance"));
             content.Add(CreateField("pedestrianBehaviour.idleStopDurationMin"));
             content.Add(CreateField("pedestrianBehaviour.idleStopDurationMax"));
-            content.Add(CreateField("pedestrianBehaviour.poiStopDurationMin"));
-            content.Add(CreateField("pedestrianBehaviour.poiStopDurationMax"));
         }
 
         private void BuildCrowdCard(VisualElement parent)
@@ -425,6 +430,14 @@ namespace CityGenerator.Editor
             content.Add(CreateField("crowd.staggerMinAgentCount"));
             content.Add(CreateField("crowd.staggerDistance"));
             content.Add(CreateField("crowd.staggerFrames"));
+        }
+
+        private void BuildCustomPlacesCard(VisualElement parent)
+        {
+            customPlacesCard = AddCard(parent, "customPlaces", "Custom Places", "d_Prefab On Icon", defaultExpanded: true, TabCustomPlaces);
+            customPlaceList = new CityGeneratorCustomPlaceList(RefreshDynamicUi);
+            customPlaceList.Bind(FindProperty("customPlaces"));
+            customPlacesCard.ContentContainer.Add(customPlaceList);
         }
 
         private void BuildFooter()
@@ -547,6 +560,8 @@ namespace CityGenerator.Editor
             crowdCard.SetBadge($"{FindProperty("crowd.staggerMinAgentCount").intValue}+ staggered");
 
             gridPreview.SetGrid(gridWidth, gridHeight);
+            customPlaceList.SetGrid(gridWidth, gridHeight);
+            customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
             int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
             float totalSize = gridWidth * CityGeneratorConstants.CellPitch;
@@ -627,6 +642,7 @@ namespace CityGenerator.Editor
             tabBar.SetHasError(TabCity, tabsWithErrors.Contains(TabCity));
             tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
             tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
+            tabBar.SetHasError(TabCustomPlaces, tabsWithErrors.Contains(TabCustomPlaces));
 
             int blockingCount = 0;
             foreach (CityGeneratorValidationIssue issue in issues)

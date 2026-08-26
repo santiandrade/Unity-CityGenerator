@@ -8,6 +8,7 @@
             <engine:VisualElement name="cg-cards-city" class="cg-cards" />
             <engine:VisualElement name="cg-cards-player" class="cg-cards" />
             <engine:VisualElement name="cg-cards-pedestrians" class="cg-cards" />
+            <engine:VisualElement name="cg-cards-customplaces" class="cg-cards" />
         </engine:ScrollView>
 
         <engine:VisualElement name="cg-footer" class="cg-footer">

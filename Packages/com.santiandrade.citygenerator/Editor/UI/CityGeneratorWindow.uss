@@ -404,3 +404,36 @@
 .cg-weighted-list__add-field {
     margin-top: 2px;
 }
+
+/* ---------- Custom place list ---------- */
+
+.cg-custom-place-list__row {
+    background-color: var(--cg-surface-alt);
+    border-radius: 4px;
+    padding: 6px;
+    margin-bottom: 8px;
+}
+
+.cg-custom-place-list__row-header {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cg-custom-place-list__row-header .cg-field-row {
+    flex-grow: 1;
+}
+
+.cg-custom-place-list__remove {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 9px;
+    background-color: transparent;
+    color: var(--cg-danger);
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.cg-custom-place-list__add-button {
+    margin-top: 2px;
+}
