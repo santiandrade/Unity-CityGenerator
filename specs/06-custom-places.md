@@ -3,6 +3,7 @@
 > **Estado:** Implemented
 > **Depende de:** SPEC 01 (City Generator Tool), SPEC 03 (Red peatonal), SPEC 04 (Correcciones críticas y arquitectónicas)
 > **Fecha:** 2026-08-26
+> **Nota posterior (2026-08-27):** la tab dedicada "Custom Places" descrita aquí se eliminó; la card de Custom Places se movió a la tab "City" (última card de esa tab). El resto de esta spec (modelo de datos, builder, validación, picker visual) sigue vigente sin cambios — ver `docs/architecture/custom-places.md` y `docs/architecture/editor-tool.md` para el estado actual.
 > **Objetivo:** Añadir "Custom Places" — lugares definidos manualmente por el usuario (título, prefab, posición fija en manzana/slot elegida en un grid visual, orientación fija) que se instancian en lugar de un edificio aleatorio en esa posición — y, en paralelo, desvincular por completo el sistema de puntos de interés (POI) de la red peatonal, eliminando la parada aleatoria de peatones en bancos/plaza.
 
 ## Scope

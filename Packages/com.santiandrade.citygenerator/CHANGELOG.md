@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The Custom Places card moved from its own "Custom Places" tab into the "City" tab (as its last
+  card). The tab it used to live on is gone; the tool now has three tabs (City/Player/Pedestrians)
+  instead of four.
+
 ## [2.2.0] - 2026-08-26
 
 ### Added

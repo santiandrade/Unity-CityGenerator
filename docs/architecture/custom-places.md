@@ -20,4 +20,4 @@ Runs **before** `CityGeneratorBuildingBuilder` in the pipeline and returns the r
 
 ## UI
 
-`CityGeneratorCustomPlaceList` (`Editor/UI/`) is the list editor for the Custom Places tab: each row is self-contained (own title/prefab/toggle/facing controls plus its own grid preview), same convention as `CityGeneratorWeightedPrefabList`'s rows. Its fields are plain `TextField`/`ObjectField`/`Toggle`/`EnumField` controls, **not** `PropertyField` — a `PropertyField` on a row created after the window's one-time `Bind()` call never binds and renders empty (see `editor-tool.md`).
+`CityGeneratorCustomPlaceList` (`Editor/UI/`) is the list editor for the Custom Places card, on the **City** tab: each row is self-contained (own title/prefab/toggle/facing controls plus its own grid preview), same convention as `CityGeneratorWeightedPrefabList`'s rows. Its fields are plain `TextField`/`ObjectField`/`Toggle`/`EnumField` controls, **not** `PropertyField` — a `PropertyField` on a row created after the window's one-time `Bind()` call never binds and renders empty (see `editor-tool.md`).

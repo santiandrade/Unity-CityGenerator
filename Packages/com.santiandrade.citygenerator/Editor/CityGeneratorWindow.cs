@@ -23,7 +23,6 @@ namespace CityGenerator.Editor
         private const string TabCity = "city";
         private const string TabPlayer = "player";
         private const string TabPedestrians = "pedestrians";
-        private const string TabCustomPlaces = "customplaces";
 
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
         private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Light, camera and player are left untouched.";
@@ -172,13 +171,11 @@ namespace CityGenerator.Editor
             VisualElement cityContainer = rootVisualElement.Q<VisualElement>("cg-cards-city");
             VisualElement playerContainer = rootVisualElement.Q<VisualElement>("cg-cards-player");
             VisualElement pedestriansContainer = rootVisualElement.Q<VisualElement>("cg-cards-pedestrians");
-            VisualElement customPlacesContainer = rootVisualElement.Q<VisualElement>("cg-cards-customplaces");
 
             tabBar = new CityGeneratorTabBar(tabsContainer);
             tabBar.AddTab(TabCity, "City", cityContainer);
             tabBar.AddTab(TabPlayer, "Player", playerContainer);
             tabBar.AddTab(TabPedestrians, "Pedestrians", pedestriansContainer);
-            tabBar.AddTab(TabCustomPlaces, "Custom Places", customPlacesContainer);
 
             BuildGeneralCard(cityContainer);
             BuildGroundCard(cityContainer);
@@ -187,6 +184,7 @@ namespace CityGenerator.Editor
             BuildVegetationCard(cityContainer);
             BuildVehiclesCard(cityContainer);
             BuildPropsCard(cityContainer);
+            BuildCustomPlacesCard(cityContainer);
 
             BuildPlayerCard(playerContainer);
             BuildCameraCard(playerContainer);
@@ -194,8 +192,6 @@ namespace CityGenerator.Editor
             BuildPedestriansCard(pedestriansContainer);
             BuildPedestrianBehaviourCard(pedestriansContainer);
             BuildCrowdCard(pedestriansContainer);
-
-            BuildCustomPlacesCard(customPlacesContainer);
 
             BuildFooter();
 
@@ -426,7 +422,7 @@ namespace CityGenerator.Editor
 
         private void BuildCustomPlacesCard(VisualElement parent)
         {
-            customPlacesCard = AddCard(parent, "customPlaces", "Custom Places", "d_Prefab On Icon", defaultExpanded: true, TabCustomPlaces);
+            customPlacesCard = AddCard(parent, "customPlaces", "Custom Places", "d_Prefab On Icon", defaultExpanded: true, TabCity);
             customPlaceList = new CityGeneratorCustomPlaceList(RefreshDynamicUi);
             customPlaceList.Bind(FindProperty("customPlaces"));
             customPlacesCard.ContentContainer.Add(customPlaceList);
@@ -634,7 +630,6 @@ namespace CityGenerator.Editor
             tabBar.SetHasError(TabCity, tabsWithErrors.Contains(TabCity));
             tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
             tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
-            tabBar.SetHasError(TabCustomPlaces, tabsWithErrors.Contains(TabCustomPlaces));
 
             int blockingCount = 0;
             foreach (CityGeneratorValidationIssue issue in issues)

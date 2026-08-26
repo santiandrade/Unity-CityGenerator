@@ -8,12 +8,11 @@ Detail behind the "The tool" section of the root `CLAUDE.md`. Namespace `CityGen
 
 Built with **UI Toolkit** (`CreateGUI`, not `OnGUI`): `Editor/UI/CityGeneratorWindow.uxml` is the structural skeleton (banner, tab bar, scrollable card container per tab, footer) cloned into `rootVisualElement`, styled by `CityGeneratorWindow.uss` plus a theme sheet (`_Dark`/`_Light`, picked by `EditorGUIUtility.isProSkin`) that only redefines `--cg-*` color variables.
 
-Four tabs:
+Three tabs:
 
-- **City** — general/ground/plaza/buildings/vegetation/vehicles/props.
+- **City** — general/ground/plaza/buildings/vegetation/vehicles/props, plus the Custom Places card (last on the tab) — see `custom-places.md`.
 - **Player** — Player Prefab + Input Actions (moved here from General), a Player card for movement/`CharacterController`/input action names, a Camera card for `ThirdPersonCamera` orbit/collision/field-of-view tuning.
 - **Pedestrians** — the weighted pedestrian list, a Behaviour card for pace/jitter/stop tuning and the animation reference speeds, a Crowd card for `PedestrianManager` separation/avoidance/staggering.
-- **Custom Places** — see `custom-places.md`.
 
 Switched by `CityGeneratorTabBar`, a hand-rolled tab strip (**not** `UnityEngine.UIElements.TabView`) so it can stay themed with `--cg-*` and mark a tab red when a card on it has a validation error; selection persisted in `EditorPrefs`. Every section is built in code as a `CityGeneratorCard` (collapsible, open/closed state persisted per-card in `EditorPrefs`, badge summarising its content, turns red when one of its fields fails validation).
 
