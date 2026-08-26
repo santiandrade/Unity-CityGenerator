@@ -5,15 +5,18 @@
 
 /* ---------- Banner ---------- */
 
-/* Just the thumbnail: height is recomputed in code from the resolved width on every layout
-   pass (CityGeneratorWindow.BuildBanner) so the full image always shows, uncropped and
-   undistorted, at whatever width the window currently has. */
+/* Fixed height regardless of window width, so a wide window doesn't let the banner eat
+   the vertical space needed for the actual parameters. Wide windows crop the image's
+   sides instead of growing taller; scale-and-crop keeps it centered both ways. */
 .cg-banner {
     flex-shrink: 0;
+    height: 200px;
     background-color: var(--cg-surface-alt);
     border-bottom-width: 1px;
     border-bottom-color: var(--cg-border);
-    -unity-background-scale-mode: scale-to-fit;
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: cover;
 }
 
 /* ---------- Tabs ---------- */

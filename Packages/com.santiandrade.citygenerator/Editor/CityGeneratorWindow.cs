@@ -206,10 +206,9 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
-        /// The header is just the thumbnail, at whatever width the window currently has, with its
-        /// full image always visible — never cropped or distorted. USS can't derive height from an
-        /// element's own resolved width, so the aspect-correct height is recomputed here on every
-        /// layout pass instead (mirrors the old IMGUI window's own <c>width / aspect</c> math).
+        /// The header is the thumbnail at a fixed height (set in USS) regardless of window width,
+        /// so a wide window doesn't let the banner eat the space needed for the actual parameters.
+        /// The image is centered and cropped to fill that height via USS background-size/-position.
         /// </summary>
         private void BuildBanner()
         {
@@ -222,13 +221,6 @@ namespace CityGenerator.Editor
             }
 
             banner.style.backgroundImage = new StyleBackground(thumbnail);
-            float aspect = (float)thumbnail.width / thumbnail.height;
-            banner.RegisterCallback<GeometryChangedEvent>(evt =>
-            {
-                float width = evt.newRect.width;
-                if (width > 0f)
-                    banner.style.height = width / aspect;
-            });
 
             UnityEditor.PackageManager.PackageInfo packageInfo =
                 UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(CityGeneratorWindow).Assembly);
