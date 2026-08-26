@@ -431,6 +431,33 @@ namespace CityGenerator.Tests.EditMode
         }
 
         [Test]
+        public void ValidateDetailed_TwoCustomPlacesWithDuplicateTitle_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("KioskA"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 0,
+                positionAssigned = true,
+            });
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = " kiosk ",
+                prefab = MakePrefabLike("KioskB"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 1,
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("titles must be unique")));
+        }
+
+        [Test]
         public void ValidateDetailed_ValidCustomPlace_HasNoBlockingIssues()
         {
             CityGeneratorSettings settings = MakeMinimalValidSettings();

@@ -191,9 +191,10 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Per-entry blocking checks for Custom Places: title, prefab, an assigned position that
-        /// resolves to a real, non-plaza block, and no two entries claiming the same slot (a
+        /// resolves to a real, non-plaza block, no two entries claiming the same slot (a
         /// whole-block entry conflicts with any entry in the same block; two corner entries
-        /// conflict only when they share the same corner).
+        /// conflict only when they share the same corner), and no two entries sharing the same
+        /// title.
         /// </summary>
         private static void ValidateCustomPlaces(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
         {
@@ -244,6 +245,22 @@ namespace CityGenerator.Editor
                     string labelA = string.IsNullOrEmpty(a.title) ? $"entry {i + 1}" : $"'{a.title}'";
                     string labelB = string.IsNullOrEmpty(b.title) ? $"entry {j + 1}" : $"'{b.title}'";
                     issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {labelA} and {labelB} both claim the same slot in block ({a.blockCell.x}, {a.blockCell.y})."));
+                }
+            }
+
+            for (int i = 0; i < customPlaces.Count; i++)
+            {
+                CustomPlaceEntry a = customPlaces[i];
+                if (string.IsNullOrEmpty(a.title))
+                    continue;
+
+                for (int j = i + 1; j < customPlaces.Count; j++)
+                {
+                    CustomPlaceEntry b = customPlaces[j];
+                    if (string.IsNullOrEmpty(b.title) || !string.Equals(a.title.Trim(), b.title.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: entries {i + 1} and {j + 1} both use the title '{a.title}' — titles must be unique."));
                 }
             }
         }
