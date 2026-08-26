@@ -319,19 +319,6 @@ namespace CityGenerator.Tests.EditMode
         }
 
         [Test]
-        public void ValidateDetailed_PedestrianPoiStopMaxBelowMin_IsBlocking()
-        {
-            CityGeneratorSettings settings = MakeMinimalValidSettings();
-            settings.pedestrianBehaviour.poiStopDurationMin = 10f;
-            settings.pedestrianBehaviour.poiStopDurationMax = 1f;
-
-            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
-
-            Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "pedestrianBehaviour.poiStopDurationMax" && !i.isWarning));
-        }
-
-        [Test]
         public void ValidateDetailed_NegativeCrowdSeparationRadius_IsBlocking()
         {
             CityGeneratorSettings settings = MakeMinimalValidSettings();
@@ -341,6 +328,152 @@ namespace CityGenerator.Tests.EditMode
 
             Assert.IsFalse(valid);
             Assert.IsTrue(issues.Exists(i => i.settingsPath == "crowd.separationRadius" && !i.isWarning));
+        }
+
+        [Test]
+        public void ValidateDetailed_CustomPlaceMissingTitle_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = string.Empty,
+                prefab = MakePrefabLike("Kiosk"),
+                blockCell = new Vector2Int(0, 0),
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("title")));
+        }
+
+        [Test]
+        public void ValidateDetailed_CustomPlaceMissingPrefab_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = null,
+                blockCell = new Vector2Int(0, 0),
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("prefab")));
+        }
+
+        [Test]
+        public void ValidateDetailed_CustomPlaceWithoutPositionAssigned_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("Kiosk"),
+                positionAssigned = false,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("no position assigned")));
+        }
+
+        [Test]
+        public void ValidateDetailed_CustomPlaceOnPlazaBlock_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.plaza.lawnPrefab = MakePrefabLike("Lawn");
+            settings.general.plazaCells.Add(new Vector2Int(0, 0));
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("Kiosk"),
+                blockCell = new Vector2Int(0, 0),
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("plaza")));
+        }
+
+        [Test]
+        public void ValidateDetailed_TwoCustomPlacesClaimingSameCorner_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk A",
+                prefab = MakePrefabLike("KioskA"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 0,
+                positionAssigned = true,
+            });
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk B",
+                prefab = MakePrefabLike("KioskB"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 0,
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("same slot")));
+        }
+
+        [Test]
+        public void ValidateDetailed_TwoCustomPlacesWithDuplicateTitle_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("KioskA"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 0,
+                positionAssigned = true,
+            });
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = " kiosk ",
+                prefab = MakePrefabLike("KioskB"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 1,
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("titles must be unique")));
+        }
+
+        [Test]
+        public void ValidateDetailed_ValidCustomPlace_HasNoBlockingIssues()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("Kiosk"),
+                blockCell = new Vector2Int(0, 0),
+                cornerSlot = 0,
+                facing = CustomPlaceFacing.North,
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
         }
 
         [Test]

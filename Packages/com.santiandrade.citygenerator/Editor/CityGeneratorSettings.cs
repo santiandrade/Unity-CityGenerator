@@ -20,6 +20,7 @@ namespace CityGenerator.Editor
         public CameraSettings camera = new();
         public PedestrianBehaviourSettings pedestrianBehaviour = new();
         public CrowdSettings crowd = new();
+        public List<CustomPlaceEntry> customPlaces = new();
     }
 
     [Serializable]
@@ -192,7 +193,7 @@ namespace CityGenerator.Editor
 
         [Header("Collision")]
         [Tooltip("Layers the camera collides against, pulling itself closer to the pivot to avoid clipping through geometry.")]
-        public LayerMask collisionMask = ~0;
+        public LayerMask collisionMask = -1;
         [Tooltip("Radius of the sphere used for the camera's own collision check.")]
         public float collisionRadius = 0.3f;
 
@@ -233,10 +234,6 @@ namespace CityGenerator.Editor
         public float idleStopDurationMin = 2f;
         [Tooltip("Longest random idle stop duration, in seconds.")]
         public float idleStopDurationMax = 6f;
-        [Tooltip("Longer stop range used at a PointOfInterest node (bench/fountain), where lingering reads as sitting/resting rather than a random street pause. Shortest duration, in seconds.")]
-        public float poiStopDurationMin = 5f;
-        [Tooltip("Longest duration for a PointOfInterest stop, in seconds.")]
-        public float poiStopDurationMax = 15f;
     }
 
     // Applied to the generated PedestrianManager by CityGeneratorPedestrianBuilder.AddManagerComponent.
@@ -264,5 +261,33 @@ namespace CityGenerator.Editor
         public float staggerDistance = 60f;
         [Tooltip("A staggered pedestrian's sensor runs 1 out of every this many frames, reusing the previous clearance in between.")]
         public int staggerFrames = 4;
+    }
+
+    [Serializable]
+    internal enum CustomPlaceFacing { North, East, South, West } // 90-degree steps, same axis as BuildingBuilder's Euler(0, 90*n, 0)
+
+    // Instantiated by CityGeneratorCustomPlaceBuilder at a fixed block/slot/orientation instead of
+    // a random building. cornerSlot reuses CityGeneratorBuildingBuilder.SlotOffsets' 0-3 indices so
+    // the picker, this builder and the building builder share one geometric source of truth.
+    [Serializable]
+    internal struct CustomPlaceEntry
+    {
+        [Tooltip("Display name for this entry in the tool UI and in validation messages. Required.")]
+        public string title;
+        [Tooltip("Prefab instantiated at the chosen position. Required.")]
+        public GameObject prefab; // required
+        [Tooltip("Reserved for a future minimap/POI system. No functional effect yet.")]
+        public bool isPointOfInterest;
+        [Tooltip("If true, occupies the whole block (all 4 corner slots) instead of a single 22 m corner slot.")]
+        public bool occupiesFullBlock;
+        [Tooltip("Block (x, y) chosen by clicking this entry's grid preview. Must be within the grid and not a plaza block.")]
+        public Vector2Int blockCell;
+        [Tooltip("Corner slot within the block (0-3, same convention as CityGeneratorBuildingBuilder.SlotOffsets), chosen by clicking a quadrant. Ignored when occupiesFullBlock is true.")]
+        public int cornerSlot;
+        [Tooltip("Fixed orientation, in 90-degree steps. Never randomised, unlike normal buildings.")]
+        public CustomPlaceFacing facing;
+        // Internal bookkeeping: whether blockCell/cornerSlot were ever set via the grid preview
+        // (distinguishes "not placed yet" from a legitimate (0,0) selection), read by the validator.
+        public bool positionAssigned;
     }
 }

@@ -8,9 +8,9 @@ namespace CityGenerator.Runtime
     /// <summary>
     /// Walks the <see cref="PedestrianNetwork"/> graph from destination to destination, moving by
     /// transform (no CharacterController/Rigidbody, mirroring CarAgent). Waits at a curb until the
-    /// crossing ahead is clear, and occasionally stops idle or at a point of interest before
-    /// picking a new destination. Animates with the same Speed/Grounded mapping PlayerController
-    /// uses, so it shares CharacterAnimator.controller's Locomotion blend tree unmodified.
+    /// crossing ahead is clear, and occasionally stops idle before picking a new destination.
+    /// Animates with the same Speed/Grounded mapping PlayerController uses, so it shares
+    /// CharacterAnimator.controller's Locomotion blend tree unmodified.
     /// </summary>
     [RequireComponent(typeof(Animator))]
     public class PedestrianAgent : MonoBehaviour
@@ -54,8 +54,6 @@ namespace CityGenerator.Runtime
         [SerializeField] private float idleStopChance = 0.3f;
         [SerializeField] private float idleStopDurationMin = 2f;
         [SerializeField] private float idleStopDurationMax = 6f;
-        [SerializeField] private float poiStopDurationMin = 5f;
-        [SerializeField] private float poiStopDurationMax = 15f;
 
         private static readonly int SpeedHash = Animator.StringToHash("Speed");
         private static readonly int GroundedHash = Animator.StringToHash("Grounded");
@@ -261,23 +259,6 @@ namespace CityGenerator.Runtime
 
         private void OnReachedDestination()
         {
-            PedestrianNode arrived = network.GetNode(currentNode);
-            if (arrived.Kind == PedestrianNodeKind.PointOfInterest)
-            {
-                if (arrived.LookAt.HasValue)
-                {
-                    Vector3 lookDir = arrived.LookAt.Value - transform.position;
-                    lookDir.y = 0f;
-                    if (lookDir.sqrMagnitude > 0.0001f)
-                    {
-                        transform.rotation = Quaternion.LookRotation(lookDir.normalized, Vector3.up);
-                    }
-                }
-
-                StartIdling(poiStopDurationMin, poiStopDurationMax);
-                return;
-            }
-
             if (Random.value < idleStopChance)
             {
                 StartIdling(idleStopDurationMin, idleStopDurationMax);

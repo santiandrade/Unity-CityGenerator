@@ -12,7 +12,9 @@ namespace CityGenerator.Editor
     /// </summary>
     internal static class CityGeneratorBuildingBuilder
     {
-        private static readonly Vector2[] SlotOffsets =
+        // Internal (not private): CityGeneratorCustomPlaceBuilder and the Custom Places grid
+        // picker reuse this same 0-3 index convention as their single geometric source of truth.
+        internal static readonly Vector2[] SlotOffsets =
         {
             new(-CityGeneratorConstants.BuildingSlotPitch / 2f, -CityGeneratorConstants.BuildingSlotPitch / 2f),
             new(CityGeneratorConstants.BuildingSlotPitch / 2f, -CityGeneratorConstants.BuildingSlotPitch / 2f),
@@ -20,7 +22,7 @@ namespace CityGenerator.Editor
             new(CityGeneratorConstants.BuildingSlotPitch / 2f, CityGeneratorConstants.BuildingSlotPitch / 2f),
         };
 
-        public static List<GameObject> BuildBuildings(List<GameObject> buildingPrefabs, Transform buildingsGroup, IReadOnlyList<BlockCell> blocks, int buildingsPerBlock, System.Random random)
+        public static List<GameObject> BuildBuildings(List<GameObject> buildingPrefabs, Transform buildingsGroup, IReadOnlyList<BlockCell> blocks, int buildingsPerBlock, System.Random random, IReadOnlyCollection<(int gridX, int gridY, int slot)> reservedSlots = null)
         {
             var placed = new List<GameObject>();
             if (buildingPrefabs.Count == 0)
@@ -30,19 +32,28 @@ namespace CityGenerator.Editor
             if (buildingsPerBlock == 0)
                 return placed;
 
+            var reserved = reservedSlots ?? System.Array.Empty<(int, int, int)>();
+
             var slots = new List<(BlockCell block, Vector2 offset)>();
             foreach (BlockCell block in blocks)
             {
                 if (block.isPlaza)
                     continue;
 
+                // A Custom Place occupying the whole block excludes every corner of that block
+                // from the random building distribution.
+                if (reserved.Contains((block.gridX, block.gridY, -1)))
+                    continue;
+
                 // Which corners get filled is randomised per block: with fewer than 4
                 // buildings, always picking corners 0..buildingsPerBlock-1 made every partially
                 // filled block look identical (same corners occupied, same corners empty).
-                List<int> cornerOrder = Enumerable.Range(0, CityGeneratorConstants.MaxBuildingSlotsPerBlock).ToList();
+                List<int> cornerOrder = Enumerable.Range(0, CityGeneratorConstants.MaxBuildingSlotsPerBlock)
+                    .Where(corner => !reserved.Contains((block.gridX, block.gridY, corner)))
+                    .ToList();
                 CityGeneratorRandomUtility.Shuffle(cornerOrder, random);
 
-                for (int s = 0; s < buildingsPerBlock; s++)
+                for (int s = 0; s < buildingsPerBlock && s < cornerOrder.Count; s++)
                     slots.Add((block, SlotOffsets[cornerOrder[s]]));
             }
 

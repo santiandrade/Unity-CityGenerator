@@ -97,31 +97,6 @@ namespace CityGenerator.Tests.EditMode
         }
 
         [Test]
-        public void RegisterPointOfInterest_SurvivesRebuild()
-        {
-            int ringNode = 0; // sw corner of block (0,0)
-            Vector3 poiPosition = network.GetNode(ringNode).Position + new Vector3(1f, 0f, 1f);
-            int poiIndex = network.RegisterPointOfInterest(poiPosition, poiPosition, ringNode);
-
-            // FindPath immediately after registering (before any rebuild) works.
-            var path = new int[8];
-            int length = network.FindPath(ringNode, poiIndex, path);
-            Assert.Greater(length, 0);
-
-            // Build() wipes `nodes` from scratch: the POI must be replayed from its serialized
-            // descriptor, at a *new* index (nodes are rebuilt in the same deterministic order, so
-            // it lands back at the same index here, but the test only relies on FindNearestNode).
-            network.Build();
-
-            int poiAfterRebuild = network.FindNearestNode(poiPosition, PedestrianNodeKind.PointOfInterest);
-            Assert.GreaterOrEqual(poiAfterRebuild, 0);
-
-            var pathAfterRebuild = new int[8];
-            int lengthAfterRebuild = network.FindPath(0, poiAfterRebuild, pathAfterRebuild);
-            Assert.Greater(lengthAfterRebuild, 0, "POI connection did not survive Build().");
-        }
-
-        [Test]
         public void ComponentOf_IsolatedRings_AreDifferentComponents()
         {
             // Node 0 belongs to block (0,0)'s ring; node 8 is the first node of block (0,1)'s ring
@@ -141,28 +116,6 @@ namespace CityGenerator.Tests.EditMode
                 if (candidate >= 0)
                     Assert.AreEqual(requiredComponent, network.ComponentOf(candidate));
             }
-        }
-
-        [Test]
-        public void RegisterPointOfInterest_RepeatedlyAfterBuild_DoesNotThrow()
-        {
-            // Regression test: registering several POIs after Build() (as
-            // CityGeneratorPedestrianBuilder.RegisterPointsOfInterest does once per plaza block)
-            // used to grow `nodes` without keeping the ComponentOf/PickRandomDestination-backing
-            // array in sync, throwing IndexOutOfRangeException the next time a pedestrian picked a
-            // destination.
-            for (int i = 0; i < 5; i++)
-            {
-                Vector3 poiPosition = network.GetNode(0).Position + new Vector3(i, 0f, i);
-                int poiIndex = network.RegisterPointOfInterest(poiPosition, poiPosition, 0);
-                Assert.AreEqual(network.ComponentOf(0), network.ComponentOf(poiIndex));
-            }
-
-            Assert.DoesNotThrow(() =>
-            {
-                for (int attempt = 0; attempt < 50; attempt++)
-                    network.PickRandomDestination(network.ComponentOf(0));
-            });
         }
 
         [Test]

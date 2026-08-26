@@ -101,10 +101,5 @@ namespace CityGenerator.Editor
         // much larger fraction of ring nodes can be filled before it reads as overcrowded than
         // the vehicle case (VehicleDensityWarningThreshold, 0.4).
         public const float PedestrianCountWarningThreshold = 0.7f;
-
-        // Short loop of PointOfInterest nodes around a plaza's centerpiece, inside the bench
-        // radius (PlazaBenchRadius, ~5.3) so it reads as "approaching the fountain" rather than
-        // overlapping the benches' own footprint.
-        public const float PlazaCenterpieceRingRadius = 2.5f;
     }
 }

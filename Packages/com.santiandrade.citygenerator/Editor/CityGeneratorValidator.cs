@@ -167,8 +167,6 @@ namespace CityGenerator.Editor
 
             if (settings.pedestrianBehaviour.idleStopDurationMin > settings.pedestrianBehaviour.idleStopDurationMax)
                 issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.idleStopDurationMax", "Pedestrians: Idle Stop Duration Max must be greater than or equal to Idle Stop Duration Min."));
-            if (settings.pedestrianBehaviour.poiStopDurationMin > settings.pedestrianBehaviour.poiStopDurationMax)
-                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMax", "Pedestrians: POI Stop Duration Max must be greater than or equal to POI Stop Duration Min."));
 
             if (settings.pedestrianBehaviour.arriveRadius < 0f)
                 issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.arriveRadius", "Pedestrians: Arrive Radius must not be negative."));
@@ -176,10 +174,6 @@ namespace CityGenerator.Editor
                 issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.idleStopDurationMin", "Pedestrians: Idle Stop Duration Min must not be negative."));
             if (settings.pedestrianBehaviour.idleStopDurationMax < 0f)
                 issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.idleStopDurationMax", "Pedestrians: Idle Stop Duration Max must not be negative."));
-            if (settings.pedestrianBehaviour.poiStopDurationMin < 0f)
-                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMin", "Pedestrians: POI Stop Duration Min must not be negative."));
-            if (settings.pedestrianBehaviour.poiStopDurationMax < 0f)
-                issues.Add(new CityGeneratorValidationIssue("pedestrianBehaviour.poiStopDurationMax", "Pedestrians: POI Stop Duration Max must not be negative."));
 
             if (settings.crowd.separationCellSize < 0f)
                 issues.Add(new CityGeneratorValidationIssue("crowd.separationCellSize", "Crowd: Separation Cell Size must not be negative."));
@@ -190,7 +184,85 @@ namespace CityGenerator.Editor
             if (settings.crowd.staggerDistance < 0f)
                 issues.Add(new CityGeneratorValidationIssue("crowd.staggerDistance", "Crowd: Stagger Distance must not be negative."));
 
+            ValidateCustomPlaces(settings, issues);
+
             return !issues.Exists(issue => !issue.isWarning);
+        }
+
+        /// <summary>
+        /// Per-entry blocking checks for Custom Places: title, prefab, an assigned position that
+        /// resolves to a real, non-plaza block, no two entries claiming the same slot (a
+        /// whole-block entry conflicts with any entry in the same block; two corner entries
+        /// conflict only when they share the same corner), and no two entries sharing the same
+        /// title.
+        /// </summary>
+        private static void ValidateCustomPlaces(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
+        {
+            List<CustomPlaceEntry> customPlaces = settings.customPlaces;
+            var plazaLookup = new HashSet<Vector2Int>(settings.general.plazaCells);
+
+            for (int i = 0; i < customPlaces.Count; i++)
+            {
+                CustomPlaceEntry entry = customPlaces[i];
+                string label = string.IsNullOrEmpty(entry.title) ? $"entry {i + 1}" : $"'{entry.title}'";
+
+                if (string.IsNullOrEmpty(entry.title))
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: entry {i + 1} needs a title."));
+
+                if (entry.prefab == null)
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} is missing its prefab."));
+
+                if (!entry.positionAssigned)
+                {
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} has no position assigned yet — click a block (and a quadrant, if not occupying the full block) in its grid preview."));
+                    continue;
+                }
+
+                bool inGrid = entry.blockCell.x >= 0 && entry.blockCell.x < settings.general.gridWidth
+                    && entry.blockCell.y >= 0 && entry.blockCell.y < settings.general.gridHeight;
+                if (!inGrid)
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), outside the {settings.general.gridWidth}x{settings.general.gridHeight} grid."));
+                else if (plazaLookup.Contains(entry.blockCell))
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which is a plaza block."));
+            }
+
+            for (int i = 0; i < customPlaces.Count; i++)
+            {
+                CustomPlaceEntry a = customPlaces[i];
+                if (!a.positionAssigned)
+                    continue;
+
+                for (int j = i + 1; j < customPlaces.Count; j++)
+                {
+                    CustomPlaceEntry b = customPlaces[j];
+                    if (!b.positionAssigned || a.blockCell != b.blockCell)
+                        continue;
+
+                    bool conflicts = a.occupiesFullBlock || b.occupiesFullBlock || a.cornerSlot == b.cornerSlot;
+                    if (!conflicts)
+                        continue;
+
+                    string labelA = string.IsNullOrEmpty(a.title) ? $"entry {i + 1}" : $"'{a.title}'";
+                    string labelB = string.IsNullOrEmpty(b.title) ? $"entry {j + 1}" : $"'{b.title}'";
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {labelA} and {labelB} both claim the same slot in block ({a.blockCell.x}, {a.blockCell.y})."));
+                }
+            }
+
+            for (int i = 0; i < customPlaces.Count; i++)
+            {
+                CustomPlaceEntry a = customPlaces[i];
+                if (string.IsNullOrEmpty(a.title))
+                    continue;
+
+                for (int j = i + 1; j < customPlaces.Count; j++)
+                {
+                    CustomPlaceEntry b = customPlaces[j];
+                    if (string.IsNullOrEmpty(b.title) || !string.Equals(a.title.Trim(), b.title.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: entries {i + 1} and {j + 1} both use the title '{a.title}' — titles must be unique."));
+                }
+            }
         }
 
         /// <summary>Item 10 gap 5: confirms the Move/Sprint/Jump/Look action names configured under Player > Input Actions actually exist in the assigned asset's action map, with the expected control type — a typo here otherwise fails silently at runtime (the action is just never found).</summary>

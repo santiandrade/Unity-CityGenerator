@@ -9,11 +9,14 @@ carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáfo
 tráfico autónomo y peatones— en una escena nueva o existente. Ábrela desde **Tools >
 City Generator > Open**.
 
-La ventana está dividida en tres pestañas: **City** (cuadrícula, suelo, edificios,
+La ventana está dividida en cuatro pestañas: **City** (cuadrícula, suelo, edificios,
 plazas, vehículos, mobiliario), **Player** (Player Prefab, movimiento, ajuste del
-`CharacterController` y de la cámara) y **Pedestrians** (la lista de prefabs de
-peatones, además de su comportamiento al caminar/esperar y el ajuste de la multitud) —
-todo se edita desde la ventana, sin necesidad de tocar el código del paquete.
+`CharacterController` y de la cámara), **Pedestrians** (la lista de prefabs de
+peatones, además de su comportamiento al caminar/esperar y el ajuste de la multitud) y
+**Custom Places** (lugares colocados a mano — un título, un prefab, una manzana/esquina
+elegida en un grid visual, y una orientación fija — que se instancian en lugar de un
+edificio aleatorio en esa posición) — todo se edita desde la ventana, sin necesidad de
+tocar el código del paquete.
 
 Se distribuye como el package embebido `com.santiandrade.citygenerator`, instalable
 directamente desde una git URL, con un conjunto completo de prefabs de demostración
