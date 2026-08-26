@@ -395,6 +395,22 @@ namespace CityGenerator.Runtime
             return nodePosition + perpendicular.normalized * lateralOffset;
         }
 
+        // Two node-graph-timing approaches (smearing the sidewalkY/roadY step across the whole
+        // curb<->crossing segment, then chasing it from whichever end the Curb node fell on) both
+        // still guessed *when* the step should happen instead of asking where it actually is.
+        // Grounding by raycast sidesteps that entirely: the agent's Y just always matches whatever
+        // real floor collider (RoadBase/Sidewalk, both BoxColliders -- see CLAUDE.md "Demo
+        // content") sits under its current XZ, so the step happens on the exact frame the agent's
+        // feet cross the true collider edge, not an approximation of it. groundMask defaults to
+        // Default (every floor/building/prop collider) since Vehicle/Pedestrian are dynamically
+        // assigned layers created at generation time and never used for ground geometry.
+        [Header("Grounding")]
+        [Tooltip("Raycast downward each frame to find the real floor height under the agent, instead of trusting the network's own sidewalkY/roadY node heights and the timing of travel between them.")]
+        [SerializeField] private LayerMask groundMask = 1;
+
+        private const float GroundRayUpOffset = 1f;
+        private const float GroundRayDownDistance = 3f;
+
         private void MoveTowards(Vector3 targetPosition, float dt)
         {
             Vector3 flatDir = targetPosition - transform.position;
@@ -405,9 +421,27 @@ namespace CityGenerator.Runtime
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, desired, rotationSpeed * dt);
             }
 
-            Vector3 nextPosition = Vector3.MoveTowards(transform.position, targetPosition, effectiveSpeed * dt);
-            distanceTravelled += Vector3.Distance(transform.position, nextPosition);
+            Vector3 currentPosition = transform.position;
+            Vector3 currentXZ = new(currentPosition.x, 0f, currentPosition.z);
+            Vector3 targetXZ = new(targetPosition.x, 0f, targetPosition.z);
+            Vector3 nextXZ = Vector3.MoveTowards(currentXZ, targetXZ, effectiveSpeed * dt);
+
+            float nextY = ResolveGroundY(nextXZ, currentPosition.y);
+            Vector3 nextPosition = new(nextXZ.x, nextY, nextXZ.z);
+
+            distanceTravelled += Vector3.Distance(currentPosition, nextPosition);
             transform.position = nextPosition;
+        }
+
+        private float ResolveGroundY(Vector3 xz, float fallbackY)
+        {
+            Vector3 origin = new(xz.x, fallbackY + GroundRayUpOffset, xz.z);
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, GroundRayUpOffset + GroundRayDownDistance, groundMask, QueryTriggerInteraction.Ignore))
+            {
+                return hit.point.y;
+            }
+
+            return fallbackY;
         }
     }
 }
