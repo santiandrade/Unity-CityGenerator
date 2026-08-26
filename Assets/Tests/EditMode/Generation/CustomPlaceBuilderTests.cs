@@ -45,6 +45,7 @@ namespace CityGenerator.Tests.EditMode.Generation
             settings.general.gridWidth = gridWidth;
             settings.general.gridHeight = gridHeight;
             settings.general.plazaCells.Clear();
+            settings.customPlaces.Clear();
             settings.general.useCustomSeed = true;
             settings.general.seed = seed;
             return settings;
