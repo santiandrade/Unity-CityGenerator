@@ -38,9 +38,51 @@ namespace CityGenerator.Runtime
 
         [SerializeField] private float playerAvoidanceStrength = 6f;
 
+        [Tooltip("This manager's PedestrianRoadProximityGrid, on the same GameObject. Set by CityGeneratorPedestrianBuilder.AddManagerComponent. Rebuilt once per frame here so CarAgent can query nearby pedestrians without a SphereCast (item 8, stage 4).")]
+        [SerializeField] private PedestrianRoadProximityGrid roadProximityGrid;
+
         private readonly List<PedestrianAgent> agents = new();
-        private readonly Dictionary<Vector2Int, List<PedestrianAgent>> grid = new();
+        // Item 9: bucketed by index into `agents`, not by PedestrianAgent reference -- lets
+        // ApplyLocalSeparation dedupe pairs by comparing indices instead of doing a second,
+        // separate identity lookup.
+        private readonly Dictionary<Vector2Int, List<int>> grid = new();
+        // Only the 4 "forward" neighbour offsets (out of the full 3x3 = 9): visiting a cell pair
+        // from both directions would process every agent pair twice, once from each side, exactly
+        // the duplication item 9 removes. Picking one consistent half of the 8 neighbours (plus the
+        // cell's own bucket, handled separately) visits each unordered cell pair exactly once.
+        private static readonly Vector2Int[] ForwardNeighbourOffsets =
+        {
+            new(1, 0), new(1, 1), new(0, 1), new(-1, 1)
+        };
+        private Vector3[] separationPush = System.Array.Empty<Vector3>();
+        // Same staggering condition already computed once per agent in Update, reused by
+        // ApplyLocalSeparation so a pair where neither side is due for a recalculation this frame
+        // is skipped entirely instead of redoing the same push it already applied last frame.
+        private bool[] activeThisFrame = System.Array.Empty<bool>();
         private int frameIndex;
+
+        [Tooltip("This manager's own PedestrianNetwork, set by CityGeneratorPedestrianBuilder.AddManagerComponent -- only used to size PathBufferPool. Deliberately not a FindAnyObjectByType lookup: with multiple independent cities/networks in the same scene (see CLAUDE.md), that could resolve a different city's network and size the pool for the wrong graph.")]
+        [SerializeField] private PedestrianNetwork network;
+
+        // Item 9: shared pool of FindPath output buffers, lazily constructed on first use (Play
+        // mode only -- this field, like the pool itself, is never serialized). Every
+        // PedestrianAgent rents from this instead of keeping its own permanent nodeCount-sized array.
+        private PedestrianPathBufferPool pathBufferPool;
+        public PedestrianPathBufferPool PathBufferPool
+        {
+            get
+            {
+                if (pathBufferPool == null)
+                {
+                    // `network` is only unset for a standalone PedestrianManager auto-created by
+                    // PedestrianAgent.OnEnable's fallback (no generator involved) -- the generated
+                    // case always pre-wires it via CityGeneratorPedestrianBuilder.AddManagerComponent.
+                    PedestrianNetwork resolvedNetwork = network != null ? network : FindAnyObjectByType<PedestrianNetwork>();
+                    pathBufferPool = new PedestrianPathBufferPool(resolvedNetwork != null ? resolvedNetwork.NodeCount : 0);
+                }
+                return pathBufferPool;
+            }
+        }
 
         // Looked up lazily rather than once in Awake: the scene's Player instance is spawned by
         // CityGeneratorSceneBuilder after PedestrianManager already exists, so an eager lookup
@@ -68,6 +110,9 @@ namespace CityGenerator.Runtime
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
             float sqrStaggerDistance = staggerDistance * staggerDistance;
 
+            if (activeThisFrame.Length < agents.Count)
+                activeThisFrame = new bool[agents.Count];
+
             for (int i = 0; i < agents.Count; i++)
             {
                 PedestrianAgent agent = agents[i];
@@ -80,11 +125,14 @@ namespace CityGenerator.Runtime
                         runLogic = (frameIndex + i) % staggerFrames == 0;
                 }
 
+                activeThisFrame[i] = runLogic;
                 agent.Tick(dt, runLogic);
             }
 
             ApplyLocalSeparation(dt);
             ApplyPlayerAvoidance(dt);
+
+            roadProximityGrid?.Rebuild(agents, staggerMinAgentCount, playerTransform);
 
             frameIndex++;
         }
@@ -122,60 +170,75 @@ namespace CityGenerator.Runtime
             }
         }
 
+        /// <summary>
+        /// Item 9: each unordered agent pair is evaluated exactly once (instead of once per side,
+        /// which computed and applied the same push twice under slightly different floating-point
+        /// paths) and, when neither agent of a pair is due for a recalculation this frame (see
+        /// activeThisFrame/the same staggering condition Update already computed), the pair is
+        /// skipped entirely -- a stationary crowd far from the camera doesn't repeat the same
+        /// push-apart work every single frame.
+        /// </summary>
         private void ApplyLocalSeparation(float dt)
         {
             RebuildGrid();
 
+            if (separationPush.Length < agents.Count)
+                separationPush = new Vector3[agents.Count];
+            System.Array.Clear(separationPush, 0, agents.Count);
+
             float sqrSeparationRadius = separationRadius * separationRadius;
+
+            foreach (KeyValuePair<Vector2Int, List<int>> entry in grid)
+            {
+                Vector2Int cell = entry.Key;
+                List<int> bucket = entry.Value;
+
+                for (int a = 0; a < bucket.Count; a++)
+                {
+                    for (int b = a + 1; b < bucket.Count; b++)
+                        AccumulateSeparationPair(bucket[a], bucket[b], sqrSeparationRadius);
+                }
+
+                for (int n = 0; n < ForwardNeighbourOffsets.Length; n++)
+                {
+                    if (!grid.TryGetValue(cell + ForwardNeighbourOffsets[n], out List<int> neighbourBucket))
+                        continue;
+
+                    for (int a = 0; a < bucket.Count; a++)
+                    {
+                        for (int b = 0; b < neighbourBucket.Count; b++)
+                            AccumulateSeparationPair(bucket[a], neighbourBucket[b], sqrSeparationRadius);
+                    }
+                }
+            }
 
             for (int i = 0; i < agents.Count; i++)
             {
-                PedestrianAgent agent = agents[i];
-                Vector3 position = agent.transform.position;
-                Vector2Int cell = CellOf(position);
-                Vector3 push = Vector3.zero;
-
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    for (int dz = -1; dz <= 1; dz++)
-                    {
-                        if (!grid.TryGetValue(new Vector2Int(cell.x + dx, cell.y + dz), out List<PedestrianAgent> bucket))
-                        {
-                            continue;
-                        }
-
-                        for (int b = 0; b < bucket.Count; b++)
-                        {
-                            PedestrianAgent other = bucket[b];
-                            if (other == agent)
-                            {
-                                continue;
-                            }
-
-                            Vector3 offset = position - other.transform.position;
-                            offset.y = 0f;
-                            float sqrDistance = offset.sqrMagnitude;
-                            if (sqrDistance < 0.0001f || sqrDistance >= sqrSeparationRadius)
-                            {
-                                continue;
-                            }
-
-                            float distance = Mathf.Sqrt(sqrDistance);
-                            push += offset / distance * (1f - distance / separationRadius);
-                        }
-                    }
-                }
-
-                if (push.sqrMagnitude > 0.0001f)
-                {
-                    agent.transform.position += push * separationStrength * dt;
-                }
+                if (separationPush[i].sqrMagnitude > 0.0001f)
+                    agents[i].transform.position += separationPush[i] * separationStrength * dt;
             }
+        }
+
+        private void AccumulateSeparationPair(int i, int j, float sqrSeparationRadius)
+        {
+            if (!activeThisFrame[i] && !activeThisFrame[j])
+                return;
+
+            Vector3 offset = agents[i].transform.position - agents[j].transform.position;
+            offset.y = 0f;
+            float sqrDistance = offset.sqrMagnitude;
+            if (sqrDistance < 0.0001f || sqrDistance >= sqrSeparationRadius)
+                return;
+
+            float distance = Mathf.Sqrt(sqrDistance);
+            Vector3 push = offset / distance * (1f - distance / separationRadius);
+            separationPush[i] += push;
+            separationPush[j] -= push;
         }
 
         private void RebuildGrid()
         {
-            foreach (List<PedestrianAgent> bucket in grid.Values)
+            foreach (List<int> bucket in grid.Values)
             {
                 bucket.Clear();
             }
@@ -183,13 +246,13 @@ namespace CityGenerator.Runtime
             for (int i = 0; i < agents.Count; i++)
             {
                 Vector2Int cell = CellOf(agents[i].transform.position);
-                if (!grid.TryGetValue(cell, out List<PedestrianAgent> bucket))
+                if (!grid.TryGetValue(cell, out List<int> bucket))
                 {
-                    bucket = new List<PedestrianAgent>();
+                    bucket = new List<int>();
                     grid[cell] = bucket;
                 }
 
-                bucket.Add(agents[i]);
+                bucket.Add(i);
             }
         }
 

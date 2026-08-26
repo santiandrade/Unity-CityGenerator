@@ -40,6 +40,16 @@ namespace CityGenerator.Runtime
         [SerializeField] private float rotationSpeed = 360f;
         [SerializeField] private float arriveRadius = 0.3f;
 
+        [Header("Spawn")]
+        [Tooltip("Set per-instance by CityGeneratorPedestrianBuilder.BuildPedestrians (spawn order). Used only to stagger this agent's first PlanNewDestination across several seconds instead of every agent planning on the same frame Start() runs -- see initialPlanStaggerSeconds.")]
+        [SerializeField] private int spawnIndex;
+
+        // Per-agent delay before its *first* PlanNewDestination call, item 9's answer to "every
+        // pedestrian spawned at once plans in the same frame". Reuses the existing Idling
+        // state/stopUntilTime machinery below rather than adding a new one: Start() enters Idling
+        // with a staggered stopUntilTime instead of calling PlanNewDestination directly.
+        private const float InitialPlanStaggerSeconds = 0.01f;
+
         [Header("Stops")]
         [SerializeField] private float idleStopChance = 0.3f;
         [SerializeField] private float idleStopDurationMin = 2f;
@@ -58,13 +68,12 @@ namespace CityGenerator.Runtime
         private PedestrianManager manager;
         private PedestrianState state = PedestrianState.Walking;
 
-        // A simple shortest path never revisits a node, so network.NodeCount is a hard upper
-        // bound on its length — sizing the buffer to it (allocated once, here, after `network` is
-        // known) means FindPath can only ever refuse a request for being genuinely unreachable,
-        // never for a route that's merely long. A fixed constant undercounted this badly: this
-        // graph has many hops per metre (a single street crossing alone costs 4), so with
-        // PlanNewDestination now deliberately biasing towards far destinations, routes routinely
-        // ran into a fixed-size cap that a physical-distance estimate didn't anticipate.
+        // Sized to the actual length of this agent's *current* path, grown only when a longer one
+        // is planned -- not to network.NodeCount up front. Item 9: FindPath's own output buffer
+        // (which does need the full nodeCount-worst-case size) is rented from
+        // PedestrianManager.PathBufferPool for the duration of PlanNewDestination and returned
+        // immediately after the used prefix is copied in here, instead of every agent keeping its
+        // own permanent nodeCount-sized array alive for its whole lifetime.
         private int[] path;
         private int pathLength;
         private int pathIndex;
@@ -128,8 +137,6 @@ namespace CityGenerator.Runtime
                 return;
             }
 
-            path = new int[network.NodeCount];
-
             bool isRunner = Random.value < runnerChance;
             float basePace = isRunner ? runReferenceSpeed : walkReferenceSpeed * paceFraction;
             effectiveSpeed = basePace * (1f + Random.Range(-speedJitter, speedJitter));
@@ -146,7 +153,12 @@ namespace CityGenerator.Runtime
                 return;
             }
 
-            PlanNewDestination();
+            // Staggers this agent's first PlanNewDestination instead of every spawned pedestrian
+            // planning on the same frame (Unity runs every pending Start() in one batch before the
+            // first Update, so without this every agent's initial BFS/candidate search would land
+            // in a single frame). Tick's existing Idling branch below picks this up naturally once
+            // stopUntilTime elapses -- no separate state machine needed.
+            StartIdling(spawnIndex * InitialPlanStaggerSeconds, spawnIndex * InitialPlanStaggerSeconds);
         }
 
         private void OnDisable()
@@ -300,10 +312,11 @@ namespace CityGenerator.Runtime
         {
             Vector3 fromPosition = network.GetNode(currentNode).Position;
             int candidateCount = 0;
+            int requiredComponent = network.ComponentOf(currentNode);
 
             for (int attempt = 0; attempt < DestinationCandidateAttempts; attempt++)
             {
-                int candidate = network.PickRandomDestination();
+                int candidate = network.PickRandomDestination(requiredComponent);
                 if (candidate < 0 || candidate == currentNode)
                 {
                     continue;
@@ -333,18 +346,30 @@ namespace CityGenerator.Runtime
 
             for (int i = 0; i < candidateCount; i++)
             {
-                pathLength = network.FindPath(currentNode, candidateNodes[i], path);
-                if (pathLength > 1)
+                int[] scratch = manager.PathBufferPool.Rent();
+                int length = network.FindPath(currentNode, candidateNodes[i], scratch);
+                if (length > 1)
                 {
+                    EnsurePathCapacity(length);
+                    System.Array.Copy(scratch, path, length);
+                    pathLength = length;
                     pathIndex = 1; // path[0] == currentNode
                     state = PedestrianState.Walking;
+                    manager.PathBufferPool.Return(scratch);
                     return;
                 }
+                manager.PathBufferPool.Return(scratch);
             }
 
             // None of this round's candidates were reachable (e.g. an isolated block on a 1xN
             // grid): settle briefly and try again with a fresh random draw instead of spinning.
             StartIdling(1f, 2f);
+        }
+
+        private void EnsurePathCapacity(int length)
+        {
+            if (path == null || path.Length < length)
+                path = new int[length];
         }
 
         /// <summary>
@@ -370,6 +395,22 @@ namespace CityGenerator.Runtime
             return nodePosition + perpendicular.normalized * lateralOffset;
         }
 
+        // Two node-graph-timing approaches (smearing the sidewalkY/roadY step across the whole
+        // curb<->crossing segment, then chasing it from whichever end the Curb node fell on) both
+        // still guessed *when* the step should happen instead of asking where it actually is.
+        // Grounding by raycast sidesteps that entirely: the agent's Y just always matches whatever
+        // real floor collider (RoadBase/Sidewalk, both BoxColliders -- see CLAUDE.md "Demo
+        // content") sits under its current XZ, so the step happens on the exact frame the agent's
+        // feet cross the true collider edge, not an approximation of it. groundMask defaults to
+        // Default (every floor/building/prop collider) since Vehicle/Pedestrian are dynamically
+        // assigned layers created at generation time and never used for ground geometry.
+        [Header("Grounding")]
+        [Tooltip("Raycast downward each frame to find the real floor height under the agent, instead of trusting the network's own sidewalkY/roadY node heights and the timing of travel between them.")]
+        [SerializeField] private LayerMask groundMask = 1;
+
+        private const float GroundRayUpOffset = 1f;
+        private const float GroundRayDownDistance = 3f;
+
         private void MoveTowards(Vector3 targetPosition, float dt)
         {
             Vector3 flatDir = targetPosition - transform.position;
@@ -380,9 +421,27 @@ namespace CityGenerator.Runtime
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, desired, rotationSpeed * dt);
             }
 
-            Vector3 nextPosition = Vector3.MoveTowards(transform.position, targetPosition, effectiveSpeed * dt);
-            distanceTravelled += Vector3.Distance(transform.position, nextPosition);
+            Vector3 currentPosition = transform.position;
+            Vector3 currentXZ = new(currentPosition.x, 0f, currentPosition.z);
+            Vector3 targetXZ = new(targetPosition.x, 0f, targetPosition.z);
+            Vector3 nextXZ = Vector3.MoveTowards(currentXZ, targetXZ, effectiveSpeed * dt);
+
+            float nextY = ResolveGroundY(nextXZ, currentPosition.y);
+            Vector3 nextPosition = new(nextXZ.x, nextY, nextXZ.z);
+
+            distanceTravelled += Vector3.Distance(currentPosition, nextPosition);
             transform.position = nextPosition;
+        }
+
+        private float ResolveGroundY(Vector3 xz, float fallbackY)
+        {
+            Vector3 origin = new(xz.x, fallbackY + GroundRayUpOffset, xz.z);
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, GroundRayUpOffset + GroundRayDownDistance, groundMask, QueryTriggerInteraction.Ignore))
+            {
+                return hit.point.y;
+            }
+
+            return fallbackY;
         }
     }
 }

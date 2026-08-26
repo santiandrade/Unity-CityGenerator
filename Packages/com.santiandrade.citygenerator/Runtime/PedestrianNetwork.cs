@@ -91,6 +91,11 @@ namespace CityGenerator.Runtime
 
         public PedestrianManager Manager => manager;
 
+        [Tooltip("This network's PedestrianRoadProximityGrid, on the same GameObject as Manager. Set by CityGeneratorPedestrianBuilder.AddManagerComponent. CarAgent queries it for nearby pedestrians instead of SphereCasting once the pedestrian count justifies it.")]
+        [SerializeField] private PedestrianRoadProximityGrid roadProximity;
+
+        public PedestrianRoadProximityGrid RoadProximity => roadProximity;
+
         [Header("Obstacle pruning")]
         [Tooltip("Layers Physics.CheckSphere treats as obstacles. Set by CityGeneratorPedestrianBuilder to exclude the Pedestrian layer: without that, a pedestrian standing right on its own spawn node gets detected by this very check the moment PedestrianNetwork.Awake() rebuilds the graph in Play, wrongly marking that node (and any neighbour whose only route ran through it) Blocked.")]
         [SerializeField] private LayerMask obstacleMask = ~0;
@@ -121,8 +126,19 @@ namespace CityGenerator.Runtime
         // by every FindPath call without allocating — Unity's single-threaded main loop makes one
         // shared set safe across every agent that calls FindPath in turn.
         private int[] bfsQueue;
-        private int[] bfsParent;
         private bool[] bfsVisited;
+
+        // Connected components (item 9): parallel to `nodes`, recomputed every Build() by a flood
+        // fill over the just-built edges. Lets PlanNewDestination filter candidate destinations to
+        // the origin's own component before ever attempting a route, instead of discovering
+        // unreachability only after a failed FindPath -- the common case on a 1xN/Nx1 grid, whose
+        // blocks have no interior intersections to link their rings together (see CLAUDE.md).
+        private int[] nodeComponent;
+
+        // Short-lived BFS route cache (item 9): keyed by origin node, invalidated on every Build().
+        // Several pedestrians planning in the same short window of frames from nearby/identical
+        // origins reuse one shared cameFrom tree instead of each re-running its own BFS.
+        private readonly Dictionary<int, int[]> cameFromCache = new();
 
         public int NodeCount
         {
@@ -172,6 +188,14 @@ namespace CityGenerator.Runtime
         {
             nodes.Clear();
             poiDescriptorByNodeIndex.Clear();
+            cameFromCache.Clear();
+            // Null (not just cleared) while Build() runs its own internal AddNode calls (ring,
+            // crossing, ReinsertPointsOfInterest): AddNode only tries to keep nodeComponent in sync
+            // once it's non-null, so those calls are left alone and ComputeConnectedComponents
+            // below computes the array fresh, once, from the complete final node set. It only
+            // needs to stay in sync afterwards, for nodes AddNode-ed by the generator once Build()
+            // has already returned (plaza POIs; see RegisterPointOfInterest).
+            nodeComponent = null;
 
             if (trafficNetwork == null)
             {
@@ -209,7 +233,57 @@ namespace CityGenerator.Runtime
             ReinsertPointsOfInterest();
 
             RebuildBfsBuffers();
+            ComputeConnectedComponents();
             PrunePlacedObstacles();
+        }
+
+        /// <summary>
+        /// Flood fill over the just-built edges, assigning every node an index identifying which
+        /// connected component it belongs to. Independent of Blocked: components reflect graph
+        /// topology (the same thing FindPath's reachability ultimately depends on), not runtime
+        /// obstacle pruning.
+        /// </summary>
+        private void ComputeConnectedComponents()
+        {
+            nodeComponent = new int[nodes.Count];
+            for (int i = 0; i < nodeComponent.Length; i++)
+                nodeComponent[i] = -1;
+
+            var stack = new Stack<int>();
+            int currentComponent = 0;
+
+            for (int start = 0; start < nodes.Count; start++)
+            {
+                if (nodeComponent[start] != -1)
+                    continue;
+
+                stack.Push(start);
+                nodeComponent[start] = currentComponent;
+
+                while (stack.Count > 0)
+                {
+                    int current = stack.Pop();
+                    List<int> neighbours = nodes[current].Neighbours;
+                    for (int n = 0; n < neighbours.Count; n++)
+                    {
+                        int next = neighbours[n];
+                        if (nodeComponent[next] == -1)
+                        {
+                            nodeComponent[next] = currentComponent;
+                            stack.Push(next);
+                        }
+                    }
+                }
+
+                currentComponent++;
+            }
+        }
+
+        /// <summary>Which connected component <paramref name="nodeIndex"/> belongs to -- two nodes only have any chance of a path between them if this matches.</summary>
+        public int ComponentOf(int nodeIndex)
+        {
+            EnsureBuilt();
+            return nodeComponent[nodeIndex];
         }
 
         /// <summary>
@@ -392,7 +466,20 @@ namespace CityGenerator.Runtime
                 LookAt = lookAt,
                 Neighbours = new List<int>()
             });
-            return nodes.Count - 1;
+            int index = nodes.Count - 1;
+
+            // Only once Build() has already computed the array once (nodeComponent is null while
+            // Build() runs its own internal AddNode calls -- see Build()): keeps it in sync for a
+            // node AddNode-ed afterwards (a plaza POI), so PickRandomDestination never indexes past
+            // its end. Starts unassigned (-1); RegisterPointOfInterest fills it in from whatever
+            // it connects to.
+            if (nodeComponent != null)
+            {
+                System.Array.Resize(ref nodeComponent, nodes.Count);
+                nodeComponent[index] = -1;
+            }
+
+            return index;
         }
 
         /// <summary>Adds an undirected edge between two existing nodes.</summary>
@@ -431,6 +518,11 @@ namespace CityGenerator.Runtime
                 ConnectPointOfInterest(nodeIndex, connectedNodeIndex);
             }
 
+            // A cached cameFrom tree from before this node/edge existed wouldn't know how to reach
+            // it. Cheap to drop entirely rather than track exactly which cached origins are now
+            // stale -- registration only happens a handful of times per generation run.
+            cameFromCache.Clear();
+
             return nodeIndex;
         }
 
@@ -446,6 +538,18 @@ namespace CityGenerator.Runtime
             Connect(a, b);
             AppendPoiConnection(a, b);
             AppendPoiConnection(b, a);
+
+            // Keeps a POI node's component in sync with whatever it just connected to (see AddNode):
+            // it starts at -1 (unassigned) and only ever needs to inherit once, from either side --
+            // covers both a POI connecting to an existing Ring node and a POI-to-POI edge (e.g. a
+            // plaza centerpiece's loop), as long as at least one side already has a real component.
+            if (nodeComponent != null)
+            {
+                if (nodeComponent[a] == -1 && nodeComponent[b] != -1)
+                    nodeComponent[a] = nodeComponent[b];
+                else if (nodeComponent[b] == -1 && nodeComponent[a] != -1)
+                    nodeComponent[b] = nodeComponent[a];
+            }
         }
 
         private void AppendPoiConnection(int nodeIndex, int otherIndex)
@@ -536,19 +640,29 @@ namespace CityGenerator.Runtime
             return trafficNetwork.AxisState(node.Intersection, node.CrossingAxisIsX) == TrafficLightState.Red;
         }
 
-        /// <summary>Picks a random non-blocked Ring or PointOfInterest node — the only kinds valid as a final destination.</summary>
-        public int PickRandomDestination()
+        /// <summary>
+        /// Picks a random non-blocked Ring or PointOfInterest node — the only kinds valid as a
+        /// final destination. When <paramref name="requiredComponent"/> is non-negative (item 9),
+        /// only considers nodes in that connected component: on a grid with isolated block rings
+        /// (e.g. gridWidth == 1 or gridHeight == 1, see CLAUDE.md), this stops PlanNewDestination
+        /// from repeatedly drawing candidates FindPath could never reach in the first place.
+        /// </summary>
+        public int PickRandomDestination(int requiredComponent = -1)
         {
             EnsureBuilt();
             int attempts = nodes.Count * 2;
             for (int attempt = 0; attempt < attempts; attempt++)
             {
                 int candidate = Random.Range(0, nodes.Count);
-                PedestrianNodeKind kind = nodes[candidate].Kind;
-                if (!nodes[candidate].Blocked && (kind == PedestrianNodeKind.Ring || kind == PedestrianNodeKind.PointOfInterest))
-                {
-                    return candidate;
-                }
+                PedestrianNode node = nodes[candidate];
+                if (node.Blocked)
+                    continue;
+                if (node.Kind != PedestrianNodeKind.Ring && node.Kind != PedestrianNodeKind.PointOfInterest)
+                    continue;
+                if (requiredComponent >= 0 && nodeComponent[candidate] != requiredComponent)
+                    continue;
+
+                return candidate;
             }
 
             return -1;
@@ -557,8 +671,14 @@ namespace CityGenerator.Runtime
         /// <summary>
         /// Breadth-first shortest path from `from` to `to` (fewest hops; every edge is unweighted).
         /// Writes node indices (from -> to inclusive) into the caller-supplied outPath buffer and
-        /// returns how many were written, or 0 if unreachable. Uses only the pre-allocated BFS
-        /// scratch buffers — no allocation per call.
+        /// returns how many were written, or 0 if unreachable.
+        ///
+        /// Item 9: the full single-source `cameFrom` tree from `from` is cached (see
+        /// <see cref="cameFromCache"/>) rather than only walking until `to` is found, so several
+        /// FindPath calls sharing the same `from` within one Build() window (PlanNewDestination
+        /// tries up to 8 candidate destinations per call, always from the current node) reuse one
+        /// BFS instead of re-running it per destination. The BFS itself is still zero-allocation
+        /// per call; only the first call for a given, not-yet-cached `from` allocates its tree.
         /// </summary>
         public int FindPath(int from, int to, int[] outPath)
         {
@@ -568,51 +688,17 @@ namespace CityGenerator.Runtime
                 return 0;
             }
 
-            // AddNode may have grown the graph (e.g. points of interest registered after Build())
-            // since the buffers were last sized.
-            if (bfsQueue == null || bfsQueue.Length != nodes.Count)
-            {
-                RebuildBfsBuffers();
-            }
-
             if (from == to)
             {
                 outPath[0] = from;
                 return 1;
             }
 
-            System.Array.Clear(bfsVisited, 0, bfsVisited.Length);
-            int head = 0, tail = 0;
-            bfsQueue[tail++] = from;
-            bfsVisited[from] = true;
-            bfsParent[from] = -1;
+            int[] cameFrom = GetOrComputeCameFrom(from);
 
-            bool found = false;
-            while (head < tail)
-            {
-                int current = bfsQueue[head++];
-                if (current == to)
-                {
-                    found = true;
-                    break;
-                }
-
-                List<int> neighbours = nodes[current].Neighbours;
-                for (int n = 0; n < neighbours.Count; n++)
-                {
-                    int next = neighbours[n];
-                    if (bfsVisited[next] || nodes[next].Blocked)
-                    {
-                        continue;
-                    }
-
-                    bfsVisited[next] = true;
-                    bfsParent[next] = current;
-                    bfsQueue[tail++] = next;
-                }
-            }
-
-            if (!found)
+            // -2 = never visited by this origin's BFS (unreachable); -1 is reserved for `from`
+            // itself, which can't be `to` here (handled above).
+            if (cameFrom[to] == -2)
             {
                 return 0;
             }
@@ -622,7 +708,7 @@ namespace CityGenerator.Runtime
             while (node != -1)
             {
                 length++;
-                node = bfsParent[node];
+                node = cameFrom[node];
             }
 
             if (length > outPath.Length)
@@ -636,16 +722,60 @@ namespace CityGenerator.Runtime
             while (node != -1 && writeIndex >= 0)
             {
                 outPath[writeIndex--] = node;
-                node = bfsParent[node];
+                node = cameFrom[node];
             }
 
             return length;
         }
 
+        private int[] GetOrComputeCameFrom(int from)
+        {
+            if (cameFromCache.TryGetValue(from, out int[] cached))
+            {
+                return cached;
+            }
+
+            // AddNode may have grown the graph (e.g. points of interest registered after Build())
+            // since the scratch buffers were last sized.
+            if (bfsQueue == null || bfsQueue.Length != nodes.Count)
+            {
+                RebuildBfsBuffers();
+            }
+
+            var cameFrom = new int[nodes.Count];
+            System.Array.Fill(cameFrom, -2);
+
+            System.Array.Clear(bfsVisited, 0, bfsVisited.Length);
+            int head = 0, tail = 0;
+            bfsQueue[tail++] = from;
+            bfsVisited[from] = true;
+            cameFrom[from] = -1;
+
+            while (head < tail)
+            {
+                int current = bfsQueue[head++];
+                List<int> neighbours = nodes[current].Neighbours;
+                for (int n = 0; n < neighbours.Count; n++)
+                {
+                    int next = neighbours[n];
+                    if (bfsVisited[next] || nodes[next].Blocked)
+                    {
+                        continue;
+                    }
+
+                    bfsVisited[next] = true;
+                    cameFrom[next] = current;
+                    bfsQueue[tail++] = next;
+                }
+            }
+
+            cameFromCache[from] = cameFrom;
+            return cameFrom;
+        }
+
         private void RebuildBfsBuffers()
         {
             bfsQueue = new int[nodes.Count];
-            bfsParent = new int[nodes.Count];
             bfsVisited = new bool[nodes.Count];
         }
 

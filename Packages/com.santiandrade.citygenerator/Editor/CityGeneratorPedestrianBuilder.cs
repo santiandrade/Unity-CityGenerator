@@ -61,6 +61,7 @@ namespace CityGenerator.Editor
         public static void AddManagerComponent(Transform pedestrianNetworkGroup, PedestrianNetwork network, CrowdSettings settings)
         {
             PedestrianManager manager = pedestrianNetworkGroup.gameObject.AddComponent<PedestrianManager>();
+            PedestrianRoadProximityGrid roadProximity = pedestrianNetworkGroup.gameObject.AddComponent<PedestrianRoadProximityGrid>();
 
             var serialized = new SerializedObject(manager);
             serialized.FindProperty("staggerMinAgentCount").intValue = settings.staggerMinAgentCount;
@@ -71,10 +72,13 @@ namespace CityGenerator.Editor
             serialized.FindProperty("separationStrength").floatValue = settings.separationStrength;
             serialized.FindProperty("playerAvoidanceRadius").floatValue = settings.playerAvoidanceRadius;
             serialized.FindProperty("playerAvoidanceStrength").floatValue = settings.playerAvoidanceStrength;
+            serialized.FindProperty("roadProximityGrid").objectReferenceValue = roadProximity;
+            serialized.FindProperty("network").objectReferenceValue = network;
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             var networkSerialized = new SerializedObject(network);
             networkSerialized.FindProperty("manager").objectReferenceValue = manager;
+            networkSerialized.FindProperty("roadProximity").objectReferenceValue = roadProximity;
             networkSerialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -164,6 +168,7 @@ namespace CityGenerator.Editor
 
                     var serializedAgent = new SerializedObject(agent);
                     serializedAgent.FindProperty("network").objectReferenceValue = network;
+                    serializedAgent.FindProperty("spawnIndex").intValue = placed.Count;
                     serializedAgent.FindProperty("walkReferenceSpeed").floatValue = behaviour.walkReferenceSpeed;
                     serializedAgent.FindProperty("runReferenceSpeed").floatValue = behaviour.runReferenceSpeed;
                     serializedAgent.FindProperty("paceFraction").floatValue = behaviour.paceFraction;
