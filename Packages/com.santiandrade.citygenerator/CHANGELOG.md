@@ -15,8 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all 4 corners of its block from the random building distribution; a quarter-block entry excludes
   only its own corner. Every Custom Place participates in the same shared obstacle list as other
   placed content, so props/vegetation never overlap it. Validated the same way as every other list
-  in the tool: missing title/prefab, no position assigned, a plaza-block target, or a slot conflict
-  between two entries all block generation with an inline error.
+  in the tool: missing title/prefab, no position assigned, a plaza-block target, a slot conflict
+  between two entries, or two entries sharing the same title all block generation with an inline
+  error.
+- A new demo model, **Hospital**, ships as a whole-block Custom Places entry in the default
+  settings (and in the demo scene), showing off the feature out of the box instead of leaving the
+  Custom Places tab empty on a fresh install.
 
 ### Removed
 
