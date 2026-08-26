@@ -193,7 +193,7 @@ namespace CityGenerator.Editor
 
         [Header("Collision")]
         [Tooltip("Layers the camera collides against, pulling itself closer to the pivot to avoid clipping through geometry.")]
-        public LayerMask collisionMask = ~0;
+        public LayerMask collisionMask = -1;
         [Tooltip("Radius of the sphere used for the camera's own collision check.")]
         public float collisionRadius = 0.3f;
 

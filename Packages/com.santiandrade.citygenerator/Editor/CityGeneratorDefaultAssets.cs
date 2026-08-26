@@ -24,7 +24,10 @@ namespace CityGenerator.Editor
         {
             settings.general.playerPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Male-D.prefab");
             settings.general.inputActions = AssetDatabase.LoadAssetAtPath<InputActionAsset>($"{DefaultAssetsRoot}/Input/InputSystem_Actions.inputactions");
-            settings.general.plazaCells = new List<Vector2Int> { new Vector2Int(2, 2) };
+            settings.general.plazaCells = new List<Vector2Int>
+            {
+                new Vector2Int(2, 2),
+            };
 
             settings.ground.roadBasePrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadBase.prefab");
             settings.ground.sidewalkPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadSidewalk.prefab");
@@ -93,6 +96,21 @@ namespace CityGenerator.Editor
                 new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-D.prefab"), percentage = 8.333333f },
                 new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-E.prefab"), percentage = 8.333333f },
                 new() { prefab = Load($"{DefaultAssetsRoot}/Prefabs/Characters/Character-Female-F.prefab"), percentage = 8.333333f },
+            };
+
+            settings.customPlaces = new List<CustomPlaceEntry>
+            {
+                new()
+                {
+                    title = "Hospital",
+                    prefab = Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Hospital.prefab"),
+                    isPointOfInterest = true,
+                    occupiesFullBlock = true,
+                    blockCell = new Vector2Int(3, 3),
+                    cornerSlot = 0,
+                    facing = CustomPlaceFacing.East,
+                    positionAssigned = true,
+                },
             };
 
             settings.props.trafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight.prefab");

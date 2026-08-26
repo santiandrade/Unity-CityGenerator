@@ -104,6 +104,9 @@ namespace CityGenerator.Editor
             AppendPedestriansList(sb, settings.pedestrians, warnings);
             sb.AppendLine();
 
+            AppendCustomPlacesList(sb, settings.customPlaces, warnings);
+            sb.AppendLine();
+
             AppendAssignment(sb, "settings.props.trafficLightPrefab", BuildGameObjectExpr(settings.props.trafficLightPrefab, warnings, "Props > Traffic Light Prefab"));
             AppendAssignment(sb, "settings.props.lampPrefab", BuildGameObjectExpr(settings.props.lampPrefab, warnings, "Props > Lamp Prefab"));
             AppendAssignment(sb, "settings.props.binPrefab", BuildGameObjectExpr(settings.props.binPrefab, warnings, "Props > Bin Prefab"));
@@ -169,6 +172,30 @@ namespace CityGenerator.Editor
                 if (expression == null)
                     continue;
                 sb.AppendLine($"                new() {{ prefab = {expression}, percentage = {FormatFloat(entry.percentage)}f }},");
+            }
+            sb.AppendLine("            };");
+        }
+
+        private static void AppendCustomPlacesList(StringBuilder sb, List<CustomPlaceEntry> customPlaces, List<string> warnings)
+        {
+            sb.AppendLine("            settings.customPlaces = new List<CustomPlaceEntry>");
+            sb.AppendLine("            {");
+            foreach (CustomPlaceEntry entry in customPlaces)
+            {
+                string expression = BuildGameObjectExpr(entry.prefab, warnings, $"Custom Places > {entry.title}");
+                if (expression == null)
+                    continue;
+                sb.AppendLine("                new()");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    title = \"{Escape(entry.title)}\",");
+                sb.AppendLine($"                    prefab = {expression},");
+                sb.AppendLine($"                    isPointOfInterest = {(entry.isPointOfInterest ? "true" : "false")},");
+                sb.AppendLine($"                    occupiesFullBlock = {(entry.occupiesFullBlock ? "true" : "false")},");
+                sb.AppendLine($"                    blockCell = new Vector2Int({entry.blockCell.x}, {entry.blockCell.y}),");
+                sb.AppendLine($"                    cornerSlot = {entry.cornerSlot.ToString(CultureInfo.InvariantCulture)},");
+                sb.AppendLine($"                    facing = CustomPlaceFacing.{entry.facing},");
+                sb.AppendLine($"                    positionAssigned = {(entry.positionAssigned ? "true" : "false")},");
+                sb.AppendLine("                },");
             }
             sb.AppendLine("            };");
         }
