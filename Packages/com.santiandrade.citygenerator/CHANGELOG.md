@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-26
+
+### Added
+
+- A test suite (`Assets/Tests/`, outside the package): EditMode tests for the pedestrian network's
+  `CanCross` rules, connected-component routing and `PedestrianRoadProximityGrid`; PlayMode tests
+  for `TrafficLightIntersection`'s phase cycle, manager registration/deregistration and
+  collider-on-child detection; and Performance tests measuring a baseline generation and runtime
+  frame cost. Baseline/delta measurements are recorded in `specs/05-performance-and-tests.md`.
+
+### Changed
+
+- `CityGeneratorPlacementEngine`'s overlap check now queries a spatial hash
+  (`CityGeneratorSpatialHash`) over the shared obstacles list instead of scanning it linearly per
+  candidate (measured -17.2% total generation time on a 10x10 grid).
+- `Physics.SyncTransforms` moved from `TrafficNetwork` to `TrafficManager.Update`, and is only
+  called when at least one `CarAgent` is registered.
+- `CarAgent`'s forward vehicle sensor now scans an `OverlapSphere` centred on the car's own
+  position instead of a `SphereCast` from a point offset ahead of it, closing a blind spot where a
+  long vehicle (a `Truck`/`Garbage-Truck`) a couple of metres ahead could go undetected; the new
+  `TrafficLaneOccupancy` fast path resolves "car ahead in the same lane segment" without a
+  `SphereCast` at all, measuring the gap to the other car's actual collider surface (via its new
+  `OwnCollider` property) instead of centre-to-centre, so a queue of cars no longer settles with
+  their bodies visibly overlapping.
+- `PedestrianNetwork` now computes connected components so `PedestrianAgent.PlanNewDestination`
+  never attempts a route to an unreachable part of the graph; each agent's initial destination
+  planning is staggered by spawn index instead of every agent planning on the same frame;
+  `FindPath` caches the full BFS tree per origin instead of recomputing it for every candidate
+  destination tried; and `PedestrianAgent` rents its path buffer from a shared
+  `PedestrianPathBufferPool` instead of keeping a permanent per-agent array sized to the whole
+  graph. `PedestrianManager`'s local-separation pass now processes each agent pair once instead of
+  twice and skips pairs where neither side is due for a recalculation this frame.
+- `CarAgent` can now query nearby pedestrians through `PedestrianRoadProximityGrid` instead of its
+  own `SphereCast`, once the pedestrian count justifies it (same staggering threshold as vehicle
+  detection). `PedestrianManager` feeds the grid the player's position separately from registered
+  `PedestrianAgent` instances, since the player is on the same `Pedestrian` layer without being one
+  — without this, once the pedestrian count crossed the staggering threshold, vehicles stopped
+  detecting and braking for the player.
+
+### Fixed
+
+- `CarAgent`'s "ahead" direction is now the vector toward its own current target node instead of
+  `transform.forward`: mid-corner, `RotateTowards` keeps a car's heading lagging behind its actual
+  path for the whole turn, which could put another car rounding the same corner a few metres away
+  outside the forward cone.
+- Fixed an `IndexOutOfRangeException` when a plaza's `PointOfInterest` node was registered after
+  `PedestrianNetwork.Build()`, growing the node list without keeping the connected-components array
+  in sync (regression introduced while implementing the connected-components routing above; caught
+  by the new runtime performance tests and covered by a regression test).
+
 ## [2.0.0] - 2026-08-25
 
 ### Changed
