@@ -5,14 +5,6 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-
-- Applied a post-processing volume profile (`Assets/Settings/PolaroidVolumeProfile.asset`) to the
-  demo scene (`Assets/Scenes/City.unity`), plus a shadow tuning pass on `PC_RPAsset.asset`. This
-  repo's test scene only — the package itself carries no post-processing dependency.
-
 ## [2.3.0] - 2026-08-27
 ### Added
 
@@ -21,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Places marked as Point of Interest labelled by name. Configured in a new "Minimap" tab
   (Enabled/Texture Resolution/View Radius). The snapshot is captured once during generation and
   saved as a PNG asset next to the generated scene (e.g. `Assets/Scenes/City1_Minimap.png`).
+
+### Changed
+
+- Applied a post-processing volume profile (`Assets/Settings/PolaroidVolumeProfile.asset`) to the
+  demo scene (`Assets/Scenes/City.unity`), plus a shadow tuning pass on `PC_RPAsset.asset`. This
+  repo's test scene only — the package itself carries no post-processing dependency.
 
 ## [2.2.2] - 2026-08-27
 
