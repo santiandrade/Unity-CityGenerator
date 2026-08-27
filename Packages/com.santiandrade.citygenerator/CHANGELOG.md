@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-08-27
+### Fixed
+
+- Custom Places grid picker: the block/quadrant you clicked in the picker no longer lands on the
+  wrong row once the city is generated. The picker's row axis was drawn opposite to how a generated
+  city reads in a top-down view (e.g. Unity's own Top Scene View), so entries away from the grid's
+  middle row landed one or more rows off from where they were placed; column position and the
+  plaza-cell picker (same component) had the same row flip.
+
 ## [2.2.1] - 2026-08-27
 
 ### Changed
