@@ -3,14 +3,17 @@ using UnityEngine;
 namespace CityGenerator.Runtime
 {
     /// <summary>
-    /// Added to the generated "Directional Light" by CityGeneratorSceneBuilder when the Editor's
-    /// Day/Night Cycle setting is enabled, mirroring how MinimapData is projected from the
-    /// editor-only MinimapSettings. Rotates the light on a single pitch axis over a 24h cycle
-    /// (yaw/roll are captured once and held fixed) and samples <see cref="lightColorOverTime"/>/
-    /// <see cref="lightIntensityOverTime"/> for its color/intensity. Advances <see cref="currentHour"/>
-    /// automatically in Play Mode via speedMultiplier; the Editor preview right after generation is
-    /// driven by a single explicit ApplySun call from the builder instead, so this component has no
-    /// [ExecuteAlways] behaviour of its own.
+    /// Added to the generated "Directional Light" by CityGeneratorSceneBuilder, mirroring how
+    /// MinimapData is projected from the editor-only MinimapSettings. Rotates the light on a
+    /// single pitch axis over a 24h cycle (yaw/roll are captured once and held fixed) and samples
+    /// <see cref="lightColorOverTime"/>/<see cref="lightIntensityOverTime"/> for its color/intensity.
+    /// Advances <see cref="currentHour"/> automatically in Play Mode via speedMultiplier — but only
+    /// while this Behaviour's own <c>enabled</c> is true, which CityGeneratorSceneBuilder sets to
+    /// the Editor's Day/Night Cycle "Enabled" toggle: when off, the component stays attached but
+    /// inert (Unity skips Update on a disabled Behaviour), so the light stays fixed at Start Hour
+    /// instead of cycling. The Editor preview right after generation is driven by a single explicit
+    /// ApplySun call from the builder, called unconditionally regardless of enabled, so this
+    /// component has no [ExecuteAlways] behaviour of its own.
     /// </summary>
     public class DayNightCycle : MonoBehaviour
     {
@@ -71,6 +74,18 @@ namespace CityGenerator.Runtime
             if (baseRotationCaptured)
                 return;
             baseRotation = transform.rotation;
+            baseRotationCaptured = true;
+        }
+
+        /// <summary>
+        /// Overrides the yaw/roll used by <see cref="ApplySun"/>, bypassing the "captured once"
+        /// guard in <see cref="CaptureBaseRotation"/>. Used by CityGeneratorSceneBuilder to force
+        /// the Directional Light's yaw on every build/re-build, even when this component already
+        /// existed with a different baked-in yaw.
+        /// </summary>
+        public void SetBaseRotation(Quaternion rotation)
+        {
+            baseRotation = rotation;
             baseRotationCaptured = true;
         }
     }

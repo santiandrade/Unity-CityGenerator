@@ -315,17 +315,19 @@ namespace CityGenerator.Editor
     }
 
     // Consumed by CityGeneratorSceneBuilder.CreateDirectionalLight/RebuildInActiveScene, which
-    // add/update/remove a Runtime.DayNightCycle on the generated Directional Light and project
-    // these fields onto it, mirroring how MinimapSettings feeds MinimapHUD.
+    // add/update a Runtime.DayNightCycle on the generated Directional Light and project these
+    // fields onto it, mirroring how MinimapSettings feeds MinimapHUD. The component itself always
+    // ends up on the light; `enabled` only maps onto the component's own MonoBehaviour.enabled, so
+    // startHour is always reflected on the light even when the cycle is off.
     [Serializable]
     internal struct DayNightSettings
     {
-        [Tooltip("Whether the Directional Light simulates a 24h day/night cycle in Play Mode. Off by default.")]
+        [Tooltip("Whether the Directional Light auto-advances through a 24h day/night cycle in Play Mode. Off by default. Start Hour is always applied to the light regardless of this toggle.")]
         public bool enabled;
-        [Tooltip("Hour of day (0-24) the cycle starts at, both in Play Mode and as an Editor preview right after generation.")]
+        [Tooltip("Hour of day (0-24) the light is set to, both in Play Mode and as an Editor preview right after generation — applied even when Enabled is off.")]
         [Range(0f, 24f)] public float startHour;
         [Tooltip("How fast simulated time passes relative to real time. 1 = real time, 2 = twice real time, etc.")]
-        [Range(0.1f, 100f)] public float speedMultiplier;
+        [Range(1f, 1000f)] public float speedMultiplier;
         [Tooltip("Light color over the course of a day, sampled at time 0-1 (0 = midnight, 0.5 = noon).")]
         public Gradient lightColorOverTime;
         [Tooltip("Light intensity over the course of a day, sampled at time 0-1 (0 = midnight, 0.5 = noon).")]
@@ -334,8 +336,8 @@ namespace CityGenerator.Editor
         public static DayNightSettings Default() => new DayNightSettings
         {
             enabled = false,
-            startHour = 8f,
-            speedMultiplier = 1f,
+            startHour = 10f,
+            speedMultiplier = 30f,
             lightColorOverTime = DefaultColorGradient(),
             lightIntensityOverTime = DefaultIntensityCurve(),
         };
