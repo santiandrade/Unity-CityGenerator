@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Applied a post-processing volume profile (`Assets/Settings/PolaroidVolumeProfile.asset`) to the
+  demo scene (`Assets/Scenes/City.unity`), plus a shadow tuning pass on `PC_RPAsset.asset`. This
+  repo's test scene only — the package itself carries no post-processing dependency.
+
 ## [2.3.0] - 2026-08-27
 ### Added
 
