@@ -94,7 +94,7 @@ namespace CityGenerator.Editor
             CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
 
             Report("Custom places", 0.2f);
-            (List<GameObject> builtCustomPlaces, HashSet<(int gridX, int gridY, int slot)> reservedSlots) =
+            (List<GameObject> builtCustomPlaces, HashSet<(int gridX, int gridY, int slot)> reservedSlots, List<PointOfInterestEntry> pointsOfInterest) =
                 CityGeneratorCustomPlaceBuilder.BuildCustomPlaces(settings.customPlaces, blocks, customPlaces);
 
             Report("Buildings", 0.25f);
@@ -165,6 +165,14 @@ namespace CityGenerator.Editor
                 CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup, pedestrianNetwork, settings.crowd);
                 pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random, settings.pedestrianBehaviour);
             }
+
+            // Runs last so the Vehicle/Pedestrian layers above already exist and can be excluded
+            // from the snapshot's culling mask, even though the snapshot itself only captures
+            // static geometry. Only fills MinimapData with an in-memory snapshot texture and the
+            // POI list — CityGeneratorSceneBuilder finalises it into a saved PNG asset once the
+            // generated scene's path is known (not yet the case here, mid-Assemble).
+            Report("Minimap", 0.97f);
+            CityGeneratorMinimapBuilder.Build(settings.minimap, cityRoot, gridWidth, gridHeight, pointsOfInterest);
 
             // Every group except Vehicles/Pedestrians is 100% static geometry once generated:
             // marking it unlocks static batching and is a prerequisite for baking occlusion

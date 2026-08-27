@@ -23,6 +23,7 @@ namespace CityGenerator.Editor
         private const string TabCity = "city";
         private const string TabPlayer = "player";
         private const string TabPedestrians = "pedestrians";
+        private const string TabMinimap = "minimap";
 
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
         private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Light, camera and player are left untouched.";
@@ -56,6 +57,9 @@ namespace CityGenerator.Editor
         private CityGeneratorCard crowdCard;
         private CityGeneratorCard customPlacesCard;
         private CityGeneratorCustomPlaceList customPlaceList;
+        private CityGeneratorCard minimapCard;
+        private HelpBox minimapResolutionWarning;
+        private HelpBox minimapViewRadiusWarning;
         private CityGeneratorTabBar tabBar;
         private HelpBox referenceSpeedMismatchWarning;
         private CityGeneratorGridPreview gridPreview;
@@ -171,11 +175,13 @@ namespace CityGenerator.Editor
             VisualElement cityContainer = rootVisualElement.Q<VisualElement>("cg-cards-city");
             VisualElement playerContainer = rootVisualElement.Q<VisualElement>("cg-cards-player");
             VisualElement pedestriansContainer = rootVisualElement.Q<VisualElement>("cg-cards-pedestrians");
+            VisualElement minimapContainer = rootVisualElement.Q<VisualElement>("cg-cards-minimap");
 
             tabBar = new CityGeneratorTabBar(tabsContainer);
             tabBar.AddTab(TabCity, "City", cityContainer);
             tabBar.AddTab(TabPlayer, "Player", playerContainer);
             tabBar.AddTab(TabPedestrians, "Pedestrians", pedestriansContainer);
+            tabBar.AddTab(TabMinimap, "Minimap", minimapContainer);
 
             BuildGeneralCard(cityContainer);
             BuildGroundCard(cityContainer);
@@ -192,6 +198,8 @@ namespace CityGenerator.Editor
             BuildPedestriansCard(pedestriansContainer);
             BuildPedestrianBehaviourCard(pedestriansContainer);
             BuildCrowdCard(pedestriansContainer);
+
+            BuildMinimapCard(minimapContainer);
 
             BuildFooter();
 
@@ -428,6 +436,23 @@ namespace CityGenerator.Editor
             customPlacesCard.ContentContainer.Add(customPlaceList);
         }
 
+        private void BuildMinimapCard(VisualElement parent)
+        {
+            minimapCard = AddCard(parent, "minimap", "Minimap", "d_GridLayoutGroup Icon", defaultExpanded: true, TabMinimap);
+            VisualElement content = minimapCard.ContentContainer;
+
+            content.Add(CreateField("minimap.enabled", "Enabled"));
+            content.Add(CreateField("minimap.textureResolution", "Texture Resolution"));
+            minimapResolutionWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            minimapResolutionWarning.style.display = DisplayStyle.None;
+            content.Add(minimapResolutionWarning);
+
+            content.Add(CreateField("minimap.viewRadiusMeters", "View Radius (m)"));
+            minimapViewRadiusWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            minimapViewRadiusWarning.style.display = DisplayStyle.None;
+            content.Add(minimapViewRadiusWarning);
+        }
+
         private void BuildFooter()
         {
             validationPanel = rootVisualElement.Q<VisualElement>("cg-validation-panel");
@@ -550,6 +575,7 @@ namespace CityGenerator.Editor
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
+            minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
             int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
             float totalSize = gridWidth * CityGeneratorConstants.CellPitch;
@@ -564,6 +590,8 @@ namespace CityGenerator.Editor
             SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());
             SetWarning(isolatedBlocksWarning, GetIsolatedBlocksWarning());
             SetWarning(referenceSpeedMismatchWarning, GetReferenceSpeedMismatchWarning());
+            SetWarning(minimapResolutionWarning, GetMinimapResolutionWarning());
+            SetWarning(minimapViewRadiusWarning, GetMinimapViewRadiusWarning());
 
             foreach (RequiredRow row in requiredRows)
             {
@@ -630,6 +658,7 @@ namespace CityGenerator.Editor
             tabBar.SetHasError(TabCity, tabsWithErrors.Contains(TabCity));
             tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
             tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
+            tabBar.SetHasError(TabMinimap, tabsWithErrors.Contains(TabMinimap));
 
             int blockingCount = 0;
             foreach (CityGeneratorValidationIssue issue in issues)
@@ -730,6 +759,39 @@ namespace CityGenerator.Editor
             return $"Walk/Run Reference Speed ({walkReferenceSpeed:0.##}/{runReferenceSpeed:0.##}) no longer match Player > Walk/Run Speed " +
                    $"({playerWalkSpeed:0.##}/{playerRunSpeed:0.##}). CharacterAnimator.controller's Locomotion blend tree is calibrated " +
                    "against these, so pedestrians will foot-slide until they're aligned again.";
+        }
+
+        /// <summary>Mirrors <see cref="CityGeneratorValidator"/>'s minimap texture resolution warning, inline next to the field instead of only in the bottom validation panel.</summary>
+        private string GetMinimapResolutionWarning()
+        {
+            if (!FindProperty("minimap.enabled").boolValue)
+                return null;
+
+            int textureResolution = FindProperty("minimap.textureResolution").intValue;
+            const int warningThreshold = 4096;
+            if (textureResolution <= warningThreshold)
+                return null;
+
+            return $"Texture Resolution {textureResolution}px is above {warningThreshold}px — a large snapshot costs noticeable texture memory and disk space for the generated PNG asset.";
+        }
+
+        /// <summary>Mirrors <see cref="CityGeneratorValidator"/>'s minimap view radius warning, inline next to the field instead of only in the bottom validation panel.</summary>
+        private string GetMinimapViewRadiusWarning()
+        {
+            if (!FindProperty("minimap.enabled").boolValue)
+                return null;
+
+            int gridWidth = FindProperty("general.gridWidth").intValue;
+            int gridHeight = FindProperty("general.gridHeight").intValue;
+            float viewRadiusMeters = FindProperty("minimap.viewRadiusMeters").floatValue;
+
+            float width = gridWidth * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            float depth = gridHeight * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            float coveredHalfExtent = Mathf.Min(width, depth) / 2f;
+            if (viewRadiusMeters <= coveredHalfExtent)
+                return null;
+
+            return $"View Radius ({viewRadiusMeters:0.#}m) is larger than the snapshot's covered world size (~{coveredHalfExtent:0.#}m half-extent for this {gridWidth}x{gridHeight} grid) — the HUD could never zoom out far enough to show it.";
         }
 
         private void ResetToDefaults()

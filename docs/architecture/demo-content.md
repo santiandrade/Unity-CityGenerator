@@ -10,6 +10,11 @@ Detail behind the "Demo content" bullet of the root `CLAUDE.md`. Ships inside th
 - **`Props/`** — `Bench`, `Bin`, `Lamp`, `TrafficLight`, and `Fountain` (the only imported-model prop, built on `DefaultAssets/Models/Props/Fountain by Poly.glb` via glTFast).
 - **`Vegetation/Tree.prefab`**.
 - **`Vehicles/`** — 15 prefabs: `Ambulance`, `Delivery-Flat`, `DeliveryCar`, `Firetruck`, `Garbage-Truck`, `Hatchback-Sports`, `PoliceCar`, `Sedan`, `SedanSportCar`, `Suv`, `Suv-Luxury`, `TaxiCar`, `Truck`, `Truck-Flat`, `Van`.
+- **`MinimapHUD.prefab`** (SPEC 07) — Canvas (Screen Space Overlay) + a circle-masked `RawImage`, player marker and a deactivated POI marker template, wired to a `Runtime/MinimapHUD` component. Built via an editor script (procedurally-generated sprites, see below), not hand-authored. Instantiated by `CityGeneratorSceneBuilder` when `minimap.enabled`.
+
+## `DefaultAssets/Sprites/`
+
+`Minimap_Circle.png` (the HUD's circular mask), `Minimap_PlayerArrow.png` (player marker), `Minimap_POIPin.png` (the single generic POI icon reused for every Point of Interest) — all three generated procedurally by a one-off editor script (flat shapes on a transparent background), not authored externally.
 
 ## Colliders
 

@@ -6,17 +6,19 @@
 
 Una herramienta de Editor para Unity que genera proceduralmente una ciudad —
 carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos,
-tráfico autónomo y peatones— en una escena nueva o existente. Ábrela desde **Tools >
-City Generator > Open**.
+tráfico autónomo, peatones y un HUD de minimapa— en una escena nueva o existente.
+Ábrela desde **Tools > City Generator > Open**.
 
-La ventana está dividida en tres pestañas: **City** (cuadrícula, suelo, edificios,
+La ventana está dividida en cuatro pestañas: **City** (cuadrícula, suelo, edificios,
 plazas, vehículos, mobiliario, y Custom Places — lugares colocados a mano: un título,
-un prefab, una manzana/esquina elegida en un grid visual, y una orientación fija — que
-se instancian en lugar de un edificio aleatorio en esa posición), **Player** (Player
-Prefab, movimiento, ajuste del `CharacterController` y de la cámara) y **Pedestrians**
+un prefab, una manzana/esquina elegida en un grid visual, una orientación fija, y un
+flag opcional "Is Point Of Interest" que marca la entrada en el minimapa — que se
+instancian en lugar de un edificio aleatorio en esa posición), **Player** (Player
+Prefab, movimiento, ajuste del `CharacterController` y de la cámara), **Pedestrians**
 (la lista de prefabs de peatones, además de su comportamiento al caminar/esperar y el
-ajuste de la multitud) — todo se edita desde la ventana, sin necesidad de tocar el
-código del paquete.
+ajuste de la multitud), y **Minimap** (activado por defecto; resolución de textura y
+radio de visión del HUD de minimapa en el juego) — todo se edita desde la ventana, sin
+necesidad de tocar el código del paquete.
 
 Se distribuye como el package embebido `com.santiandrade.citygenerator`, instalable
 directamente desde una git URL, con un conjunto completo de prefabs de demostración
@@ -85,8 +87,9 @@ vuelve a instalarla desde la git URL usando el tag nuevo de la
 
 El package incluye un conjunto completo de assets de demostración bajo su carpeta
 `DefaultAssets/` — edificios, vehículos, vegetación, mobiliario urbano, piezas de
-suelo, materiales y el prefab del jugador— así que `Tools > City Generator > Open` se abre con
-todos los campos obligatorios ya rellenos y una ciudad está a un clic de distancia.
+suelo, materiales, el prefab del jugador, y el prefab/sprites del HUD de minimapa—
+así que `Tools > City Generator > Open` se abre con todos los campos obligatorios ya
+rellenos y una ciudad está a un clic de distancia.
 
 Este contenido de demostración vive dentro del package, que Unity trata como de solo
 lectura en tu proyecto. Si quieres modificar un prefab de demostración, cópialo primero

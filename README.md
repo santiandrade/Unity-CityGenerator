@@ -5,16 +5,19 @@
 <img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="City Generator thumbnail" width="100%">
 
 An Editor tool for Unity that procedurally generates a city — roads, sidewalks, road
-markings, buildings, plazas, street furniture, traffic lights, autonomous traffic and
-pedestrians — into a new or existing scene. Open it from **Tools > City Generator > Open**.
+markings, buildings, plazas, street furniture, traffic lights, autonomous traffic,
+pedestrians and a minimap HUD — into a new or existing scene. Open it from
+**Tools > City Generator > Open**.
 
-The window is split into three tabs: **City** (grid, ground, buildings, plazas, vehicles,
+The window is split into four tabs: **City** (grid, ground, buildings, plazas, vehicles,
 props, and Custom Places — manually-placed entries with a title, a prefab, a block/corner
-picked from a grid preview, and a fixed orientation, instantiated instead of a random
-building at that spot), **Player** (Player Prefab, movement, `CharacterController` and
-camera tuning) and **Pedestrians** (the pedestrian prefab list, plus their walk/idle
-behaviour and crowd tuning) — everything is editable from the window, nothing requires
-touching the package's code.
+picked from a grid preview, a fixed orientation, and an optional "Is Point Of Interest"
+flag that surfaces the entry on the minimap — instantiated instead of a random building at
+that spot), **Player** (Player Prefab, movement, `CharacterController` and camera tuning),
+**Pedestrians** (the pedestrian prefab list, plus their walk/idle behaviour and crowd
+tuning), and **Minimap** (on by default; texture resolution and view radius for the
+in-game minimap HUD) — everything is editable from the window, nothing requires touching
+the package's code.
 
 It ships as the embedded package `com.santiandrade.citygenerator`, installable directly
 from a git URL, with a full set of demo prefabs included so the window is ready to
@@ -78,9 +81,9 @@ git URL using the new tag from the [Releases page](https://github.com/santiandra
 ## Demo content
 
 The package includes a full set of demo assets under its `DefaultAssets/` folder —
-buildings, vehicles, vegetation, street furniture, floor pieces, materials and the
-player prefab — so `Tools > City Generator > Open` opens with every required field already
-filled in and a city is one click away.
+buildings, vehicles, vegetation, street furniture, floor pieces, materials, the
+player prefab, and the minimap HUD prefab/sprites — so `Tools > City Generator > Open`
+opens with every required field already filled in and a city is one click away.
 
 This demo content lives inside the package, which Unity treats as read-only in your
 project. If you want to modify a demo prefab, copy it into your own `Assets/` folder

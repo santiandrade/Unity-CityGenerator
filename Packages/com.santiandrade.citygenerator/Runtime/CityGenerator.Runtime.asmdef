@@ -2,7 +2,8 @@
     "name": "CityGenerator.Runtime",
     "rootNamespace": "CityGenerator.Runtime",
     "references": [
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

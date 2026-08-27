@@ -5,9 +5,25 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.3.0] - 2026-08-27
+### Added
+
+- Minimap HUD: an optional (on by default) circular minimap in the top-left corner, showing a
+  static top-down snapshot of the generated city centred on the player in real time, with Custom
+  Places marked as Point of Interest labelled by name. Configured in a new "Minimap" tab
+  (Enabled/Texture Resolution/View Radius). The snapshot is captured once during generation and
+  saved as a PNG asset inside the scene's own per-scene folder (e.g.
+  `Assets/Scenes/City1/City1_Minimap.png`, the same folder Unity itself creates next to a scene for
+  things like baked lighting data).
+
+### Changed
+
+- Applied a post-processing volume profile (`Assets/Settings/PolaroidVolumeProfile.asset`) to the
+  demo scene (`Assets/Scenes/City.unity`), plus a shadow tuning pass on `PC_RPAsset.asset`. This
+  repo's test scene only — the package itself carries no post-processing dependency.
 
 ## [2.2.2] - 2026-08-27
+
 ### Fixed
 
 - Custom Places grid picker: the block/quadrant you clicked in the picker no longer lands on the

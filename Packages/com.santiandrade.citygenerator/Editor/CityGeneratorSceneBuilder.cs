@@ -14,6 +14,8 @@ namespace CityGenerator.Editor
     internal static class CityGeneratorSceneBuilder
     {
         private const string ScenesFolder = "Assets/Scenes";
+        private const string MinimapHudPrefabPath = "Packages/com.santiandrade.citygenerator/DefaultAssets/Prefabs/MinimapHUD.prefab";
+        private const string MinimapHudInstanceName = "Minimap HUD";
 
         public static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings)
         {
@@ -31,6 +33,11 @@ namespace CityGenerator.Editor
                 SceneManager.MoveGameObjectToScene(cityRootGO, scene);
                 CityBuildSummary summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform, onProgress);
 
+                // Known now (before the scene itself is saved) purely so the sibling PNG asset can
+                // be named after it; see CityGeneratorMinimapBuilder's remarks on the two-phase split.
+                string scenePath = GetNextFreeScenePath();
+                CityGeneratorMinimapBuilder.SaveSnapshotAsset(cityRootGO.transform, scenePath);
+
                 CreateDirectionalLight(scene);
 
                 GameObject player = null;
@@ -44,8 +51,8 @@ namespace CityGenerator.Editor
                 }
 
                 CreateMainCamera(scene, player, settings.general.inputActions, settings.player.actionMapName, settings.player.lookActionName, settings.camera);
+                CreateMinimapHud(scene, settings.minimap);
 
-                string scenePath = GetNextFreeScenePath();
                 EditorSceneManager.SaveScene(scene, scenePath);
 
                 return (scenePath, summary);
@@ -84,6 +91,7 @@ namespace CityGenerator.Editor
             try
             {
                 summary = CityGeneratorContentAssembler.Assemble(settings, cityRootGO.transform, onProgress);
+                CityGeneratorMinimapBuilder.SaveSnapshotAsset(cityRootGO.transform, scene.path);
             }
             catch
             {
@@ -93,6 +101,10 @@ namespace CityGenerator.Editor
 
             int undoGroup = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Rebuild City");
+
+            GameObject previousMinimapHud = GameObject.Find(MinimapHudInstanceName);
+            if (previousMinimapHud != null)
+                Undo.DestroyObjectImmediate(previousMinimapHud);
 
             foreach (GameObject root in scene.GetRootGameObjects())
             {
@@ -108,6 +120,8 @@ namespace CityGenerator.Editor
             Undo.RegisterCreatedObjectUndo(cityRootGO, "Rebuild City");
             Undo.RecordObject(cityRootGO, "Rebuild City");
             cityRootGO.name = "City";
+
+            CreateMinimapHud(scene, settings.minimap);
 
             Undo.CollapseUndoOperations(undoGroup);
 
@@ -224,6 +238,35 @@ namespace CityGenerator.Editor
             var playerSerialized = new SerializedObject(playerController);
             playerSerialized.FindProperty("cameraTransform").objectReferenceValue = cameraGO.transform;
             playerSerialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Loaded by a fixed package path (like ThumbnailPath in CityGeneratorWindow), not a
+        // settings field: the HUD prefab is fixed tool content, not something a user is expected
+        // to swap out. Silently skipped (same fail-closed fallback as AssignPedestrianLayer) if
+        // the package's DefaultAssets/ prefab is ever missing, so a broken/partial install still
+        // produces a working city, just without the HUD.
+        private static void CreateMinimapHud(Scene scene, MinimapSettings settings)
+        {
+            if (!settings.enabled)
+                return;
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(MinimapHudPrefabPath);
+            if (prefab == null)
+            {
+                Debug.LogWarning("[City Generator] Minimap is enabled but the MinimapHUD prefab is missing from DefaultAssets/ — skipping the HUD.");
+                return;
+            }
+
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
+            instance.name = MinimapHudInstanceName;
+
+            var hud = instance.GetComponentInChildren<MinimapHUD>(true);
+            if (hud == null)
+                return;
+
+            var serialized = new SerializedObject(hud);
+            serialized.FindProperty("viewRadiusMeters").floatValue = settings.viewRadiusMeters;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // AssetDatabase.GenerateUniqueAssetPath would suffix collisions as "City 1.unity" (with a

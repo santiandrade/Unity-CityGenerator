@@ -21,6 +21,7 @@ namespace CityGenerator.Editor
         public PedestrianBehaviourSettings pedestrianBehaviour = new();
         public CrowdSettings crowd = new();
         public List<CustomPlaceEntry> customPlaces = new();
+        public MinimapSettings minimap = MinimapSettings.Default();
     }
 
     [Serializable]
@@ -276,7 +277,7 @@ namespace CityGenerator.Editor
         public string title;
         [Tooltip("Prefab instantiated at the chosen position. Required.")]
         public GameObject prefab; // required
-        [Tooltip("Reserved for a future minimap/POI system. No functional effect yet.")]
+        [Tooltip("Marks this place as a Point of Interest shown on the Minimap HUD, labelled with Title.")]
         public bool isPointOfInterest;
         [Tooltip("If true, occupies the whole block (all 4 corner slots) instead of a single 22 m corner slot.")]
         public bool occupiesFullBlock;
@@ -289,5 +290,26 @@ namespace CityGenerator.Editor
         // Internal bookkeeping: whether blockCell/cornerSlot were ever set via the grid preview
         // (distinguishes "not placed yet" from a legitimate (0,0) selection), read by the validator.
         public bool positionAssigned;
+    }
+
+    // Consumed by CityGeneratorMinimapBuilder (snapshot capture) and CityGeneratorSceneBuilder
+    // (instantiates the MinimapHUD prefab and writes viewRadiusMeters onto it, mirroring how
+    // CreateMainCamera applies the Camera tab to the generated ThirdPersonCamera).
+    [Serializable]
+    internal struct MinimapSettings
+    {
+        [Tooltip("Whether a minimap HUD is generated and added to the scene. On by default.")]
+        public bool enabled;
+        [Tooltip("Resolution (width and height, in pixels) of the top-down snapshot texture. Higher values cost more texture memory and disk space for the generated PNG asset.")]
+        public int textureResolution;
+        [Tooltip("Radius, in meters, of the world area visible in the minimap HUD around the player. Must not exceed the snapshot's covered world size.")]
+        public float viewRadiusMeters;
+
+        public static MinimapSettings Default() => new MinimapSettings
+        {
+            enabled = true,
+            textureResolution = 2048,
+            viewRadiusMeters = 60f,
+        };
     }
 }
