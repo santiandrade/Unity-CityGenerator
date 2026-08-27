@@ -22,6 +22,7 @@ namespace CityGenerator.Editor
         public CrowdSettings crowd = new();
         public List<CustomPlaceEntry> customPlaces = new();
         public MinimapSettings minimap = MinimapSettings.Default();
+        public DayNightSettings dayNight = DayNightSettings.Default();
     }
 
     [Serializable]
@@ -311,5 +312,65 @@ namespace CityGenerator.Editor
             textureResolution = 2048,
             viewRadiusMeters = 60f,
         };
+    }
+
+    // Consumed by CityGeneratorSceneBuilder.CreateDirectionalLight/RebuildInActiveScene, which
+    // add/update/remove a Runtime.DayNightCycle on the generated Directional Light and project
+    // these fields onto it, mirroring how MinimapSettings feeds MinimapHUD.
+    [Serializable]
+    internal struct DayNightSettings
+    {
+        [Tooltip("Whether the Directional Light simulates a 24h day/night cycle in Play Mode. Off by default.")]
+        public bool enabled;
+        [Tooltip("Hour of day (0-24) the cycle starts at, both in Play Mode and as an Editor preview right after generation.")]
+        [Range(0f, 24f)] public float startHour;
+        [Tooltip("How fast simulated time passes relative to real time. 1 = real time, 2 = twice real time, etc.")]
+        [Range(0.1f, 100f)] public float speedMultiplier;
+        [Tooltip("Light color over the course of a day, sampled at time 0-1 (0 = midnight, 0.5 = noon).")]
+        public Gradient lightColorOverTime;
+        [Tooltip("Light intensity over the course of a day, sampled at time 0-1 (0 = midnight, 0.5 = noon).")]
+        public AnimationCurve lightIntensityOverTime;
+
+        public static DayNightSettings Default() => new DayNightSettings
+        {
+            enabled = false,
+            startHour = 8f,
+            speedMultiplier = 1f,
+            lightColorOverTime = DefaultColorGradient(),
+            lightIntensityOverTime = DefaultIntensityCurve(),
+        };
+
+        // Cool/dark blue by night, warm orange at sunrise/sunset, white at noon.
+        private static Gradient DefaultColorGradient()
+        {
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.12f, 0.16f, 0.35f), 0f),
+                    new GradientColorKey(new Color(1f, 0.6f, 0.3f), 0.25f),
+                    new GradientColorKey(Color.white, 0.5f),
+                    new GradientColorKey(new Color(1f, 0.55f, 0.25f), 0.75f),
+                    new GradientColorKey(new Color(0.12f, 0.16f, 0.35f), 1f),
+                },
+                new[]
+                {
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(1f, 1f),
+                });
+            return gradient;
+        }
+
+        // Low at night (never zero, so the light stays visibly on), rising toward sunrise, peaking
+        // at noon, falling toward sunset.
+        private static AnimationCurve DefaultIntensityCurve()
+        {
+            return new AnimationCurve(
+                new Keyframe(0f, 0.1f),
+                new Keyframe(0.25f, 0.6f),
+                new Keyframe(0.5f, 1.2f),
+                new Keyframe(0.75f, 0.6f),
+                new Keyframe(1f, 0.1f));
+        }
     }
 }

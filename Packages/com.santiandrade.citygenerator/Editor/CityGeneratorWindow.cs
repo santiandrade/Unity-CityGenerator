@@ -26,7 +26,7 @@ namespace CityGenerator.Editor
         private const string TabMinimap = "minimap";
 
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
-        private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Light, camera and player are left untouched.";
+        private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Camera and player are left untouched; the Directional Light keeps its base rotation and shadows, but its Day/Night Cycle is updated to match these settings.";
 
         // internal, not private: CityGeneratorSetDefaultsWindow (Assets/Editor/, outside the
         // package, in Assembly-CSharp-Editor) reads this to implement "Set Current Selection As
@@ -56,6 +56,7 @@ namespace CityGenerator.Editor
         private CityGeneratorCard pedestrianBehaviourCard;
         private CityGeneratorCard crowdCard;
         private CityGeneratorCard customPlacesCard;
+        private CityGeneratorCard dayNightCard;
         private CityGeneratorCustomPlaceList customPlaceList;
         private CityGeneratorCard minimapCard;
         private HelpBox minimapResolutionWarning;
@@ -190,6 +191,7 @@ namespace CityGenerator.Editor
             BuildVegetationCard(cityContainer);
             BuildVehiclesCard(cityContainer);
             BuildPropsCard(cityContainer);
+            BuildDayNightCard(cityContainer);
             BuildCustomPlacesCard(cityContainer);
 
             BuildPlayerCard(playerContainer);
@@ -337,6 +339,18 @@ namespace CityGenerator.Editor
             card.ContentContainer.Add(CreateField("props.lampDensity"));
             card.ContentContainer.Add(CreateField("props.binPrefab"));
             card.ContentContainer.Add(CreateField("props.binDensity"));
+        }
+
+        private void BuildDayNightCard(VisualElement parent)
+        {
+            dayNightCard = AddCard(parent, "dayNight", "Day/Night Cycle", "d_DirectionalLight Icon", defaultExpanded: false, TabCity);
+            VisualElement content = dayNightCard.ContentContainer;
+
+            content.Add(CreateField("dayNight.enabled", "Enabled"));
+            content.Add(CreateField("dayNight.startHour", "Start Hour"));
+            content.Add(CreateField("dayNight.speedMultiplier", "Speed Multiplier"));
+            content.Add(CreateField("dayNight.lightColorOverTime", "Light Color Over Time"));
+            content.Add(CreateField("dayNight.lightIntensityOverTime", "Light Intensity Over Time"));
         }
 
         private void BuildPlayerCard(VisualElement parent)
@@ -576,6 +590,9 @@ namespace CityGenerator.Editor
             customPlaceList.SetGrid(gridWidth, gridHeight);
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
+            dayNightCard.SetBadge(FindProperty("dayNight.enabled").boolValue
+                ? $"Starts {FindProperty("dayNight.startHour").floatValue:0.#}h"
+                : "Off");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
             int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
             float totalSize = gridWidth * CityGeneratorConstants.CellPitch;

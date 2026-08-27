@@ -38,7 +38,7 @@ namespace CityGenerator.Editor
                 string scenePath = GetNextFreeScenePath();
                 CityGeneratorMinimapBuilder.SaveSnapshotAsset(cityRootGO.transform, scenePath);
 
-                CreateDirectionalLight(scene);
+                CreateDirectionalLight(scene, settings.dayNight);
 
                 GameObject player = null;
                 if (settings.general.playerPrefab != null)
@@ -70,9 +70,11 @@ namespace CityGenerator.Editor
         /// generation finishes without throwing. If <see cref="CityGeneratorContentAssembler.Assemble"/>
         /// throws, the failed temporary root is destroyed, the previous city is left completely
         /// intact, and the exception is rethrown for the caller (<c>CityGeneratorWindow</c>) to
-        /// report. Everything else in the scene (light, volume, camera, player) is left untouched.
-        /// Does not save the scene: the caller leaves that to the usual Editor "unsaved changes"
-        /// flow.
+        /// report. Camera, volume and player are left untouched; the Directional Light's day/night
+        /// cycle is the one exception — its <see cref="DayNightCycle"/> is added/updated/removed to
+        /// match <paramref name="settings"/>.dayNight, everything else about the light (base
+        /// rotation, shadows) stays as it was. Does not save the scene: the caller leaves that to
+        /// the usual Editor "unsaved changes" flow.
         /// </summary>
         public static CityBuildSummary RebuildInActiveScene(CityGeneratorSettings settings)
         {
@@ -122,6 +124,7 @@ namespace CityGenerator.Editor
             cityRootGO.name = "City";
 
             CreateMinimapHud(scene, settings.minimap);
+            UpdateDirectionalLight(scene, settings.dayNight);
 
             Undo.CollapseUndoOperations(undoGroup);
 
@@ -129,7 +132,24 @@ namespace CityGenerator.Editor
             return summary;
         }
 
-        private static void CreateDirectionalLight(Scene scene)
+        // Finds the "Directional Light" GameObject by name (same pattern, and same fragility if
+        // the user renames it, as CreateMinimapHud's lookup of "Minimap HUD"), recreating it via
+        // CreateDirectionalLight if it was deleted, then reconciles its DayNightCycle with the
+        // current settings. Never recreates or moves the light when it's found — only the
+        // day/night cycle is touched.
+        private static void UpdateDirectionalLight(Scene scene, DayNightSettings dayNight)
+        {
+            GameObject lightGO = GameObject.Find("Directional Light");
+            if (lightGO == null)
+            {
+                CreateDirectionalLight(scene, dayNight);
+                return;
+            }
+
+            ConfigureDayNightCycle(lightGO, dayNight);
+        }
+
+        private static void CreateDirectionalLight(Scene scene, DayNightSettings dayNight)
         {
             var lightGO = new GameObject("Directional Light");
             SceneManager.MoveGameObjectToScene(lightGO, scene);
@@ -137,6 +157,31 @@ namespace CityGenerator.Editor
             var light = lightGO.AddComponent<Light>();
             light.type = LightType.Directional;
             light.shadows = LightShadows.Soft;
+
+            if (dayNight.enabled)
+                ConfigureDayNightCycle(lightGO, dayNight);
+        }
+
+        // Adds/updates/removes DayNightCycle on an existing Directional Light GameObject and
+        // previews the result immediately (ApplySun), without touching the light's base rotation,
+        // shadows or any other setting that isn't part of the day/night cycle itself.
+        private static void ConfigureDayNightCycle(GameObject lightGO, DayNightSettings dayNight)
+        {
+            var cycle = lightGO.GetComponent<DayNightCycle>();
+            if (!dayNight.enabled)
+            {
+                if (cycle != null)
+                    Object.DestroyImmediate(cycle);
+                return;
+            }
+
+            if (cycle == null)
+                cycle = lightGO.AddComponent<DayNightCycle>();
+
+            cycle.speedMultiplier = dayNight.speedMultiplier;
+            cycle.lightColorOverTime = dayNight.lightColorOverTime;
+            cycle.lightIntensityOverTime = dayNight.lightIntensityOverTime;
+            cycle.ApplySun(dayNight.startHour);
         }
 
         // Lets any character model be assigned as Player Prefab, not just one already set up for
