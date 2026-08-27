@@ -38,7 +38,7 @@ namespace CityGenerator.Editor
                 string scenePath = GetNextFreeScenePath();
                 CityGeneratorMinimapBuilder.SaveSnapshotAsset(cityRootGO.transform, scenePath);
 
-                CreateDirectionalLight(scene);
+                CreateDirectionalLight(scene, settings.dayNight);
 
                 GameObject player = null;
                 if (settings.general.playerPrefab != null)
@@ -70,9 +70,11 @@ namespace CityGenerator.Editor
         /// generation finishes without throwing. If <see cref="CityGeneratorContentAssembler.Assemble"/>
         /// throws, the failed temporary root is destroyed, the previous city is left completely
         /// intact, and the exception is rethrown for the caller (<c>CityGeneratorWindow</c>) to
-        /// report. Everything else in the scene (light, volume, camera, player) is left untouched.
-        /// Does not save the scene: the caller leaves that to the usual Editor "unsaved changes"
-        /// flow.
+        /// report. Camera, volume and player are left untouched; the Directional Light's day/night
+        /// cycle is the one exception — its <see cref="DayNightCycle"/> is added/updated to match
+        /// <paramref name="settings"/>.dayNight and reapplies Start Hour, everything else about the
+        /// light (base rotation, shadows) stays as it was. Does not save the scene: the caller
+        /// leaves that to the usual Editor "unsaved changes" flow.
         /// </summary>
         public static CityBuildSummary RebuildInActiveScene(CityGeneratorSettings settings)
         {
@@ -122,6 +124,7 @@ namespace CityGenerator.Editor
             cityRootGO.name = "City";
 
             CreateMinimapHud(scene, settings.minimap);
+            UpdateDirectionalLight(scene, settings.dayNight);
 
             Undo.CollapseUndoOperations(undoGroup);
 
@@ -129,14 +132,66 @@ namespace CityGenerator.Editor
             return summary;
         }
 
-        private static void CreateDirectionalLight(Scene scene)
+        // East-west sun alignment: with the minimap's snapshot camera looking straight down
+        // (CityGeneratorMinimapBuilder, Euler(90,0,0)), minimap-right maps to world +X and
+        // minimap-top to world +Z. Minimap-right is East, so a yaw of -90 makes the sun (per
+        // DayNightCycle's pitch formula) rise due East (hour 6) and set due West (hour 18) —
+        // matching a player facing East/West at those hours. Forced on every build/re-build (see
+        // UpdateDirectionalLight), never left to whatever yaw the light happened to have.
+        private const float DirectionalLightYaw = -90f;
+
+        // Finds the "Directional Light" GameObject by name (same pattern, and same fragility if
+        // the user renames it, as CreateMinimapHud's lookup of "Minimap HUD"), recreating it via
+        // CreateDirectionalLight if it was deleted, then reconciles its DayNightCycle with the
+        // current settings. Never moves the light or touches its shadows — but the yaw (see
+        // DirectionalLightYaw) and the day/night cycle are always forced to the current settings,
+        // even on a light that already existed with a different baked-in yaw.
+        private static void UpdateDirectionalLight(Scene scene, DayNightSettings dayNight)
+        {
+            GameObject lightGO = GameObject.Find("Directional Light");
+            if (lightGO == null)
+            {
+                CreateDirectionalLight(scene, dayNight);
+                return;
+            }
+
+            ConfigureDayNightCycle(lightGO, dayNight);
+        }
+
+        private static void CreateDirectionalLight(Scene scene, DayNightSettings dayNight)
         {
             var lightGO = new GameObject("Directional Light");
             SceneManager.MoveGameObjectToScene(lightGO, scene);
-            lightGO.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            lightGO.transform.rotation = Quaternion.Euler(50f, DirectionalLightYaw, 0f);
             var light = lightGO.AddComponent<Light>();
             light.type = LightType.Directional;
             light.shadows = LightShadows.Soft;
+
+            ConfigureDayNightCycle(lightGO, dayNight);
+        }
+
+        // Adds/updates DayNightCycle on an existing Directional Light GameObject and previews the
+        // result immediately (ApplySun), without touching the light's shadows or any other setting
+        // that isn't part of the day/night cycle or its yaw. The component is kept even when
+        // dayNight.enabled is false: Start Hour is always reflected on the light (via ApplySun),
+        // and dayNight.enabled only toggles the component's own MonoBehaviour.enabled, which gates
+        // whether Update() auto-advances the hour in Play Mode — Unity skips Update on a disabled
+        // Behaviour, so a disabled cycle simply stays put at Start Hour. The yaw/roll ApplySun
+        // rotates around is forced to DirectionalLightYaw/0 via SetBaseRotation on every call,
+        // bypassing DayNightCycle's own "captured once" base rotation so a light re-built with an
+        // old yaw gets corrected too.
+        private static void ConfigureDayNightCycle(GameObject lightGO, DayNightSettings dayNight)
+        {
+            var cycle = lightGO.GetComponent<DayNightCycle>();
+            if (cycle == null)
+                cycle = lightGO.AddComponent<DayNightCycle>();
+
+            cycle.SetBaseRotation(Quaternion.Euler(0f, DirectionalLightYaw, 0f));
+            cycle.enabled = dayNight.enabled;
+            cycle.speedMultiplier = dayNight.speedMultiplier;
+            cycle.lightColorOverTime = dayNight.lightColorOverTime;
+            cycle.lightIntensityOverTime = dayNight.lightIntensityOverTime;
+            cycle.ApplySun(dayNight.startHour);
         }
 
         // Lets any character model be assigned as Player Prefab, not just one already set up for

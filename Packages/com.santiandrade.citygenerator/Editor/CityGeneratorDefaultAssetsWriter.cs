@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -227,7 +228,7 @@ namespace CityGenerator.Editor
             return $"AssetDatabase.LoadAssetAtPath<InputActionAsset>(\"{Escape(fullPath)}\")";
         }
 
-        private static string RelativeToRoot(Object asset)
+        private static string RelativeToRoot(UnityEngine.Object asset)
         {
             string path = AssetDatabase.GetAssetPath(asset);
             const string prefix = DefaultAssetsRoot + "/";
@@ -314,6 +315,15 @@ namespace CityGenerator.Editor
             // them anyway; per the spec, ApplyTo's own MinimapSettings.Default() is already the
             // intended default and "Save Current As Default" isn't expected to override it.
 
+            // DayNightSettings' scalars are likewise object-initializer assignments inside
+            // Default(), not inline field initializers, so they need their own scoped replace
+            // (scoped to that one method, since "enabled = ...," alone would also match
+            // MinimapSettings.Default()'s unrelated "enabled" field).
+            DayNightSettings dayNight = settings.dayNight;
+            source = ReplaceInMethodBody(source, "DayNightSettings Default()", "enabled", dayNight.enabled ? "true" : "false");
+            source = ReplaceInMethodBody(source, "DayNightSettings Default()", "startHour", FormatFloat(dayNight.startHour) + "f");
+            source = ReplaceInMethodBody(source, "DayNightSettings Default()", "speedMultiplier", FormatFloat(dayNight.speedMultiplier) + "f");
+
             return source;
         }
 
@@ -344,6 +354,27 @@ namespace CityGenerator.Editor
             string pattern = $@"(public\s+Vector3\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
             string literal = $"new({FormatFloat(newValue.x)}f, {FormatFloat(newValue.y)}f, {FormatFloat(newValue.z)}f)";
             return Regex.Replace(source, pattern, m => m.Groups[1].Value + literal + ";");
+        }
+
+        // Replaces an object-initializer assignment ("fieldName = ...,") but only within the one
+        // method whose signature is methodSignature, so a field name shared with another struct's
+        // Default() (e.g. "enabled") isn't touched outside its own method body. The body is taken
+        // as the text up to the first "};" after the signature, which holds for every Default()
+        // method in this file (none nest a "};" of their own).
+        private static string ReplaceInMethodBody(string source, string methodSignature, string fieldName, string newLiteral)
+        {
+            int start = source.IndexOf(methodSignature, StringComparison.Ordinal);
+            if (start < 0)
+                return source;
+            int end = source.IndexOf("};", start, StringComparison.Ordinal);
+            if (end < 0)
+                return source;
+            end += "};".Length;
+
+            string body = source.Substring(start, end - start);
+            string pattern = $@"({Regex.Escape(fieldName)}\s*=\s*)[^,]+,";
+            string newBody = Regex.Replace(body, pattern, m => m.Groups[1].Value + newLiteral + ",");
+            return source.Substring(0, start) + newBody + source.Substring(end);
         }
     }
 }

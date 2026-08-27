@@ -46,6 +46,18 @@ namespace CityGenerator.Editor
     /// point in world space far from anything else that might be loaded, points the capture camera
     /// there instead, and moves it back after. No pre-existing content ever needs to be hidden.
     /// </para>
+    /// <para>
+    /// Lighting is not scoped to <c>cityRoot</c>'s isolated position at all — a Directional Light
+    /// anywhere in memory (the city's own, mid-Day/Night Cycle, or one belonging to another
+    /// currently-loaded scene) illuminates every camera equally regardless of where that camera
+    /// points. Left alone, this makes the snapshot reflect whatever hour of day the Directional
+    /// Light happens to be configured for. Unlike hiding a pre-existing <c>GameObject</c> (see
+    /// above), toggling a pre-existing <see cref="Light"/>'s <c>enabled</c>/color/intensity *does*
+    /// take effect on the very next <see cref="Camera.Render"/> within the same script call —
+    /// confirmed directly with a minimal repro — so every currently-enabled directional light is
+    /// simply disabled for the duration of the capture and a fresh neutral one takes its place,
+    /// guaranteeing a consistently well-lit snapshot no matter the time of day or scene state.
+    /// </para>
     /// </summary>
     internal static class CityGeneratorMinimapBuilder
     {
@@ -60,6 +72,12 @@ namespace CityGenerator.Editor
         // becoming noticeable well beyond this) — see the class remarks on why cityRoot is moved
         // here instead of hiding everything else.
         private const float SnapshotIsolationOffsetX = 50000f;
+
+        // Matches the rotation CityGeneratorSceneBuilder forces on the Directional Light (yaw -90
+        // for east-west sun alignment, see CityGeneratorSceneBuilder.DirectionalLightYaw): a
+        // neutral, well-lit daytime angle.
+        private static readonly Quaternion NeutralSnapshotLightRotation = Quaternion.Euler(50f, -90f, 0f);
+        private const float NeutralSnapshotLightIntensity = 1f;
 
         /// <summary>No-op when <paramref name="settings"/>.enabled is false: no <see cref="MinimapData"/> is added, matching the "no regression when disabled" acceptance criterion.</summary>
         public static void Build(MinimapSettings settings, Transform cityRoot, int gridWidth, int gridHeight, List<PointOfInterestEntry> pointsOfInterest)
@@ -94,6 +112,21 @@ namespace CityGenerator.Editor
             Vector3 originalPosition = cityRoot.position;
             var isolationOffset = new Vector3(SnapshotIsolationOffsetX, 0f, 0f);
 
+            // Disable every directional light currently in memory so the snapshot never reflects
+            // whatever hour of day a Day/Night Cycle (this city's own, or one left over from a
+            // previously-generated city still in the scene during a Rebuild) happens to be at; a
+            // fresh neutral one takes over lighting for the capture only. See the class remarks.
+            var directionalLights = new List<Light>();
+            foreach (Light light in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+            {
+                if (light.type == LightType.Directional && light.enabled)
+                    directionalLights.Add(light);
+            }
+            foreach (Light light in directionalLights)
+                light.enabled = false;
+
+            var neutralLightGO = new GameObject("Minimap Snapshot Light (temp)") { hideFlags = HideFlags.HideAndDontSave };
+
             Texture2D snapshot;
             try
             {
@@ -103,10 +136,21 @@ namespace CityGenerator.Editor
                     pedestriansGroup.gameObject.SetActive(false);
                 cityRoot.position = originalPosition + isolationOffset;
 
+                neutralLightGO.transform.rotation = NeutralSnapshotLightRotation;
+                var neutralLight = neutralLightGO.AddComponent<Light>();
+                neutralLight.type = LightType.Directional;
+                neutralLight.color = Color.white;
+                neutralLight.intensity = NeutralSnapshotLightIntensity;
+                neutralLight.shadows = LightShadows.None;
+
                 snapshot = CaptureSnapshot(worldCenter + isolationOffset, width, depth, settings.textureResolution);
             }
             finally
             {
+                Object.DestroyImmediate(neutralLightGO);
+                foreach (Light light in directionalLights)
+                    light.enabled = true;
+
                 cityRoot.position = originalPosition;
                 if (vehiclesGroup != null)
                     vehiclesGroup.gameObject.SetActive(vehiclesWereActive);

@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+
+- Day/Night Cycle: the Directional Light's yaw is now always forced to -90° (was -30°) on every
+  "Build City in New Scene" and "Rebuild City in Current Scene", so the sun rises due East and sets
+  due West, matching the minimap's East/West orientation (minimap-right is East). Previously the
+  yaw was only set on first creation and left untouched on a Rebuild.
+
+### Fixed
+
+- Minimap snapshot: the captured top-down image no longer reflects the Directional Light's Day/Night
+  Cycle state. Any directional light present at capture time (this city's own, mid-cycle, or one left
+  over from a previous city during a Rebuild) is temporarily disabled and replaced by a fresh neutral
+  daytime light for the snapshot only, so the minimap stays clearly readable regardless of the hour
+  the city was generated at.
+- Day/Night Cycle: Start Hour is now always applied to the Directional Light, even when Enabled is
+  off. Previously, disabling the cycle skipped the `ApplySun` call entirely, leaving the light at its
+  static default orientation instead of the configured Start Hour. The `DayNightCycle` component now
+  stays on the light regardless of Enabled; the toggle only controls whether it auto-advances the
+  hour in Play Mode.
+
+## [2.4.0] - 2026-08-27
+### Added
+
+- Day/Night Cycle: an optional (off by default) 24h cycle for the generated Directional Light,
+  configured in a new "Day/Night Cycle" card in the City tab (Enabled/Start Hour/Speed Multiplier,
+  plus a `Gradient` for light color and an `AnimationCurve` for light intensity over the day). When
+  enabled, the light already previews oriented/colored for Start Hour right after generation, and
+  rotates/changes color and intensity continuously in Play Mode at the configured speed.
+  "Rebuild City in Current Scene" now reconfigures the Directional Light's cycle to match the
+  current settings (adding/updating/removing it), while its base rotation and shadows stay
+  untouched.
 
 ## [2.3.0] - 2026-08-27
 ### Added
