@@ -126,11 +126,13 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Encodes <c>cityRoot</c>'s <see cref="MinimapData"/> in-memory snapshot (left there by
-        /// <see cref="Build"/>) to a PNG asset saved next to <paramref name="scenePath"/>
-        /// (<c>&lt;SceneName&gt;_Minimap.png</c>), then repoints <see cref="MinimapData.snapshot"/>
-        /// at the imported asset — same path on every Re-Build, so the asset keeps its GUID instead
-        /// of leaving orphaned copies behind. No-op if the city has no <see cref="MinimapData"/>
-        /// (Minimap disabled) or <paramref name="scenePath"/> is empty (an unsaved scene).
+        /// <see cref="Build"/>) to a PNG asset saved inside the scene's own per-scene folder —
+        /// <c>&lt;SceneFolder&gt;/&lt;SceneName&gt;/&lt;SceneName&gt;_Minimap.png</c>, the same
+        /// folder Unity itself creates next to the scene for things like baked lighting data — then
+        /// repoints <see cref="MinimapData.snapshot"/> at the imported asset — same path on every
+        /// Re-Build, so the asset keeps its GUID instead of leaving orphaned copies behind. No-op if
+        /// the city has no <see cref="MinimapData"/> (Minimap disabled) or <paramref name="scenePath"/>
+        /// is empty (an unsaved scene).
         /// </summary>
         public static void SaveSnapshotAsset(Transform cityRoot, string scenePath)
         {
@@ -138,9 +140,13 @@ namespace CityGenerator.Editor
             if (data == null || data.snapshot == null || string.IsNullOrEmpty(scenePath))
                 return;
 
-            string folder = Path.GetDirectoryName(scenePath)?.Replace('\\', '/');
+            string sceneFolder = Path.GetDirectoryName(scenePath)?.Replace('\\', '/');
             string sceneName = Path.GetFileNameWithoutExtension(scenePath);
+            string folder = $"{sceneFolder}/{sceneName}";
             string pngPath = $"{folder}/{sceneName}_Minimap.png";
+
+            if (!AssetDatabase.IsValidFolder(folder))
+                AssetDatabase.CreateFolder(sceneFolder, sceneName);
 
             byte[] pngBytes = data.snapshot.EncodeToPNG();
             File.WriteAllBytes(Path.GetFullPath(pngPath), pngBytes);

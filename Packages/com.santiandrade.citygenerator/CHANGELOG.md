@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   static top-down snapshot of the generated city centred on the player in real time, with Custom
   Places marked as Point of Interest labelled by name. Configured in a new "Minimap" tab
   (Enabled/Texture Resolution/View Radius). The snapshot is captured once during generation and
-  saved as a PNG asset next to the generated scene (e.g. `Assets/Scenes/City1_Minimap.png`).
+  saved as a PNG asset inside the scene's own per-scene folder (e.g.
+  `Assets/Scenes/City1/City1_Minimap.png`, the same folder Unity itself creates next to a scene for
+  things like baked lighting data).
 
 ### Changed
 
