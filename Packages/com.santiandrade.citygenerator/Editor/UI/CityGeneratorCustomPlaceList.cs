@@ -121,7 +121,7 @@ namespace CityGenerator.Editor.UI
 
                 var poiField = new Toggle("Is Point Of Interest") { value = isPointOfInterestProperty.boolValue };
                 poiField.AddToClassList("cg-field-row");
-                poiField.tooltip = "Reserved for a future minimap/POI system. No functional effect yet.";
+                poiField.tooltip = "Marks this place as a Point of Interest shown on the Minimap HUD, labelled with Title.";
                 poiField.RegisterValueChangedCallback(evt => SetBool(isPointOfInterestProperty, evt.newValue));
                 row.Add(poiField);
 

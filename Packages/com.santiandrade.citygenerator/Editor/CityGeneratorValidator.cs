@@ -185,8 +185,33 @@ namespace CityGenerator.Editor
                 issues.Add(new CityGeneratorValidationIssue("crowd.staggerDistance", "Crowd: Stagger Distance must not be negative."));
 
             ValidateCustomPlaces(settings, issues);
+            ValidateMinimap(settings, issues);
 
             return !issues.Exists(issue => !issue.isWarning);
+        }
+
+        // Both non-blocking: neither condition breaks generation, they just warn about a
+        // consequence the user might not expect (memory/disk cost, or a zoom level that could
+        // never show anything beyond the snapshot's own edge).
+        private const int MinimapTextureResolutionWarningThreshold = 4096;
+
+        private static void ValidateMinimap(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
+        {
+            if (!settings.minimap.enabled)
+                return;
+
+            if (settings.minimap.textureResolution > MinimapTextureResolutionWarningThreshold)
+                issues.Add(new CityGeneratorValidationIssue("minimap.textureResolution",
+                    $"Minimap: Texture Resolution {settings.minimap.textureResolution}px is above {MinimapTextureResolutionWarningThreshold}px — a large snapshot costs noticeable texture memory and disk space for the generated PNG asset.",
+                    isWarning: true));
+
+            float width = settings.general.gridWidth * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            float depth = settings.general.gridHeight * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            float coveredHalfExtent = Mathf.Min(width, depth) / 2f;
+            if (settings.minimap.viewRadiusMeters > coveredHalfExtent)
+                issues.Add(new CityGeneratorValidationIssue("minimap.viewRadiusMeters",
+                    $"Minimap: View Radius ({settings.minimap.viewRadiusMeters:0.#}m) is larger than the snapshot's covered world size (~{coveredHalfExtent:0.#}m half-extent for this {settings.general.gridWidth}x{settings.general.gridHeight} grid) — the HUD could never zoom out far enough to show it.",
+                    isWarning: true));
         }
 
         /// <summary>

@@ -309,6 +309,11 @@ namespace CityGenerator.Editor
             source = ReplaceField(source, "staggerDistance", FormatFloat(crowd.staggerDistance) + "f");
             source = ReplaceField(source, "staggerFrames", crowd.staggerFrames.ToString(CultureInfo.InvariantCulture));
 
+            // minimap's scalars aren't inline field initializers (they come from
+            // MinimapSettings.Default(), per the spec) so ReplaceField's pattern wouldn't match
+            // them anyway; per the spec, ApplyTo's own MinimapSettings.Default() is already the
+            // intended default and "Save Current As Default" isn't expected to override it.
+
             return source;
         }
 

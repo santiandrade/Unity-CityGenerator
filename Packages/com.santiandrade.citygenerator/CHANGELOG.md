@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.2.2] - 2026-08-27
+### Added
+
+- Minimap HUD: an optional (on by default) circular minimap in the top-left corner, showing a
+  static top-down snapshot of the generated city centred on the player in real time, with Custom
+  Places marked as Point of Interest labelled by name. Configured in a new "Minimap" tab
+  (Enabled/Texture Resolution/View Radius). The snapshot is captured once during generation and
+  saved as a PNG asset next to the generated scene (e.g. `Assets/Scenes/City1_Minimap.png`).
+
+
 ### Fixed
 
 - Custom Places grid picker: the block/quadrant you clicked in the picker no longer lands on the

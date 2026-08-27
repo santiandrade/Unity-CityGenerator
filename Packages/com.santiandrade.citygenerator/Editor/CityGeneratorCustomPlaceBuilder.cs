@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CityGenerator.Runtime;
 using UnityEditor;
 using UnityEngine;
 
@@ -20,15 +21,20 @@ namespace CityGenerator.Editor
         /// placed, pointing at a plaza block, an out-of-range block) is silently skipped here — the
         /// same configuration is a blocking validation error in <see cref="CityGeneratorValidator"/>,
         /// which is what keeps the Build buttons disabled before this ever runs.
+        /// Also projects every placed entry with <c>isPointOfInterest == true</c> into a
+        /// <see cref="PointOfInterestEntry"/> (title + final world position), consumed by
+        /// <see cref="CityGeneratorMinimapBuilder"/> — computed here, not re-derived later, since
+        /// this is the one place that already resolves an entry's final world position.
         /// </summary>
-        public static (List<GameObject> placed, HashSet<(int gridX, int gridY, int slot)> reservedSlots) BuildCustomPlaces(
+        public static (List<GameObject> placed, HashSet<(int gridX, int gridY, int slot)> reservedSlots, List<PointOfInterestEntry> pointsOfInterest) BuildCustomPlaces(
             List<CustomPlaceEntry> customPlaces, IReadOnlyList<BlockCell> blocks, Transform customPlacesGroup)
         {
             var placed = new List<GameObject>();
             var reservedSlots = new HashSet<(int gridX, int gridY, int slot)>();
+            var pointsOfInterest = new List<PointOfInterestEntry>();
 
             if (customPlaces == null || customPlaces.Count == 0)
-                return (placed, reservedSlots);
+                return (placed, reservedSlots, pointsOfInterest);
 
             var blockLookup = new Dictionary<(int gridX, int gridY), BlockCell>();
             foreach (BlockCell block in blocks)
@@ -58,9 +64,12 @@ namespace CityGenerator.Editor
                 instance.transform.localPosition = position;
                 instance.transform.localRotation = Quaternion.Euler(0f, 90f * (int)entry.facing, 0f);
                 placed.Add(instance);
+
+                if (entry.isPointOfInterest)
+                    pointsOfInterest.Add(new PointOfInterestEntry { title = entry.title, worldPosition = instance.transform.position });
             }
 
-            return (placed, reservedSlots);
+            return (placed, reservedSlots, pointsOfInterest);
         }
 
         private static bool TryResolveEntry(CustomPlaceEntry entry, Dictionary<(int gridX, int gridY), BlockCell> blockLookup, out BlockCell block)
