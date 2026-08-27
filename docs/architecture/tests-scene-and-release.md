@@ -20,6 +20,6 @@ Build Settings list this scene as the only enabled one. It is **disposable**: re
 
 ## Versioning and releasing the package
 
-- `Packages/com.santiandrade.citygenerator/package.json` carries the SemVer `version` (currently 2.2.0); `CHANGELOG.md` in the same folder follows Keep a Changelog, with a `## [Unreleased]` section always present above the latest release. A git tag `vX.Y.Z` marks each release.
+- `Packages/com.santiandrade.citygenerator/package.json` carries the SemVer `version` (currently 2.4.1); `CHANGELOG.md` in the same folder follows Keep a Changelog, with a `## [Unreleased]` section always present above the latest release. A git tag `vX.Y.Z` marks each release.
 - Unity has **no real "Update" button for a package installed by git URL** — installing fixes the resolved commit in `Packages/packages-lock.json`. Updating means reinstalling the URL with the new tag; this is documented for end users in the root README.
 - `Assets/Editor/CityGeneratorReleaseWindow.cs` (`Tools > City Generator > Release`, outside the package, in `Assembly-CSharp-Editor`) automates the repetitive part: bumps `version` in `package.json`, turns `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` and opens a new empty `## [Unreleased]` above it, then shows (and copies to the clipboard) the `git tag vX.Y.Z && git push origin vX.Y.Z` command. It never runs git itself — the tag is always created by a person, on purpose.
