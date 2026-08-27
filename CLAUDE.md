@@ -53,6 +53,7 @@ Specs are in `specs/` (Spanish, driven by a `/spec-*` workflow configured by `sp
 | [`05-performance-and-tests.md`](specs/05-performance-and-tests.md) | v2.1.0: the `Assets/Tests/` suite, `CityGeneratorSpatialHash`, `TrafficLaneOccupancy`, `PedestrianRoadProximityGrid`, connected components / BFS caching, `PedestrianPathBufferPool`. Records the measured baseline/delta for each change. |
 | [`06-custom-places.md`](specs/06-custom-places.md) | Custom Places, plus full removal of the pedestrian POI machinery. |
 | [`07-minimap-hud.md`](specs/07-minimap-hud.md) | v2.3.0: the Minimap HUD, `CityGeneratorMinimapBuilder`'s snapshot capture, and wiring `isPointOfInterest` on Custom Places to it. |
+| [`08-day-night-cycle.md`](specs/08-day-night-cycle.md) | The optional Day/Night Cycle: `Runtime/DayNightCycle.cs`, and the first case where "Rebuild City in Current Scene" reconfigures the Directional Light instead of leaving it untouched. |
 
 - [`docs/technical-review.md`](docs/technical-review.md) — standing technical review (performance, code quality, ECS analysis) with the pending findings.
 - [`docs/technical-review-2026-08-25.md`](docs/technical-review-2026-08-25.md) — external review; its critical/architectural findings were addressed by SPEC 04 and its performance findings (items 6-9) by SPEC 05. Remaining medium/low-priority items (demo content, docs, `CityGeneratorWindow` splitting) stay open.
