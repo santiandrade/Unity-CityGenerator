@@ -11,8 +11,8 @@ namespace CityGenerator.Editor
     /// <see cref="MinimapData"/> component on <c>cityRoot</c> with it, the world bounding box it
     /// covers, and the projected Point of Interest list. Runs at the end of
     /// <see cref="CityGeneratorContentAssembler.Assemble"/> (after every other builder, including
-    /// <c>TrafficBuilder</c>/<c>PedestrianBuilder</c>) so the Vehicle/Pedestrian layers those create
-    /// already exist and can be excluded from the snapshot's culling mask.
+    /// <c>TrafficBuilder</c>/<c>PedestrianBuilder</c>), so the "Vehicles"/"Pedestrians" groups those
+    /// populate already exist and can be hidden from the snapshot.
     /// <para>
     /// The snapshot is only captured here, into an in-memory (non-asset) <see cref="Texture2D"/>:
     /// at this point in the pipeline the final scene path (used to name the sibling PNG asset,
@@ -40,7 +40,35 @@ namespace CityGenerator.Editor
             float depth = gridHeight * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
             Vector3 worldCenter = cityRoot.TransformPoint(Vector3.zero);
 
-            Texture2D snapshot = CaptureSnapshot(worldCenter, width, depth, settings.textureResolution);
+            // Excluding Vehicle/Pedestrian by Camera.cullingMask alone doesn't work: that layer is
+            // assigned only to each instance's root sensor/proxy collider (see the invariant that a
+            // collider deeper in a user prefab's hierarchy is left untouched), never cascaded onto
+            // the child mesh Renderers that actually draw the car/pedestrian — those stay on
+            // whatever layer the prefab's own meshes were authored with (typically Default), so
+            // they'd still render into the snapshot. Hiding the two groups outright avoids depending
+            // on layer assignment at all.
+            Transform vehiclesGroup = cityRoot.Find("Vehicles");
+            Transform pedestriansGroup = cityRoot.Find("Pedestrians");
+            bool vehiclesWereActive = vehiclesGroup != null && vehiclesGroup.gameObject.activeSelf;
+            bool pedestriansWereActive = pedestriansGroup != null && pedestriansGroup.gameObject.activeSelf;
+
+            Texture2D snapshot;
+            try
+            {
+                if (vehiclesGroup != null)
+                    vehiclesGroup.gameObject.SetActive(false);
+                if (pedestriansGroup != null)
+                    pedestriansGroup.gameObject.SetActive(false);
+
+                snapshot = CaptureSnapshot(worldCenter, width, depth, settings.textureResolution);
+            }
+            finally
+            {
+                if (vehiclesGroup != null)
+                    vehiclesGroup.gameObject.SetActive(vehiclesWereActive);
+                if (pedestriansGroup != null)
+                    pedestriansGroup.gameObject.SetActive(pedestriansWereActive);
+            }
 
             var data = cityRoot.GetComponent<MinimapData>();
             if (data == null)
@@ -112,7 +140,6 @@ namespace CityGenerator.Editor
                 camera.farClipPlane = SnapshotCameraHeight + SnapshotFarClipMargin;
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Color.black;
-                camera.cullingMask = BuildCullingMask();
                 camera.allowHDR = false;
                 camera.allowMSAA = false;
                 camera.useOcclusionCulling = false;
@@ -138,21 +165,6 @@ namespace CityGenerator.Editor
                 }
                 Object.DestroyImmediate(cameraGO);
             }
-        }
-
-        // Excludes only the two dedicated layers the generator itself manages (see the spec's
-        // "decisiones descartadas" for why not a third "Minimap"/"MinimapIgnore" layer); left in
-        // the mask entirely if a layer doesn't exist yet (no vehicles/pedestrians were generated).
-        private static int BuildCullingMask()
-        {
-            int mask = ~0;
-            int vehicleLayer = LayerMask.NameToLayer(CityGeneratorConstants.VehicleLayerName);
-            if (vehicleLayer >= 0)
-                mask &= ~(1 << vehicleLayer);
-            int pedestrianLayer = LayerMask.NameToLayer(CityGeneratorConstants.PedestrianLayerName);
-            if (pedestrianLayer >= 0)
-                mask &= ~(1 << pedestrianLayer);
-            return mask;
         }
     }
 }
