@@ -135,9 +135,16 @@ namespace CityGenerator.Editor.UI
 
             Vector2 local = evt.localPosition;
             int gx = Mathf.FloorToInt((local.x - originX) / cellSize);
-            int gy = Mathf.FloorToInt((local.y - originY) / cellSize);
-            if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight)
+            int row = Mathf.FloorToInt((local.y - originY) / cellSize);
+            if (gx < 0 || gx >= gridWidth || row < 0 || row >= gridHeight)
                 return;
+
+            // The picker's top row must match +Z (the row Unity's own top-down Scene/Game view
+            // draws at the top of the screen), while pointer-local Y still grows downward like
+            // every other screen coordinate. Without this flip, the block a Custom Place/plaza
+            // cell is clicked on here would land one Z row away from where it visually sits once
+            // generated and viewed from above.
+            int gy = gridHeight - 1 - row;
 
             if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
             {
@@ -146,7 +153,7 @@ namespace CityGenerator.Editor.UI
             else
             {
                 float cellLocalX = local.x - (originX + gx * cellSize);
-                float cellLocalY = local.y - (originY + gy * cellSize);
+                float cellLocalY = local.y - (originY + row * cellSize);
                 SelectSingleCell(new Vector2Int(gx, gy), cellLocalX, cellLocalY, cellSize);
             }
 
@@ -203,7 +210,9 @@ namespace CityGenerator.Editor.UI
             if (!occupiesFullBlock && cornerSlotProperty != null)
             {
                 float half = cellSize * 0.5f;
-                int quadrant = (cellLocalX >= half ? 1 : 0) + (cellLocalY >= half ? 2 : 0);
+                // cellLocalY still grows downward (screen space); flipped so the top half of the
+                // cell (smaller Y) maps to the +Z slots (2/3), matching the row flip above.
+                int quadrant = (cellLocalX >= half ? 1 : 0) + (cellLocalY < half ? 2 : 0);
                 cornerSlotProperty.intValue = quadrant;
             }
 
@@ -243,11 +252,15 @@ namespace CityGenerator.Editor.UI
             HashSet<Vector2Int> plazaCells = ReadPlazaCells();
             float inset = cellSize * 0.08f;
 
+            // Screen row y=0 is the top of the picture; it must show the block that renders at
+            // the top of Unity's own top-down view, which is the highest gy (largest +Z), so the
+            // row read from plazaCells is flipped relative to the screen row being painted.
             for (int y = 0; y < gridHeight; y++)
             {
+                int gy = gridHeight - 1 - y;
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    bool isPlaza = plazaCells.Contains(new Vector2Int(x, y));
+                    bool isPlaza = plazaCells.Contains(new Vector2Int(x, gy));
 
                     float cx = originX + x * cellSize + inset;
                     float cy = originY + y * cellSize + inset;
@@ -285,11 +298,14 @@ namespace CityGenerator.Editor.UI
 
             float inset = cellSize * 0.08f;
 
+            // Same row flip as DrawPlazaMultiToggle: screen row y=0 (top) must show gy = gridHeight-1
+            // (largest +Z), matching Unity's own top-down view.
             for (int y = 0; y < gridHeight; y++)
             {
+                int gy = gridHeight - 1 - y;
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    bool isSelected = positionAssigned && selectedCell.x == x && selectedCell.y == y;
+                    bool isSelected = positionAssigned && selectedCell.x == x && selectedCell.y == gy;
 
                     float cx = originX + x * cellSize + inset;
                     float cy = originY + y * cellSize + inset;
@@ -299,8 +315,10 @@ namespace CityGenerator.Editor.UI
                     if (isSelected && !occupiesFullBlock && cornerSlot >= 0)
                     {
                         float half = size * 0.5f;
+                        // Bit 2 (+Z slots 2/3) draws in the top half of the cell, matching the
+                        // click-side flip in SelectSingleCell.
                         float qx = cx + ((cornerSlot & 1) != 0 ? half : 0f);
-                        float qy = cy + ((cornerSlot & 2) != 0 ? half : 0f);
+                        float qy = cy + ((cornerSlot & 2) != 0 ? 0f : half);
                         DrawRect(painter, quadrantColor, qx, qy, half, half);
                     }
                 }
