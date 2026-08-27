@@ -3,6 +3,7 @@ using System.IO;
 using CityGenerator.Runtime;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace CityGenerator.Editor
 {
@@ -20,6 +21,21 @@ namespace CityGenerator.Editor
     /// saved after <c>Assemble</c> returns. <see cref="SaveSnapshotAsset"/> finalises it into a real
     /// PNG asset once <c>CityGeneratorSceneBuilder</c> knows that path, for both a new scene and a
     /// Re-Build of the current one.
+    /// </para>
+    /// <para>
+    /// The capture camera is not scene-scoped by default — it renders every currently loaded scene
+    /// within its frustum, not just <c>cityRoot</c>'s own. "Build City in New Scene" deliberately
+    /// leaves any currently open scene loaded, so without isolating the capture, generating a new
+    /// city while a previous one is open bleeds that other scene's buildings/vehicles/pedestrians
+    /// into the new snapshot — found in QA by comparing a snapshot's vehicle pixel positions against
+    /// the still-open other scene's own vehicle transforms, an exact match. <see cref="Camera.scene"/>
+    /// looks like the natural fix (it's Unity's own supported mechanism for exactly this, used
+    /// internally for Prefab Mode isolation) but does **not** work here: it silently fails to filter
+    /// when the target scene hasn't been saved yet (empty name/path) — confirmed directly, and
+    /// <c>cityRoot</c>'s scene is unsaved at this point in the pipeline (a brand new scene is only
+    /// saved after <c>Assemble</c> returns). So every other loaded scene's root objects are
+    /// deactivated for the capture instead (restored right after, in a <c>finally</c>) — this works
+    /// regardless of save state, since it doesn't depend on scene identity at all.
     /// </para>
     /// </summary>
     internal static class CityGeneratorMinimapBuilder
@@ -52,6 +68,23 @@ namespace CityGenerator.Editor
             bool vehiclesWereActive = vehiclesGroup != null && vehiclesGroup.gameObject.activeSelf;
             bool pedestriansWereActive = pedestriansGroup != null && pedestriansGroup.gameObject.activeSelf;
 
+            // See the class remarks: every other loaded scene's root objects are hidden too, since
+            // the capture camera isn't otherwise scene-scoped.
+            Scene ownScene = cityRoot.gameObject.scene;
+            var otherSceneRoots = new List<GameObject>();
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                Scene scene = SceneManager.GetSceneAt(i);
+                if (!scene.IsValid() || !scene.isLoaded || scene == ownScene)
+                    continue;
+
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    if (root.activeSelf)
+                        otherSceneRoots.Add(root);
+                }
+            }
+
             Texture2D snapshot;
             try
             {
@@ -59,6 +92,8 @@ namespace CityGenerator.Editor
                     vehiclesGroup.gameObject.SetActive(false);
                 if (pedestriansGroup != null)
                     pedestriansGroup.gameObject.SetActive(false);
+                foreach (GameObject root in otherSceneRoots)
+                    root.SetActive(false);
 
                 snapshot = CaptureSnapshot(worldCenter, width, depth, settings.textureResolution);
             }
@@ -68,6 +103,11 @@ namespace CityGenerator.Editor
                     vehiclesGroup.gameObject.SetActive(vehiclesWereActive);
                 if (pedestriansGroup != null)
                     pedestriansGroup.gameObject.SetActive(pedestriansWereActive);
+                foreach (GameObject root in otherSceneRoots)
+                {
+                    if (root != null)
+                        root.SetActive(true);
+                }
             }
 
             var data = cityRoot.GetComponent<MinimapData>();

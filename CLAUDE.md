@@ -75,7 +75,7 @@ Each links to the document explaining why.
 - **Every vehicle prefab must keep its baked `CarAgent`**, or it silently falls back to identical default tuning. ([demo-content](docs/architecture/demo-content.md))
 - **Layout numbers live in `CityGeneratorConstants`, never inline**; player/camera/pedestrian/crowd tuning lives in `CityGeneratorSettings`, never back in constants. ([editor-tool](docs/architecture/editor-tool.md))
 - **Treat a Performance test failure as a correctness signal, not noise.** ([tests](docs/architecture/tests-scene-and-release.md))
-- **The Minimap snapshot excludes vehicles/pedestrians by deactivating their groups, never `Camera.cullingMask`** — the `Vehicle`/`Pedestrian` layer sits only on each instance's root proxy collider, never its child mesh `Renderer`s, so a culling mask silently renders them anyway. ([editor-tool](docs/architecture/editor-tool.md))
+- **The Minimap snapshot excludes vehicles/pedestrians by deactivating their groups, never `Camera.cullingMask`** — the `Vehicle`/`Pedestrian` layer sits only on each instance's root proxy collider, never its child mesh `Renderer`s, so a culling mask silently renders them anyway. It also deactivates every *other* loaded scene's root objects (never `Camera.scene`, which silently fails to filter an unsaved scene) — `Camera.Render()` isn't scene-scoped, and "Build City in New Scene" routinely leaves a previous scene open. ([editor-tool](docs/architecture/editor-tool.md))
 
 ## Working in this project
 
