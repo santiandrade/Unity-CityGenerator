@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repository. This 
 
 ## Project overview
 
-Unity project (`City Generator`, Unity `6000.5.8f1`, URP) whose **only reason to exist is to develop, test and distribute the City Generator tool** — an Editor window that procedurally generates a city (roads, sidewalks, markings, buildings, plazas, street furniture, traffic lights, autonomous traffic and pedestrians) into a new or existing scene.
+Unity project (`City Generator`, Unity `6000.5.8f1`, URP) whose **only reason to exist is to develop, test and distribute the City Generator tool** — an Editor window that procedurally generates a city (roads, sidewalks, markings, buildings, plazas, street furniture, traffic lights, autonomous traffic, pedestrians and a minimap HUD) into a new or existing scene.
 
 The tool lives in the embedded package `Packages/com.santiandrade.citygenerator/` and that package **is** the deliverable: what a user installs via **Package Manager > Install package from git URL**. This project consumes it the same way — as an installed package, not as loose code in `Assets/` — so a portability break shows up here first, not in the user's project. User-facing docs (install URL, update procedure, full manual) live in the root `README.md` / `README.es.md`.
 
@@ -52,6 +52,7 @@ Specs are in `specs/` (Spanish, driven by a `/spec-*` workflow configured by `sp
 | [`04-critical-architecture-fixes.md`](specs/04-critical-architecture-fixes.md) | v2.0.0: transactional rebuild, hierarchical collider detection, `Include Traffic` validation, non-singleton managers, single Input System authority. |
 | [`05-performance-and-tests.md`](specs/05-performance-and-tests.md) | v2.1.0: the `Assets/Tests/` suite, `CityGeneratorSpatialHash`, `TrafficLaneOccupancy`, `PedestrianRoadProximityGrid`, connected components / BFS caching, `PedestrianPathBufferPool`. Records the measured baseline/delta for each change. |
 | [`06-custom-places.md`](specs/06-custom-places.md) | Custom Places, plus full removal of the pedestrian POI machinery. |
+| [`07-minimap-hud.md`](specs/07-minimap-hud.md) | v2.3.0: the Minimap HUD, `CityGeneratorMinimapBuilder`'s snapshot capture, and wiring `isPointOfInterest` on Custom Places to it. |
 
 - [`docs/technical-review.md`](docs/technical-review.md) — standing technical review (performance, code quality, ECS analysis) with the pending findings.
 - [`docs/technical-review-2026-08-25.md`](docs/technical-review-2026-08-25.md) — external review; its critical/architectural findings were addressed by SPEC 04 and its performance findings (items 6-9) by SPEC 05. Remaining medium/low-priority items (demo content, docs, `CityGeneratorWindow` splitting) stay open.
@@ -74,6 +75,7 @@ Each links to the document explaining why.
 - **Every vehicle prefab must keep its baked `CarAgent`**, or it silently falls back to identical default tuning. ([demo-content](docs/architecture/demo-content.md))
 - **Layout numbers live in `CityGeneratorConstants`, never inline**; player/camera/pedestrian/crowd tuning lives in `CityGeneratorSettings`, never back in constants. ([editor-tool](docs/architecture/editor-tool.md))
 - **Treat a Performance test failure as a correctness signal, not noise.** ([tests](docs/architecture/tests-scene-and-release.md))
+- **The Minimap snapshot excludes vehicles/pedestrians by deactivating their groups, never `Camera.cullingMask`** — the `Vehicle`/`Pedestrian` layer sits only on each instance's root proxy collider, never its child mesh `Renderer`s, so a culling mask silently renders them anyway. ([editor-tool](docs/architecture/editor-tool.md))
 
 ## Working in this project
 

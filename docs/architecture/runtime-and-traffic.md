@@ -1,6 +1,6 @@
 # Runtime components — `Packages/com.santiandrade.citygenerator/Runtime/`
 
-Detail behind the "Runtime components" section of the root `CLAUDE.md`. Namespace `CityGenerator.Runtime`, references `Unity.InputSystem`. These ship with the tool and are what a generated city runs on. The pedestrian half lives in `pedestrians.md`.
+Detail behind the "Runtime components" section of the root `CLAUDE.md`. Namespace `CityGenerator.Runtime`, references `Unity.InputSystem`. These ship with the tool and are what a generated city runs on. The pedestrian half lives in `pedestrians.md`; `MinimapData`/`MinimapHUD` (also `Runtime/`) are documented in `editor-tool.md`'s "Minimap" section alongside the builder that populates them.
 
 ## Player and camera
 
