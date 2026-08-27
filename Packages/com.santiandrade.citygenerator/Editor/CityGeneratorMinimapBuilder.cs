@@ -3,7 +3,6 @@ using System.IO;
 using CityGenerator.Runtime;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace CityGenerator.Editor
 {
@@ -24,18 +23,28 @@ namespace CityGenerator.Editor
     /// </para>
     /// <para>
     /// The capture camera is not scene-scoped by default — it renders every currently loaded scene
-    /// within its frustum, not just <c>cityRoot</c>'s own. "Build City in New Scene" deliberately
-    /// leaves any currently open scene loaded, so without isolating the capture, generating a new
-    /// city while a previous one is open bleeds that other scene's buildings/vehicles/pedestrians
-    /// into the new snapshot — found in QA by comparing a snapshot's vehicle pixel positions against
-    /// the still-open other scene's own vehicle transforms, an exact match. <see cref="Camera.scene"/>
-    /// looks like the natural fix (it's Unity's own supported mechanism for exactly this, used
-    /// internally for Prefab Mode isolation) but does **not** work here: it silently fails to filter
-    /// when the target scene hasn't been saved yet (empty name/path) — confirmed directly, and
-    /// <c>cityRoot</c>'s scene is unsaved at this point in the pipeline (a brand new scene is only
-    /// saved after <c>Assemble</c> returns). So every other loaded scene's root objects are
-    /// deactivated for the capture instead (restored right after, in a <c>finally</c>) — this works
-    /// regardless of save state, since it doesn't depend on scene identity at all.
+    /// within its frustum, not just <c>cityRoot</c>'s own, and every *other* root object already
+    /// present in <c>cityRoot</c>'s own scene ("Build City in New Scene" deliberately leaves any
+    /// currently open scene loaded, and <c>CityGeneratorSceneBuilder.RebuildInActiveScene</c> only
+    /// destroys the *previous* city's root — found via <see cref="CityGeneratorRoot"/> — **after**
+    /// `Assemble` returns, so during the capture itself the old city's fully-active
+    /// `Vehicles`/`Pedestrians` are still sitting right there in the same scene as the new one).
+    /// <see cref="Camera.scene"/> looks like the natural fix but does **not** work here: it silently
+    /// fails to filter when the target scene hasn't been saved yet, which <c>cityRoot</c>'s scene
+    /// never has been at this point in the pipeline. Hiding every other root via
+    /// <c>GameObject.SetActive(false)</c> (an earlier version of this fix) doesn't work either, for
+    /// a much stranger reason confirmed by direct repro: a manual <see cref="Camera.Render"/> call
+    /// only reflects a change (active state, layer, *or* transform position — all three were tested)
+    /// made to a GameObject that has already been rendered at least once before, if that change
+    /// happened in an *earlier* Editor update than the render — changing and rendering it within the
+    /// same script call leaves the render showing the pre-change state regardless of which of the
+    /// three mechanisms is used. Brand new GameObjects (never rendered before) aren't affected and
+    /// respond to all three synchronously, which is exactly why hiding <c>vehiclesGroup</c>/
+    /// <c>pedestriansGroup</c> below still works: both are created earlier in this same `Assemble`
+    /// call. So instead of touching any pre-existing object at all, the fix moves <c>cityRoot</c>
+    /// itself — always freshly created for this call, never previously rendered — to an isolated
+    /// point in world space far from anything else that might be loaded, points the capture camera
+    /// there instead, and moves it back after. No pre-existing content ever needs to be hidden.
     /// </para>
     /// </summary>
     internal static class CityGeneratorMinimapBuilder
@@ -45,6 +54,12 @@ namespace CityGenerator.Editor
         // irrelevant to the captured footprint.
         private const float SnapshotCameraHeight = 300f;
         private const float SnapshotFarClipMargin = 50f;
+
+        // Far enough that no plausible generated city (even an extreme grid size) could ever reach
+        // it from the origin, but well inside float precision's safe range (jitter/z-fighting starts
+        // becoming noticeable well beyond this) — see the class remarks on why cityRoot is moved
+        // here instead of hiding everything else.
+        private const float SnapshotIsolationOffsetX = 50000f;
 
         /// <summary>No-op when <paramref name="settings"/>.enabled is false: no <see cref="MinimapData"/> is added, matching the "no regression when disabled" acceptance criterion.</summary>
         public static void Build(MinimapSettings settings, Transform cityRoot, int gridWidth, int gridHeight, List<PointOfInterestEntry> pointsOfInterest)
@@ -62,28 +77,22 @@ namespace CityGenerator.Editor
             // the child mesh Renderers that actually draw the car/pedestrian — those stay on
             // whatever layer the prefab's own meshes were authored with (typically Default), so
             // they'd still render into the snapshot. Hiding the two groups outright avoids depending
-            // on layer assignment at all.
+            // on layer assignment at all. This is safe to do synchronously (see the class remarks):
+            // both groups were created earlier in this same Assemble call, so they've never been
+            // rendered before.
             Transform vehiclesGroup = cityRoot.Find("Vehicles");
             Transform pedestriansGroup = cityRoot.Find("Pedestrians");
             bool vehiclesWereActive = vehiclesGroup != null && vehiclesGroup.gameObject.activeSelf;
             bool pedestriansWereActive = pedestriansGroup != null && pedestriansGroup.gameObject.activeSelf;
 
-            // See the class remarks: every other loaded scene's root objects are hidden too, since
-            // the capture camera isn't otherwise scene-scoped.
-            Scene ownScene = cityRoot.gameObject.scene;
-            var otherSceneRoots = new List<GameObject>();
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-            {
-                Scene scene = SceneManager.GetSceneAt(i);
-                if (!scene.IsValid() || !scene.isLoaded || scene == ownScene)
-                    continue;
-
-                foreach (GameObject root in scene.GetRootGameObjects())
-                {
-                    if (root.activeSelf)
-                        otherSceneRoots.Add(root);
-                }
-            }
+            // See the class remarks: rather than hiding every other pre-existing root (unreliable —
+            // a manual Camera.Render() doesn't pick up a same-call change to an already-rendered
+            // GameObject, whatever form that change takes), cityRoot itself is moved to an isolated
+            // point in space no other loaded content could plausibly reach, and the capture camera
+            // is pointed there instead. cityRoot is always freshly created for this call, so the
+            // move is guaranteed to be reflected in the very next render.
+            Vector3 originalPosition = cityRoot.position;
+            var isolationOffset = new Vector3(SnapshotIsolationOffsetX, 0f, 0f);
 
             Texture2D snapshot;
             try
@@ -92,22 +101,17 @@ namespace CityGenerator.Editor
                     vehiclesGroup.gameObject.SetActive(false);
                 if (pedestriansGroup != null)
                     pedestriansGroup.gameObject.SetActive(false);
-                foreach (GameObject root in otherSceneRoots)
-                    root.SetActive(false);
+                cityRoot.position = originalPosition + isolationOffset;
 
-                snapshot = CaptureSnapshot(worldCenter, width, depth, settings.textureResolution);
+                snapshot = CaptureSnapshot(worldCenter + isolationOffset, width, depth, settings.textureResolution);
             }
             finally
             {
+                cityRoot.position = originalPosition;
                 if (vehiclesGroup != null)
                     vehiclesGroup.gameObject.SetActive(vehiclesWereActive);
                 if (pedestriansGroup != null)
                     pedestriansGroup.gameObject.SetActive(pedestriansWereActive);
-                foreach (GameObject root in otherSceneRoots)
-                {
-                    if (root != null)
-                        root.SetActive(true);
-                }
             }
 
             var data = cityRoot.GetComponent<MinimapData>();
