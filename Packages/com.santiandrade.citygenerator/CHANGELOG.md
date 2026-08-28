@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New "Audio" tab with two cards: Ambience (2D looping clips that play regardless of camera
   position) and Plazas (3D positional clips, one AudioSource per configured entry per generated
   plaza block, with logarithmic rolloff and a per-entry min/max distance). Both are on by
-  default; Ambience ships with a default `city-ambiance.wav` clip at volume 1.
+  default; Ambience ships with a default `city-ambiance.wav` clip at volume 1, Plazas with a
+  default `plaza-ambiance-fountain.wav` clip at volume 1 and a 10/40m min/max distance.
 
 ### Changed
 

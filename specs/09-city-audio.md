@@ -19,7 +19,7 @@
   - Todas las entradas de la lista suenan en loop de forma simultánea (capas) desde que arranca la escena, cada una a su propio volumen — no hay selección aleatoria ni rotación entre clips.
 - **Card "Plazas"**: audio 3D posicional, uno por cada bloque marcado como plaza en la ciudad generada.
   - `Enabled` (`bool`, activado por defecto).
-  - Lista de entradas (`List<PlazaAudioClipEntry>`), vacía por defecto, cada una con:
+  - Lista de entradas (`List<PlazaAudioClipEntry>`), con una entrada por defecto (`DefaultAssets/Audio/plaza-ambiance-fountain.wav`, volumen 1, Min/Max Distance 10/40), cada una con:
     - `Clip` (`AudioClip`).
     - `Volume` (`float` 0-1, slider, propio de esa entrada).
     - `Min Distance` (`float`, por defecto 10, propio de esa entrada).
@@ -88,7 +88,7 @@ internal struct PlazaAudioSettings
     [Tooltip("Clips that loop simultaneously at every plaza's position, each at its own volume and hearing range.")]
     public List<PlazaAudioClipEntry> clips;
 
-    // Default: enabled = true, clips = empty list (no default plaza audio asset was provided).
+    // Default: enabled = true, clips with one entry (see CityGeneratorDefaultAssets.ApplyTo).
     public static PlazaAudioSettings Default() => new PlazaAudioSettings { enabled = true, clips = new List<PlazaAudioClipEntry>() };
 }
 
@@ -109,7 +109,7 @@ Notas:
 - Sigue el mismo patrón de lista de entradas que `VehicleEntry`/`PedestrianEntry`/`CustomPlaceEntry`: cada fila de la UI edita una entrada completa (clip + sus propios parámetros), no un clip suelto más un slider compartido.
 - **`CityGeneratorAudioBuilder`** (nuevo, `Editor/`): `BuildAmbience(Transform cityRoot, AmbienceSettings ambience)` crea un `GameObject` hijo de `cityRoot` por cada entrada (`AudioSource` con `spatialBlend = 0`, `loop = true`, `playOnAwake = true`, `volume = entry.volume`); `BuildPlazaAudio(Transform blockGroup, Vector3 center, PlazaAudioSettings plazaAudio)` crea un `GameObject` hijo de `blockGroup` (el `Plaza_{gridX}_{gridY}` que ya crea `CityGeneratorPlazaBuilder`) por cada entrada, posicionado en `center`, con `AudioSource` 3D (`spatialBlend = 1`, `loop = true`, `playOnAwake = true`, `volume`/`minDistance`/`maxDistance` de la entrada, `rolloffMode = AudioRolloffMode.Logarithmic`).
 - **No hace falta lógica de reconciliación tipo Day/Night Cycle**: a diferencia de la Directional Light (que sobrevive a un Re-Build), tanto el audio de Ambience como el de Plazas cuelgan de `cityRoot`/de los grupos de plaza, que ya se reconstruyen enteros en cada Build/Re-Build (igual que Buildings, Props, etc.) — `CityGeneratorAudioBuilder` simplemente se invoca desde `CityGeneratorContentAssembler.Assemble` como un builder más del pipeline, sin necesidad de buscar/actualizar/borrar instancias previas por nombre.
-- **`CityGeneratorDefaultAssets.ApplyTo`** añade la carga del clip por defecto de Ambience desde `Packages/com.santiandrade.citygenerator/DefaultAssets/Audio/city-ambiance.wav`, siguiendo el mismo patrón hardcoded-path que el resto de assets por defecto.
+- **`CityGeneratorDefaultAssets.ApplyTo`** añade la carga del clip por defecto de Ambience desde `Packages/com.santiandrade.citygenerator/DefaultAssets/Audio/city-ambiance.wav` y el de Plazas desde `.../DefaultAssets/Audio/plaza-ambiance-fountain.wav` (volumen 1, Min/Max Distance 10/40 — los mismos valores por defecto que ofrece "+ Add Plaza Clip" en la UI), siguiendo el mismo patrón hardcoded-path que el resto de assets por defecto.
 
 ## Plan de implementación
 
@@ -131,7 +131,7 @@ Notas:
 
 ## Criterios de aceptación
 
-- [x] `CityGeneratorSettings` compila con el campo `audio: AudioSettings` tal como se definió, con `ambience.enabled = true`, `ambience.clips` con una entrada por defecto (`city-ambiance.wav`, volumen 1), `plazaAudio.enabled = true` y `plazaAudio.clips` vacía. Verificado con `ResetToDefaults` sobre la ventana real: `ambience.clips[0].clip = city-ambiance`, `plazaAudio.clips.Count = 0`.
+- [x] `CityGeneratorSettings` compila con el campo `audio: AudioSettings` tal como se definió, con `ambience.enabled = true`, `ambience.clips` con una entrada por defecto (`city-ambiance.wav`, volumen 1), `plazaAudio.enabled = true` y `plazaAudio.clips` con una entrada por defecto (`plaza-ambiance-fountain.wav`, volumen 1, Min/Max Distance 10/40). Verificado con `ResetToDefaults` sobre la ventana real.
 - [x] `Editor/CityGeneratorAudioBuilder.cs` existe con `BuildAmbience` y `BuildPlazaAudio`, cada uno creando un `GameObject`+`AudioSource` por entrada de la lista correspondiente, con los parámetros (volumen, spatial blend, loop, min/max distance, rolloff) descritos en el modelo de datos.
 - [x] Generar una ciudad nueva ("Build City in New Scene") con `ambience.enabled = true` y al menos una entrada crea un `AudioSource` 2D en loop por entrada, hijo de `cityRoot`, reproduciéndose en Play Mode desde el inicio, al volumen configurado por entrada. Verificado vía `CityGeneratorAudioBuilderTests`: `spatialBlend=0`, `loop=true`, `playOnAwake=true`, `volume` de la entrada, padre = `cityRoot`.
 - [x] Generar una ciudad nueva con `plazaAudio.enabled = true`, al menos una entrada y al menos una plaza en `plazaCells` crea, dentro de cada `Plaza_{gridX}_{gridY}`, un `AudioSource` 3D en loop por entrada, centrado en el bloque, con `minDistance`/`maxDistance`/`volume` propios de esa entrada y `rolloffMode = Logarithmic`. Verificado vía test: todos los valores coinciden, posición = centro del bloque.
@@ -156,8 +156,9 @@ Notas:
 - **Volumen como slider 0-1 (`AudioSource.volume` nativo), no un campo libre para amplificar por encima de 1.** Consistente con otros sliders normalizados de la tool y evita clipping accidental.
 - **`Min Distance`/`Max Distance` por defecto 10/40.** Calculados sobre el tamaño real del bloque (46 m sobre rejilla de 56 m, `CityGeneratorConstants`): la atenuación empieza dentro del propio bloque de la plaza y el audio deja de oírse justo antes del bloque adyacente.
 - **No:** requerir una `AudioListener` adicional o gestionar el existente. La cámara generada (`CreateMainCamera`) ya añade un `AudioListener`; esta spec no lo toca.
+- **Plazas sí trae una entrada por defecto (`plaza-ambiance-fountain.wav`), añadida durante la implementación.** El usuario aportó el fichero en `DefaultAssets/Audio/` mientras se implementaba esta spec (que originalmente dejaba `plazaAudio.clips` vacía por falta de asset); una vez disponible, cablearlo evita que una ventana recién abierta o tras "Reset to Defaults" muestre la card Plazas en rojo por defecto, igual que Ambience.
 
 ## Riesgos identificados
 
-- **Tamaño del package.** `city-ambiance.wav` pasa a formar parte de `DefaultAssets/`, que se distribuye dentro del package instalable — un WAV sin comprimir puede pesar bastante más que los demás assets por defecto (prefabs, texturas). Mitigación: revisar en el paso 4 del plan el tamaño real del fichero y, si es significativo, ajustar sus `AudioImporter` settings (compresión, mono) antes de darlo por definitivo — no se re-graba el propio audio, ya lo aportó el usuario.
+- **Tamaño del package.** `city-ambiance.wav` y `plaza-ambiance-fountain.wav` pasan a formar parte de `DefaultAssets/`, que se distribuye dentro del package instalable — un WAV sin comprimir puede pesar bastante más que los demás assets por defecto (prefabs, texturas). Mitigación: revisar en el paso 4 del plan el tamaño real de cada fichero y, si es significativo, ajustar sus `AudioImporter` settings (compresión, mono) antes de darlos por definitivos — no se re-graba el propio audio, ya lo aportó el usuario.
 - **Número de `AudioSource` 3D simultáneos con muchas plazas y varias entradas por plaza.** Una rejilla grande con muchas plazas, cada una con varias entradas de audio, multiplica el número de `AudioSource` activos en todo momento (todas en loop desde el inicio, no solo la más cercana). Mitigación: fuera de alcance de esta spec optimizarlo (p. ej. activar/desactivar por proximidad); si en QA resulta un problema real de rendimiento o de audio saturado, es candidato a una spec futura.

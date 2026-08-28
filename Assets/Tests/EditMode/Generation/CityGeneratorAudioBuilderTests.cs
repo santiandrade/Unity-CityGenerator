@@ -37,6 +37,28 @@ namespace CityGenerator.Tests.EditMode.Generation
         }
 
         [Test]
+        public void DefaultAssets_ApplyTo_Populates_Default_Ambience_And_Plaza_Clips()
+        {
+            var settings = new CityGeneratorSettings();
+            CityGeneratorDefaultAssets.ApplyTo(settings);
+
+            Assert.IsTrue(settings.audio.ambience.enabled);
+            Assert.AreEqual(1, settings.audio.ambience.clips.Count);
+            Assert.IsNotNull(settings.audio.ambience.clips[0].clip, "Default ambience clip must load.");
+            Assert.AreEqual(1f, settings.audio.ambience.clips[0].volume);
+
+            Assert.IsTrue(settings.audio.plazaAudio.enabled);
+            Assert.AreEqual(1, settings.audio.plazaAudio.clips.Count);
+            Assert.IsNotNull(settings.audio.plazaAudio.clips[0].clip, "Default plaza clip must load.");
+            Assert.AreEqual(1f, settings.audio.plazaAudio.clips[0].volume);
+            Assert.AreEqual(10f, settings.audio.plazaAudio.clips[0].minDistance);
+            Assert.AreEqual(40f, settings.audio.plazaAudio.clips[0].maxDistance);
+
+            bool valid = CityGeneratorValidator.Validate(settings, out List<string> errors);
+            Assert.IsTrue(valid, "Default settings must not be blocked by the new Audio validation rules. Errors: " + string.Join("; ", errors));
+        }
+
+        [Test]
         public void Ambience_And_PlazaAudio_Are_Built_With_Expected_Properties()
         {
             var settings = new CityGeneratorSettings();

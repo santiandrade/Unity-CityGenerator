@@ -121,6 +121,10 @@ namespace CityGenerator.Editor
             {
                 new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/city-ambiance.wav"), volume = 1f },
             };
+            settings.audio.plazaAudio.clips = new List<PlazaAudioClipEntry>
+            {
+                new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/plaza-ambiance-fountain.wav"), volume = 1f, minDistance = 10f, maxDistance = 40f },
+            };
         }
 
         private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);
