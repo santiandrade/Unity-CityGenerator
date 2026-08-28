@@ -38,6 +38,7 @@ namespace CityGenerator.Editor
         public static List<GameObject> BuildPlazas(
             PlazaSettings plazaSettings,
             VegetationSettings vegetationSettings,
+            PlazaAudioSettings plazaAudioSettings,
             Transform plazaGroup,
             Transform treesGroup,
             IReadOnlyList<BlockCell> blocks,
@@ -69,6 +70,8 @@ namespace CityGenerator.Editor
                     obstacles.AddRange(BuildBenches(plazaSettings.benchPrefab, blockGroup, block.center));
 
                 List<GameObject> vegetation = BuildVegetation(vegetationSettings, treesGroup, block.center, obstacles, random, plazaIndex, cache);
+
+                CityGeneratorAudioBuilder.BuildPlazaAudio(blockGroup, block.center, plazaAudioSettings);
 
                 solidInstances.AddRange(obstacles);
                 solidInstances.AddRange(vegetation);

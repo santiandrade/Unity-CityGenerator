@@ -24,6 +24,7 @@ namespace CityGenerator.Editor
         private const string TabPlayer = "player";
         private const string TabPedestrians = "pedestrians";
         private const string TabMinimap = "minimap";
+        private const string TabAudio = "audio";
 
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
         private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Camera and player are left untouched; the Directional Light keeps its position and shadows, but its yaw is corrected to -110 (roughly east-west sun) and its Day/Night Cycle is updated to match these settings.";
@@ -61,6 +62,8 @@ namespace CityGenerator.Editor
         private CityGeneratorCard minimapCard;
         private HelpBox minimapResolutionWarning;
         private HelpBox minimapViewRadiusWarning;
+        private CityGeneratorCard ambienceCard;
+        private CityGeneratorCard plazaAudioCard;
         private CityGeneratorTabBar tabBar;
         private HelpBox referenceSpeedMismatchWarning;
         private CityGeneratorGridPreview gridPreview;
@@ -177,12 +180,14 @@ namespace CityGenerator.Editor
             VisualElement playerContainer = rootVisualElement.Q<VisualElement>("cg-cards-player");
             VisualElement pedestriansContainer = rootVisualElement.Q<VisualElement>("cg-cards-pedestrians");
             VisualElement minimapContainer = rootVisualElement.Q<VisualElement>("cg-cards-minimap");
+            VisualElement audioContainer = rootVisualElement.Q<VisualElement>("cg-cards-audio");
 
             tabBar = new CityGeneratorTabBar(tabsContainer);
             tabBar.AddTab(TabCity, "City", cityContainer);
             tabBar.AddTab(TabPlayer, "Player", playerContainer);
             tabBar.AddTab(TabPedestrians, "Pedestrians", pedestriansContainer);
             tabBar.AddTab(TabMinimap, "Minimap", minimapContainer);
+            tabBar.AddTab(TabAudio, "Audio", audioContainer);
 
             BuildGeneralCard(cityContainer);
             BuildGroundCard(cityContainer);
@@ -202,6 +207,9 @@ namespace CityGenerator.Editor
             BuildCrowdCard(pedestriansContainer);
 
             BuildMinimapCard(minimapContainer);
+
+            BuildAmbienceCard(audioContainer);
+            BuildPlazaAudioCard(audioContainer);
 
             BuildFooter();
 
@@ -467,6 +475,32 @@ namespace CityGenerator.Editor
             content.Add(minimapViewRadiusWarning);
         }
 
+        private void BuildAmbienceCard(VisualElement parent)
+        {
+            ambienceCard = AddCard(parent, "audio.ambience", "Ambience", "d_AudioSource Icon", defaultExpanded: true, TabAudio);
+            VisualElement content = ambienceCard.ContentContainer;
+
+            content.Add(CreateField("audio.ambience.enabled", "Enabled"));
+            var list = new CityGeneratorAmbienceClipList(RefreshDynamicUi);
+            list.Bind(FindProperty("audio.ambience.clips"));
+            content.Add(list);
+
+            RegisterCardPathAlias("audio.ambience.clips", ambienceCard, TabAudio);
+        }
+
+        private void BuildPlazaAudioCard(VisualElement parent)
+        {
+            plazaAudioCard = AddCard(parent, "audio.plazaAudio", "Plazas", "d_AudioSource Icon", defaultExpanded: true, TabAudio);
+            VisualElement content = plazaAudioCard.ContentContainer;
+
+            content.Add(CreateField("audio.plazaAudio.enabled", "Enabled"));
+            var list = new CityGeneratorPlazaAudioClipList(RefreshDynamicUi);
+            list.Bind(FindProperty("audio.plazaAudio.clips"));
+            content.Add(list);
+
+            RegisterCardPathAlias("audio.plazaAudio.clips", plazaAudioCard, TabAudio);
+        }
+
         private void BuildFooter()
         {
             validationPanel = rootVisualElement.Q<VisualElement>("cg-validation-panel");
@@ -590,6 +624,12 @@ namespace CityGenerator.Editor
             customPlaceList.SetGrid(gridWidth, gridHeight);
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
+            ambienceCard.SetBadge(FindProperty("audio.ambience.enabled").boolValue
+                ? $"{FindProperty("audio.ambience.clips").arraySize} clips"
+                : "Off");
+            plazaAudioCard.SetBadge(FindProperty("audio.plazaAudio.enabled").boolValue
+                ? $"{FindProperty("audio.plazaAudio.clips").arraySize} clips"
+                : "Off");
             dayNightCard.SetBadge(FindProperty("dayNight.enabled").boolValue
                 ? $"Starts {FindProperty("dayNight.startHour").floatValue:0.#}h"
                 : "Off");
@@ -676,6 +716,7 @@ namespace CityGenerator.Editor
             tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
             tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
             tabBar.SetHasError(TabMinimap, tabsWithErrors.Contains(TabMinimap));
+            tabBar.SetHasError(TabAudio, tabsWithErrors.Contains(TabAudio));
 
             int blockingCount = 0;
             foreach (CityGeneratorValidationIssue issue in issues)

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New "Audio" tab with two cards: Ambience (2D looping clips that play regardless of camera
+  position) and Plazas (3D positional clips, one AudioSource per configured entry per generated
+  plaza block, with logarithmic rolloff and a per-entry min/max distance). Both are on by
+  default; Ambience ships with a default `city-ambiance.wav` clip at volume 1.
+
 ### Changed
 
 - Day/Night Cycle: the Directional Light's yaw is now forced to -110° (was -90°) on every

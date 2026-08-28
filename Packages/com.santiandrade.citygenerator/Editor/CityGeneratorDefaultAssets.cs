@@ -116,8 +116,14 @@ namespace CityGenerator.Editor
             settings.props.trafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight.prefab");
             settings.props.lampPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Lamp.prefab");
             settings.props.binPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Bin.prefab");
+
+            settings.audio.ambience.clips = new List<AmbienceClipEntry>
+            {
+                new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/city-ambiance.wav"), volume = 1f },
+            };
         }
 
         private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        private static AudioClip LoadAudioClip(string path) => AssetDatabase.LoadAssetAtPath<AudioClip>(path);
     }
 }

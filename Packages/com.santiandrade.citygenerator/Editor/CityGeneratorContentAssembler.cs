@@ -114,7 +114,7 @@ namespace CityGenerator.Editor
             playerAvoidObstacles.AddRange(builtBuildings);
 
             Report("Plazas", 0.35f);
-            List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, plaza, trees, blocks, random, cache, out List<GameObject> plazaLawns);
+            List<GameObject> plazaSolids = CityGeneratorPlazaBuilder.BuildPlazas(settings.plaza, settings.vegetation, settings.audio.plazaAudio, plaza, trees, blocks, random, cache, out List<GameObject> plazaLawns);
             obstacles.AddRange(plazaSolids);
             obstacles.AddRange(plazaLawns);
             playerAvoidObstacles.AddRange(plazaSolids);
@@ -173,6 +173,9 @@ namespace CityGenerator.Editor
             // generated scene's path is known (not yet the case here, mid-Assemble).
             Report("Minimap", 0.97f);
             CityGeneratorMinimapBuilder.Build(settings.minimap, cityRoot, gridWidth, gridHeight, pointsOfInterest);
+
+            Report("Audio", 0.99f);
+            CityGeneratorAudioBuilder.BuildAmbience(cityRoot, settings.audio.ambience);
 
             // Every group except Vehicles/Pedestrians is 100% static geometry once generated:
             // marking it unlocks static batching and is a prerequisite for baking occlusion
