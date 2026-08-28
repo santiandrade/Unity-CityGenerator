@@ -73,10 +73,11 @@ namespace CityGenerator.Editor
         // here instead of hiding everything else.
         private const float SnapshotIsolationOffsetX = 50000f;
 
-        // Matches the rotation CityGeneratorSceneBuilder forces on the Directional Light (yaw -90
-        // for east-west sun alignment, see CityGeneratorSceneBuilder.DirectionalLightYaw): a
+        // Matches the rotation CityGeneratorSceneBuilder forces on the Directional Light (its
+        // DirectionalLightYaw, referenced rather than copied so the two can't drift apart): a
         // neutral, well-lit daytime angle.
-        private static readonly Quaternion NeutralSnapshotLightRotation = Quaternion.Euler(50f, -90f, 0f);
+        private static readonly Quaternion NeutralSnapshotLightRotation =
+            Quaternion.Euler(50f, CityGeneratorSceneBuilder.DirectionalLightYaw, 0f);
         private const float NeutralSnapshotLightIntensity = 1f;
 
         /// <summary>No-op when <paramref name="settings"/>.enabled is false: no <see cref="MinimapData"/> is added, matching the "no regression when disabled" acceptance criterion.</summary>

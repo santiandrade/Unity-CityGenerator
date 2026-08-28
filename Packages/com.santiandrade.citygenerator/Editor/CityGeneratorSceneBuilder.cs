@@ -132,13 +132,15 @@ namespace CityGenerator.Editor
             return summary;
         }
 
-        // East-west sun alignment: with the minimap's snapshot camera looking straight down
-        // (CityGeneratorMinimapBuilder, Euler(90,0,0)), minimap-right maps to world +X and
-        // minimap-top to world +Z. Minimap-right is East, so a yaw of -90 makes the sun (per
-        // DayNightCycle's pitch formula) rise due East (hour 6) and set due West (hour 18) —
-        // matching a player facing East/West at those hours. Forced on every build/re-build (see
+        // Roughly east-west sun alignment: with the minimap's snapshot camera looking straight
+        // down (CityGeneratorMinimapBuilder, Euler(90,0,0)), minimap-right maps to world +X and
+        // minimap-top to world +Z, so minimap-right is East. A yaw of -90 would put the sunrise
+        // (per DayNightCycle's pitch formula, hour 6) due East and the sunset due West; -110 tilts
+        // that axis by 20 degrees, so the sun rises east-north-east and sets west-south-west
+        // instead — close enough that the minimap still reads right, off-axis enough that shadows
+        // don't fall exactly along a street. Forced on every build/re-build (see
         // UpdateDirectionalLight), never left to whatever yaw the light happened to have.
-        private const float DirectionalLightYaw = -90f;
+        internal const float DirectionalLightYaw = -110f;
 
         // Finds the "Directional Light" GameObject by name (same pattern, and same fragility if
         // the user renames it, as CreateMinimapHud's lookup of "Minimap HUD"), recreating it via

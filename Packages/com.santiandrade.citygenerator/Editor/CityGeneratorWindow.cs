@@ -26,7 +26,7 @@ namespace CityGenerator.Editor
         private const string TabMinimap = "minimap";
 
         private const string BuildNewSceneButtonTooltip = "Generate a new city and save it as the next free Assets/Scenes/City<N>.unity, leaving any currently open scene untouched.";
-        private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Camera and player are left untouched; the Directional Light keeps its position and shadows, but its yaw is corrected to -90 (east-west sun) and its Day/Night Cycle is updated to match these settings.";
+        private const string RebuildCurrentSceneButtonTooltip = "Delete the \"City\" object in the current scene and regenerate it with these settings. Camera and player are left untouched; the Directional Light keeps its position and shadows, but its yaw is corrected to -110 (roughly east-west sun) and its Day/Night Cycle is updated to match these settings.";
 
         // internal, not private: CityGeneratorSetDefaultsWindow (Assets/Editor/, outside the
         // package, in Assembly-CSharp-Editor) reads this to implement "Set Current Selection As

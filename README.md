@@ -6,14 +6,16 @@
 
 An Editor tool for Unity that procedurally generates a city — roads, sidewalks, road
 markings, buildings, plazas, street furniture, traffic lights, autonomous traffic,
-pedestrians and a minimap HUD — into a new or existing scene. Open it from
+pedestrians, an optional day/night cycle and a minimap HUD — into a new or existing
+scene. Open it from
 **Tools > City Generator > Open**.
 
 The window is split into four tabs: **City** (grid, ground, buildings, plazas, vehicles,
-props, and Custom Places — manually-placed entries with a title, a prefab, a block/corner
-picked from a grid preview, a fixed orientation, and an optional "Is Point Of Interest"
-flag that surfaces the entry on the minimap — instantiated instead of a random building at
-that spot), **Player** (Player Prefab, movement, `CharacterController` and camera tuning),
+props, an optional Day/Night Cycle for the generated directional light — start hour, speed
+multiplier, and a colour gradient/intensity curve over the 24 h — and Custom Places:
+manually-placed entries with a title, a prefab, a block/corner picked from a grid preview,
+a fixed orientation, and an optional "Is Point Of Interest" flag that surfaces the entry on
+the minimap, instantiated instead of a random building at that spot), **Player** (Player Prefab, movement, `CharacterController` and camera tuning),
 **Pedestrians** (the pedestrian prefab list, plus their walk/idle behaviour and crowd
 tuning), and **Minimap** (on by default; texture resolution and view radius for the
 in-game minimap HUD) — everything is editable from the window, nothing requires touching
@@ -61,6 +63,8 @@ git URL using the new tag from the [Releases page](https://github.com/santiandra
   `UnityEngine.Input` API is not used anywhere.
 - **glTFast** (`com.unity.cloud.gltfast`, declared as a package dependency). Needed to
   import the demo fountain prop, which is a `.glb` model.
+- **uGUI** (`com.unity.ugui`, declared as a package dependency). Needed by the minimap
+  HUD, which is a UGUI `Canvas` + `RawImage`.
 - A layer named **`Vehicle`**, used by traffic so vehicles can detect each other with
   their forward sensor. You don't need to create it yourself — the tool creates it the
   first time it generates traffic with one, using the first free layer slot, and logs
@@ -126,14 +130,18 @@ instances* it generates — but it does expect a few things from what you assign
 Everything below applies to the specific scene you generated into, not to the tool. The
 tool's job ends at leaving the geometry ready for these steps to be a single button:
 
-- **Bake lightmaps and occlusion culling.** Every generated group except `Vehicles`
-  (which `CarAgent` moves by transform every frame, incompatible with static batching)
-  is already marked `Batching Static | Occluder Static | Occludee Static`, so both bakes
+- **Bake lightmaps and occlusion culling.** Every generated group except `Vehicles` and
+  `Pedestrians` (which `CarAgent`/`PedestrianAgent` move by transform every frame,
+  incompatible with static batching) is already marked `Batching Static | Occluder Static | Occludee Static`, so both bakes
   are ready to run with no manual setup — the tool just doesn't run them for you.
 - **Add `LODGroup`s** to your own prefabs if you're generating a large city. The tool
   has no opinion on LOD; it only places whatever prefab you gave it.
 - **Adjust lighting** — the generated scene ships with a single directional light and no
-  `Global Volume` (removed on purpose, to stay render-pipeline-agnostic).
+  `Global Volume` (removed on purpose, to stay render-pipeline-agnostic). That light is
+  always created facing roughly east-west (yaw -110°, so the sun rises towards the
+  minimap's right) and
+  carries the Day/Night Cycle component; with the cycle disabled it simply stays fixed at
+  the configured Start Hour.
 
 ## Recommended project settings
 
@@ -159,8 +167,8 @@ for your project; there's no package-level opt-in replacement.
 ## Scaling traffic
 
 `CarAgent` has no route planning or congestion avoidance: past roughly 40% of a grid's
-spawn nodes occupied, traffic tends to gridlock rather than flow (the tool warns in the
-console when you exceed this). If you need denser traffic than that, a
+spawn nodes occupied, traffic tends to gridlock rather than flow (the window shows a
+warning next to **Vehicle Count** as soon as you exceed this, before you generate). If you need denser traffic than that, a
 `CityGenerator.Runtime.TrafficManager` is generated automatically whenever **Include
 Traffic** is enabled — it ticks every `CarAgent` from one central `Update` and, once
 more than ~60 cars are registered, staggers the forward sensor for cars far from the

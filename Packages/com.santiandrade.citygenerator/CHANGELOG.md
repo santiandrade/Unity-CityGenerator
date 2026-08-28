@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+
+- Day/Night Cycle: the Directional Light's yaw is now forced to -110° (was -90°) on every
+  "Build City in New Scene" and "Rebuild City in Current Scene", so the sun rises
+  east-north-east and sets west-south-west instead of exactly along the world X axis. The
+  minimap snapshot's own neutral light follows the same constant.
 
 ## [2.4.1] - 2026-08-28
 ### Changed

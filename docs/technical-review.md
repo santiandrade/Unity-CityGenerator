@@ -27,9 +27,11 @@ en su propio proyecto, sobre su propia ciudad. La responsabilidad de la tool ter
 de este informe tenía un grupo D dedicado a ese trabajo por escena; se ha eliminado, y las
 notas correspondientes pertenecen ahora al README del paquete, no aquí.
 
-Revisado: los 23 scripts de `Packages/com.santiandrade.citygenerator/`, `ProjectSettings/*`,
-`Assets/Settings/*` (URP), los 22 prefabs de demo, los 14 materiales, `City.unity` y
-`Packages/manifest.json`.
+Revisado (alcance en el momento de la revisión, 2026-08-20): los 23 scripts de entonces de
+`Packages/com.santiandrade.citygenerator/`, `ProjectSettings/*`, `Assets/Settings/*` (URP),
+los 22 prefabs de demo, los 14 materiales, `City.unity` y `Packages/manifest.json`. El
+paquete ha crecido bastante desde entonces (SPEC 03-08); las filas de abajo se anotan cuando
+un cambio posterior las ha dejado desfasadas.
 
 **Conclusión de una línea**: todo lo detectado en la revisión inicial que merecía la pena ya
 está corregido en el código de la tool y en el contenido de demo (incluida la migración fuera
@@ -69,9 +71,9 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 
 | # | Hallazgo | Cómo quedó |
 |---|---|---|
-| A.1 | Sin static flags: cero batching, occlusion imposible | `CityGeneratorContentAssembler.MarkStatic` aplica `Batching\|Occluder\|Occludee Static` a todos los grupos **menos `Vehicles`** (los mueve `CarAgent` por transform). Automático en cada generación |
+| A.1 | Sin static flags: cero batching, occlusion imposible | `CityGeneratorContentAssembler.MarkStatic` aplica `Batching\|Occluder\|Occludee Static` a todos los grupos **menos `Vehicles` y `Pedestrians`** (los mueven `CarAgent`/`PedestrianAgent` por transform; `Pedestrians` se añadió a la exclusión con SPEC 03). Automático en cada generación |
 | A.3 | Farolas con densidad fija de 3 por lado | `props.lampDensity` en `CityGeneratorSettings`, mismo patrón que `binDensity` |
-| A.4 | `SphereCast` leyendo posiciones de física obsoletas | `TrafficNetwork` llama a `Physics.SyncTransforms()` una vez por frame tras mover los agentes, con el porqué comentado en el sitio |
+| A.4 | `SphereCast` leyendo posiciones de física obsoletas | `Physics.SyncTransforms()` una vez por frame tras mover los agentes, con el porqué comentado en el sitio. Estaba en `TrafficNetwork`; SPEC 05 lo movió a `TrafficManager.Update`, y solo se ejecuta si hay agentes registrados |
 | A.5 | `GetComponentInParent` por impacto y por frame | Registro estático `ColliderRegistry` indexado por `GetEntityId()` del collider |
 | A.6 | Array de 8 impactos sin ordenar | Subido a 16 en `CarAgent.hits` y en `ThirdPersonCamera.collisionHits` |
 | A.8 | `nextCarId` estático sin reset | Reset explícito (`CarAgent.cs:106`), a prueba de *Domain Reload* desactivado |
@@ -93,7 +95,7 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | C.2 | `_CameraOpaqueTexture` generada sin consumidor | `m_RequireOpaqueTexture: 0`. `m_RequireDepthTexture` sigue a 1, justificado por el SSAO del `PC_Renderer` |
 | C.3 | GPU Resident Drawer desactivado | `m_GPUResidentDrawerMode: 1` (Instanced Drawing), habilitado por A.1 |
 | C.4 | Framerate sin objetivo fijado | `CityGenerator.Runtime.PerformanceBootstrap`: `vSyncCount = 0`, `targetFrameRate = 60`. Deliberadamente **en el paquete** y no en `ProjectSettings`, para que viaje con la tool |
-| A.7 | Tick por-coche de `CarAgent` (2026-08-20) | Nuevo `CityGenerator.Runtime.TrafficManager`: `CarAgent` ya no implementa `Update()`, expone `Tick(float dt, bool runSensor)` y se registra en `Start()` contra `TrafficManager.Instance` (con fallback a `FindFirstObjectByType`/auto-creación si el componente no viene del generador). `TrafficManager.Update()` itera la lista de agentes registrados y llama a `Tick` desde un único punto. Con más de `staggerMinAgentCount` (60 por defecto) coches registrados, además escalona el `SphereCast` del sensor frontal para los coches lejos de `Camera.main`, reutilizando el último `clearance` en los frames que se saltan — por debajo de ese umbral (la demo por defecto tiene 30) el comportamiento es idéntico al `Update()` original. `CityGeneratorTrafficBuilder.AddManagerComponent` añade el componente al `GameObject` `TrafficNetwork` solo si `includeTraffic` está activo, y `BuildVehicles` inyecta la referencia a `TrafficNetwork` en cada `CarAgent` generado vía `SerializedObject`, sustituyendo el `FindFirstObjectByType<TrafficNetwork>()` que antes hacía cada coche en `Start`. Verificado en Play mode sobre la ciudad de prueba regenerada: 28/30 coches con `DistanceTravelled > 0.5 m` tras 4 s, sin errores en consola |
+| A.7 | Tick por-coche de `CarAgent` (2026-08-20) | Nuevo `CityGenerator.Runtime.TrafficManager`: `CarAgent` ya no implementa `Update()`, expone `Tick(float dt, bool runSensor)` y se registra contra el `TrafficManager` que resuelve vía `network.Manager` (con fallback a búsqueda/auto-creación si el componente no viene del generador). El `TrafficManager.Instance` singleton original se eliminó en SPEC 04 para que varias ciudades convivan en la misma escena. `TrafficManager.Update()` itera la lista de agentes registrados y llama a `Tick` desde un único punto. Con más de `staggerMinAgentCount` (60 por defecto) coches registrados, además escalona el `SphereCast` del sensor frontal para los coches lejos de `Camera.main`, reutilizando el último `clearance` en los frames que se saltan — por debajo de ese umbral (la demo por defecto tiene 30) el comportamiento es idéntico al `Update()` original. `CityGeneratorTrafficBuilder.AddManagerComponent` añade el componente al `GameObject` `TrafficNetwork` solo si `includeTraffic` está activo, y `BuildVehicles` inyecta la referencia a `TrafficNetwork` en cada `CarAgent` generado vía `SerializedObject`, sustituyendo el `FindFirstObjectByType<TrafficNetwork>()` que antes hacía cada coche en `Start`. Verificado en Play mode sobre la ciudad de prueba regenerada: 28/30 coches con `DistanceTravelled > 0.5 m` tras 4 s, sin errores en consola |
 | A.18 | Sin README del paquete (2026-08-20) | `Assets/CityGenerator/README.md` en su momento, absorbido después por el `README.md`/`README.es.md` de la raíz del repo (SPEC 02): requisitos (Input System, capa `Vehicle`), qué hacer con `CityGeneratorDefaultAssets.cs` al portar la tool a otro proyecto, requisitos de los prefabs del usuario (pivote en la base, edificios al slot de 22 m, vehículos con `BoxCollider` único y sin `Rigidbody`), pasos posteriores por escena que quedan fuera del alcance de la tool (bake de lightmaps/occlusion, `LODGroup`), y la tabla de configuración de proyecto recomendada (grupo C) |
 
 ### Pendientes
@@ -154,11 +156,13 @@ solo tiene que arrastrar un prefab. **No hacerlo** salvo que el tuning se toque 
 
 ### B.6 Modelos no referenciados — sin acción
 
-Buena parte de `Assets/Models/Characters` y `Assets/Models/Pets` no está referenciada por
-ningún prefab de demo ni escena, así que Unity no los incluye en la build: cero coste en
-runtime. **No tocar**: la carpeta `Models` de este repo se mantiene íntegra a propósito,
-hay planes de usar más de esos modelos; SPEC 02 ya excluye estos huérfanos del package por
-el mismo motivo (`AssetDatabase.GetDependencies`, no inspección manual).
+`Assets/Models/Pets` no está referenciada por ningún prefab de demo ni escena, así que
+Unity no la incluye en la build: cero coste en runtime. **No tocar**: se mantiene a
+propósito, hay planes de usar esos modelos; SPEC 02 ya excluye estos huérfanos del package
+por el mismo motivo (`AssetDatabase.GetDependencies`, no inspección manual). Actualización:
+los huérfanos de `Characters`/`Buildings`/`Cars`/`Props` sí acabaron borrándose del repo una
+vez los modelos referenciados se movieron dentro del package, así que `Pets` es hoy lo único
+que queda en `Assets/Models/`.
 
 ---
 

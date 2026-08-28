@@ -6,13 +6,16 @@
 
 Una herramienta de Editor para Unity que genera proceduralmente una ciudad —
 carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos,
-tráfico autónomo, peatones y un HUD de minimapa— en una escena nueva o existente.
+tráfico autónomo, peatones, un ciclo día/noche opcional y un HUD de minimapa— en una
+escena nueva o existente.
 Ábrela desde **Tools > City Generator > Open**.
 
 La ventana está dividida en cuatro pestañas: **City** (cuadrícula, suelo, edificios,
-plazas, vehículos, mobiliario, y Custom Places — lugares colocados a mano: un título,
-un prefab, una manzana/esquina elegida en un grid visual, una orientación fija, y un
-flag opcional "Is Point Of Interest" que marca la entrada en el minimapa — que se
+plazas, vehículos, mobiliario, un Day/Night Cycle opcional para la luz direccional
+generada —hora de inicio, multiplicador de velocidad y un gradiente de color/curva de
+intensidad a lo largo de las 24 h— y Custom Places: lugares colocados a mano con un
+título, un prefab, una manzana/esquina elegida en un grid visual, una orientación fija
+y un flag opcional "Is Point Of Interest" que marca la entrada en el minimapa, y que se
 instancian en lugar de un edificio aleatorio en esa posición), **Player** (Player
 Prefab, movimiento, ajuste del `CharacterController` y de la cámara), **Pedestrians**
 (la lista de prefabs de peatones, además de su comportamiento al caminar/esperar y el
@@ -65,6 +68,8 @@ vuelve a instalarla desde la git URL usando el tag nuevo de la
   `Unity.InputSystem`; la API clásica `UnityEngine.Input` no se usa en ningún sitio.
 - **glTFast** (`com.unity.cloud.gltfast`, declarado como dependencia del package).
   Necesario para importar la fuente de demostración, que es un modelo `.glb`.
+- **uGUI** (`com.unity.ugui`, declarado como dependencia del package). Necesario para
+  el HUD de minimapa, que es un `Canvas` + `RawImage` de UGUI.
 - Una layer llamada **`Vehicle`**, que usa el tráfico para que los vehículos se
   detecten entre sí con su sensor frontal. No hace falta que la crees tú — la
   herramienta la crea la primera vez que genera tráfico con ella, usando el primer
@@ -138,8 +143,8 @@ herramienta. El trabajo de la herramienta termina dejando la geometría lista pa
 estos pasos sean un solo botón:
 
 - **Hacer bake de lightmaps y occlusion culling.** Cada grupo generado excepto
-  `Vehicles` (que `CarAgent` mueve por transform cada frame, incompatible con el
-  batching estático) ya está marcado como
+  `Vehicles` y `Pedestrians` (que `CarAgent`/`PedestrianAgent` mueven por transform
+  cada frame, incompatible con el batching estático) ya está marcado como
   `Batching Static | Occluder Static | Occludee Static`, así que ambos bakes están
   listos para ejecutarse sin configuración manual — la herramienta simplemente no los
   ejecuta por ti.
@@ -147,7 +152,10 @@ estos pasos sean un solo botón:
   herramienta no tiene opinión sobre LOD; solo coloca el prefab que le des.
 - **Ajustar la iluminación** — la escena generada trae una única luz direccional y
   ningún `Global Volume` (eliminado a propósito, para no depender de ningún pipeline
-  de render).
+  de render). Esa luz se crea siempre orientada aproximadamente este-oeste (yaw -110°,
+  para que el sol salga hacia la derecha del minimapa) y lleva el componente del ciclo
+  día/noche; con el
+  ciclo desactivado simplemente se queda fija en la Start Hour configurada.
 
 ## Ajustes de proyecto recomendados
 
@@ -174,7 +182,8 @@ rate/VSync para tu proyecto; no hay ningún sustituto opt-in a nivel de package.
 
 `CarAgent` no tiene planificación de rutas ni evitación de congestión: superado
 aproximadamente el 40% de los nodos de spawn de una rejilla ocupados, el tráfico
-tiende a colapsar en vez de fluir (la herramienta avisa por consola cuando lo superas).
+tiende a colapsar en vez de fluir (la ventana muestra un aviso junto a **Vehicle
+Count** en cuanto lo superas, antes de generar).
 Si necesitas tráfico más denso, cada vez que **Include Traffic** está activado se
 genera automáticamente un `CityGenerator.Runtime.TrafficManager` — este actualiza cada
 `CarAgent` desde un único `Update` central y, a partir de unos ~60 coches registrados,

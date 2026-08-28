@@ -11,7 +11,7 @@ The tool lives in the embedded package `Packages/com.santiandrade.citygenerator/
 Everything else in the repo supports the package, in one of three roles:
 
 - **Demo content** — `Packages/com.santiandrade.citygenerator/DefaultAssets/`, ships inside the package.
-- **Orphan models** — `Assets/Models/`, FBX/glb library entries from the same asset packs that no demo prefab uses. Kept for future use, deliberately **not** in the package.
+- **Orphan models** — `Assets/Models/`, FBX library entries that no demo prefab uses. Kept for future use, deliberately **not** in the package. Only `Pets/` (24 animal FBX + their `colormap.png`) is left: the building/car/character/prop orphans were removed from the repo once the referenced models moved into the package.
 - **Test scene** — `Assets/Scenes/City.unity`, disposable output kept only to eyeball the result.
 
 The tool's behaviour is considered **done and correct**: reproduce it, don't redesign it.
@@ -31,14 +31,14 @@ Historical note: the layout the tool reproduces was originally a hand-built ProB
 
 ### Package layout
 
-Embedded Unity package (`name` `com.santiandrade.citygenerator`, `unity` `6000.0`, dependencies `com.unity.inputsystem` and `com.unity.cloud.gltfast`), two assemblies:
+Embedded Unity package (`name` `com.santiandrade.citygenerator`, `unity` `6000.0`, dependencies `com.unity.inputsystem`, `com.unity.cloud.gltfast` and `com.unity.ugui`), two assemblies:
 
-- `Runtime/CityGenerator.Runtime.asmdef` — namespace `CityGenerator.Runtime`, references `Unity.InputSystem`.
+- `Runtime/CityGenerator.Runtime.asmdef` — namespace `CityGenerator.Runtime`, references `Unity.InputSystem` and `UnityEngine.UI` (the Minimap HUD is UGUI).
 - `Editor/CityGenerator.Editor.asmdef` — namespace `CityGenerator.Editor`, `includePlatforms: [Editor]`, references the runtime asmdef and `Unity.InputSystem`.
 
 ### Generation pipeline
 
-`CityGeneratorValidator` → `CityGeneratorSceneBuilder` → `CityGeneratorContentAssembler` → `Grid` → `GroundBuilder` → `CustomPlaceBuilder` → `BuildingBuilder` → `PlazaBuilder` → `StreetPropsBuilder` → `TrafficBuilder`.
+`CityGeneratorValidator` → `CityGeneratorSceneBuilder` → `CityGeneratorContentAssembler` → `Grid` → `GroundBuilder` → `CustomPlaceBuilder` → `BuildingBuilder` → `PlazaBuilder` → `StreetPropsBuilder` → `TrafficBuilder` → `PedestrianBuilder` → `MinimapBuilder`.
 
 ## Specs and reviews
 
@@ -76,6 +76,8 @@ Each links to the document explaining why.
 - **Every vehicle prefab must keep its baked `CarAgent`**, or it silently falls back to identical default tuning. ([demo-content](docs/architecture/demo-content.md))
 - **Layout numbers live in `CityGeneratorConstants`, never inline**; player/camera/pedestrian/crowd tuning lives in `CityGeneratorSettings`, never back in constants. ([editor-tool](docs/architecture/editor-tool.md))
 - **Treat a Performance test failure as a correctness signal, not noise.** ([tests](docs/architecture/tests-scene-and-release.md))
+- **The Directional Light's yaw is always forced to -110°** on both Build and Re-Build (`CityGeneratorSceneBuilder.DirectionalLightYaw`, pushed into `DayNightCycle.SetBaseRotation` so an old baked yaw is corrected too), so the sun rises east-north-east and sets west-south-west, roughly matching the minimap's orientation (minimap-right is East) without putting shadows exactly along a street. `CityGeneratorMinimapBuilder`'s neutral snapshot light reads the same constant — don't hardcode a second copy. ([editor-tool](docs/architecture/editor-tool.md))
+- **The Minimap snapshot renders under its own neutral daytime light**: every enabled directional light in memory is disabled and a temporary white one added for the capture, so the snapshot never bakes in the Day/Night Cycle's current hour. Unlike hiding a preexisting GameObject, toggling a preexisting `Light` *does* take effect on a same-call `Camera.Render()`. ([editor-tool](docs/architecture/editor-tool.md))
 - **The Minimap snapshot excludes vehicles/pedestrians by deactivating their groups, never `Camera.cullingMask`** — the `Vehicle`/`Pedestrian` layer sits only on each instance's root proxy collider, never its child mesh `Renderer`s, so a culling mask silently renders them anyway.
 - **The Minimap snapshot isolates itself by moving `cityRoot` to a far-away offset before capturing, never by hiding/moving whatever else is loaded** (never `Camera.scene`, which silently fails to filter an unsaved scene). A manual `Camera.Render()` doesn't reflect a same-call `SetActive`/layer/position change on a GameObject Unity has already rendered before — confirmed directly with a minimal repro — so hiding another scene's root or a Re-Build's still-alive previous `CityGeneratorRoot` doesn't reliably work. `cityRoot` itself is always freshly created for the call, so moving *it* (never anything preexisting) is what actually works. ([editor-tool](docs/architecture/editor-tool.md))
 
