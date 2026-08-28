@@ -40,15 +40,28 @@ Repo remoto: `https://github.com/santiandrade/Unity-CityGenerator`.
 1. Última versión publicada = el tag de la GitHub Release más reciente
    (`gh release list` o `gh release view --json tagName -q .tagName` sobre la
    última, no necesariamente el tag más alto por SemVer si hay huecos históricos).
-2. `git log <último_tag>..origin/main --oneline` y revisa el diff real de los
-   ficheros relevantes (no solo los mensajes de commit) para entender qué cambió
-   de cara al usuario del paquete: nuevas features, cambios de comportamiento,
-   fixes, breaking changes, elementos eliminados. Ignora cambios que sean solo de
-   este repo de desarrollo y no afecten al paquete instalado (p. ej. tocar
-   `Assets/Scenes/City.unity`, `docs/`, `specs/`, tests) salvo que también haya
-   cambios reales en `Packages/com.santiandrade.citygenerator/`.
-3. Si no hay ningún cambio relevante desde la última release, dilo y para — no
-   crees una release vacía.
+2. **Comprueba primero, de forma explícita, si el paquete instalable cambió**:
+   `git diff --name-only <último_tag>..origin/main -- Packages/com.santiandrade.citygenerator/`.
+   Este comando es la fuente de verdad para "¿hay algo que releasear?", no una
+   lectura general del log de commits.
+   - Si esa lista sale vacía → **no hay nada que releasear**. Dilo explícitamente
+     al usuario (qué rango de commits revisaste y que ninguno tocó el paquete) y
+     para aquí, sin ejecutar los pasos 2-5 (sin tocar CHANGELOG/package.json, sin
+     tag, sin push, sin GitHub Release), aunque haya commits en `origin/main`
+     desde el último tag.
+   - Si la lista tiene entradas pero son solo cambios irrelevantes para quien
+     instala el paquete (reformateos, comentarios, ficheros de test internos que
+     no se distribuyen, etc.), trátalo también como "nada que releasear" y para
+     igual, explicando por qué esos cambios no cuentan.
+3. Si el paso 2 encontró cambios reales en `Packages/com.santiandrade.citygenerator/`,
+   revisa además `git log <último_tag>..origin/main --oneline` y el diff completo
+   (no solo los mensajes de commit) para entender qué cambió de cara al usuario
+   del paquete: nuevas features, cambios de comportamiento, fixes, breaking
+   changes, elementos eliminados. Ignora en tu análisis los cambios que sean solo
+   de este repo de desarrollo y no afecten al paquete instalado (p. ej. tocar
+   `Assets/Scenes/City.unity`, `docs/`, `specs/`, tests) — ya sabes por el paso 2
+   que hay cambios reales del paquete acompañándolos, así que sigue adelante con
+   la release centrándote en esos.
 
 ## Paso 2 — Comprobar/actualizar el CHANGELOG
 
