@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plaza block, with logarithmic rolloff and a per-entry min/max distance). Both are on by
   default; Ambience ships with a default `city-ambiance.wav` clip at volume 1, Plazas with a
   default `plaza-ambiance-fountain.wav` clip at volume 1 and a 10/40m min/max distance.
+- Ambience/Plazas volume sliders now have a numeric field next to them for typing an exact value,
+  kept in sync with the slider in both directions.
+
+### Fixed
+
+- Audio: editing a Plaza clip entry's Min Distance/Max Distance in the tool UI silently kept the
+  entry's previous value instead of the typed one, so generated cities always used stale/default
+  distances regardless of what was configured. Caused by the row holding onto a `SerializedProperty`
+  captured when the row was built, which goes stale once anything else in the window edits the
+  shared `SerializedObject` in between; the Ambience/Plazas clip lists now re-fetch each property by
+  array index at write time instead, matching `CityGeneratorWeightedPrefabList`'s already-safe
+  pattern.
 
 ### Changed
 

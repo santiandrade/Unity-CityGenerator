@@ -8,9 +8,21 @@ namespace CityGenerator.Editor.UI
 {
     /// <summary>
     /// List editor for <c>List&lt;PlazaAudioClipEntry&gt;</c>: each row is a self-contained clip
-    /// plus its own volume/min distance/max distance. Rows are built with plain controls
-    /// (ObjectField/Slider/FloatField) that read and write their SerializedProperty directly,
-    /// instead of PropertyField — same reasoning as <see cref="CityGeneratorCustomPlaceList"/>.
+    /// plus its own volume (a Slider paired with a FloatField, see
+    /// <see cref="CityGeneratorAmbienceClipList.BuildVolumeRow"/>), min distance and max distance.
+    /// Rows are built with plain controls (ObjectField/Slider/FloatField) instead of PropertyField,
+    /// since rows are added to the tree well after CityGeneratorWindow's one-time Bind() call —
+    /// same reasoning as <see cref="CityGeneratorCustomPlaceList"/>.
+    ///
+    /// Writes re-fetch each SerializedProperty by array index at write time (see
+    /// <see cref="SetObjectReference"/>/<see cref="SetFloat"/>) rather than closing over a
+    /// property captured once in <see cref="Rebuild"/> — mirroring
+    /// <see cref="CityGeneratorWeightedPrefabList.SetPercentage"/>. A captured-property closure
+    /// used to go stale after the window's <c>TrackSerializedObjectValue</c> callback (or any
+    /// sibling field's own edit) called <c>Update()</c> on the shared <c>SerializedObject</c> in
+    /// between the row being built and the field being edited — Min/Max Distance, edited last in
+    /// each row, were the fields most likely to hit this and silently keep the entry's previous
+    /// value instead of what was typed.
     /// </summary>
     internal class CityGeneratorPlazaAudioClipList : VisualElement
     {
@@ -71,57 +83,60 @@ namespace CityGenerator.Editor.UI
                 SerializedProperty entry = listProperty.GetArrayElementAtIndex(i);
                 int capturedIndex = i;
 
-                SerializedProperty clipProperty = entry.FindPropertyRelative("clip");
-                SerializedProperty volumeProperty = entry.FindPropertyRelative("volume");
-                SerializedProperty minDistanceProperty = entry.FindPropertyRelative("minDistance");
-                SerializedProperty maxDistanceProperty = entry.FindPropertyRelative("maxDistance");
+                UnityEngine.Object clipValue = entry.FindPropertyRelative("clip").objectReferenceValue;
+                float volumeValue = entry.FindPropertyRelative("volume").floatValue;
+                float minDistanceValue = entry.FindPropertyRelative("minDistance").floatValue;
+                float maxDistanceValue = entry.FindPropertyRelative("maxDistance").floatValue;
 
                 var row = new VisualElement();
                 row.AddToClassList("cg-custom-place-list__row");
 
                 var header = new VisualElement();
                 header.AddToClassList("cg-custom-place-list__row-header");
-                var clipField = new ObjectField("Clip") { objectType = typeof(AudioClip), allowSceneObjects = false, value = clipProperty.objectReferenceValue };
+                var clipField = new ObjectField("Clip") { objectType = typeof(AudioClip), allowSceneObjects = false, value = clipValue };
                 clipField.AddToClassList("cg-field-row");
-                clipField.RegisterValueChangedCallback(evt => SetObjectReference(clipProperty, evt.newValue));
+                clipField.RegisterValueChangedCallback(evt => SetObjectReference(capturedIndex, "clip", evt.newValue));
                 header.Add(clipField);
                 var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×", tooltip = "Remove this entry from the list." };
                 removeButton.AddToClassList("cg-custom-place-list__remove");
                 header.Add(removeButton);
                 row.Add(header);
 
-                var volumeField = new Slider("Volume", 0f, 1f) { value = volumeProperty.floatValue };
-                volumeField.AddToClassList("cg-field-row");
-                volumeField.RegisterValueChangedCallback(evt => SetFloat(volumeProperty, evt.newValue));
-                row.Add(volumeField);
+                row.Add(CityGeneratorAmbienceClipList.BuildVolumeRow(volumeValue, value => SetFloat(capturedIndex, "volume", value)));
 
-                var minDistanceField = new FloatField("Min Distance") { value = minDistanceProperty.floatValue, tooltip = "AudioSource.minDistance: distance at which attenuation starts." };
+                var minDistanceField = new FloatField("Min Distance") { value = minDistanceValue, tooltip = "AudioSource.minDistance: distance at which attenuation starts." };
                 minDistanceField.AddToClassList("cg-field-row");
-                minDistanceField.RegisterValueChangedCallback(evt => SetFloat(minDistanceProperty, evt.newValue));
+                minDistanceField.RegisterValueChangedCallback(evt => SetFloat(capturedIndex, "minDistance", evt.newValue));
                 row.Add(minDistanceField);
 
-                var maxDistanceField = new FloatField("Max Distance") { value = maxDistanceProperty.floatValue, tooltip = "AudioSource.maxDistance: distance at which the clip stops being audible." };
+                var maxDistanceField = new FloatField("Max Distance") { value = maxDistanceValue, tooltip = "AudioSource.maxDistance: distance at which the clip stops being audible." };
                 maxDistanceField.AddToClassList("cg-field-row");
-                maxDistanceField.RegisterValueChangedCallback(evt => SetFloat(maxDistanceProperty, evt.newValue));
+                maxDistanceField.RegisterValueChangedCallback(evt => SetFloat(capturedIndex, "maxDistance", evt.newValue));
                 row.Add(maxDistanceField);
 
                 rowsContainer.Add(row);
             }
         }
 
-        private void SetObjectReference(SerializedProperty property, UnityEngine.Object value)
+        private void SetObjectReference(int index, string fieldName, UnityEngine.Object value)
         {
-            property.serializedObject.Update();
-            property.objectReferenceValue = value;
-            property.serializedObject.ApplyModifiedProperties();
+            if (listProperty == null || index < 0 || index >= listProperty.arraySize)
+                return;
+
+            listProperty.serializedObject.Update();
+            listProperty.GetArrayElementAtIndex(index).FindPropertyRelative(fieldName).objectReferenceValue = value;
+            listProperty.serializedObject.ApplyModifiedProperties();
             onChanged?.Invoke();
         }
 
-        private void SetFloat(SerializedProperty property, float value)
+        private void SetFloat(int index, string fieldName, float value)
         {
-            property.serializedObject.Update();
-            property.floatValue = value;
-            property.serializedObject.ApplyModifiedProperties();
+            if (listProperty == null || index < 0 || index >= listProperty.arraySize)
+                return;
+
+            listProperty.serializedObject.Update();
+            listProperty.GetArrayElementAtIndex(index).FindPropertyRelative(fieldName).floatValue = value;
+            listProperty.serializedObject.ApplyModifiedProperties();
             onChanged?.Invoke();
         }
 

@@ -440,3 +440,21 @@
 .cg-custom-place-list__add-button {
     margin-top: 2px;
 }
+
+/* ---------- Value row (slider + numeric field, e.g. Ambience/Plazas volume) ---------- */
+
+.cg-value-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cg-value-row__slider {
+    flex-grow: 1;
+    margin-right: 6px;
+    margin-bottom: 0;
+}
+
+.cg-value-row__field {
+    width: 50px;
+    flex-shrink: 0;
+}
