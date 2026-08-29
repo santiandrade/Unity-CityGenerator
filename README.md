@@ -41,7 +41,7 @@ For a reproducible install pinned to a specific release, append `#vX.Y.Z` with a
 the [Releases page](https://github.com/santiandrade/Unity-CityGenerator/releases) — for
 example, `...citygenerator#v1.0.1` for that exact version.
 
-## Updating
+### Updating
 
 If you installed **without** a `#vX.Y.Z` tag (tracking the tip of the default branch),
 Package Manager can detect and apply updates for you: open **Package Manager > your
