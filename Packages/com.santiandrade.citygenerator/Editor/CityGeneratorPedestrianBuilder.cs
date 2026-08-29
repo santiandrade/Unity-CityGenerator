@@ -38,7 +38,6 @@ namespace CityGenerator.Editor
             var serialized = new SerializedObject(network);
             ApplyBoolArray(serialized.FindProperty("blockIsPlaza"), isPlaza);
             ApplyBoolArray(serialized.FindProperty("blockIsFullyReserved"), isFullyReserved);
-            serialized.FindProperty("plazaGridStep").floatValue = CityGeneratorConstants.PlazaGridStep;
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             return network;

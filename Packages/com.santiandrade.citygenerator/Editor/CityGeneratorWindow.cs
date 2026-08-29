@@ -760,8 +760,8 @@ namespace CityGenerator.Editor
         /// <summary>
         /// Non-blocking density warning, mirroring <see cref="GetVehicleDensityWarning"/>. Pedestrians
         /// still only spawn on Ring nodes, but Ring stopped representing the block's real walkable
-        /// capacity once Interior/Plaza nodes exist (SPEC 10) -- so the denominator is an estimate
-        /// of the network's total node count instead, mirroring <see cref="PedestrianNetwork.Build"/>'s
+        /// capacity once Interior nodes exist (SPEC 10) -- so the denominator is an estimate of the
+        /// network's total node count instead, mirroring <see cref="PedestrianNetwork.Build"/>'s
         /// own per-block node counts (a full-block Custom Place's exact count isn't known before
         /// generation randomly places it, so this slightly overestimates a grid with one; a
         /// non-blocking warning doesn't need to be exact).
@@ -781,15 +781,7 @@ namespace CityGenerator.Editor
             int ringNodeCount = 8 * totalBlocks;
             int interiorNodeCount = 5 * normalBlockCount;
 
-            // Mirrors PedestrianNetwork.BuildPlazaGrid's own grid-sizing formula: half the block
-            // footprint (CityGeneratorConstants.BlockSize / 2) inset by PlazaGridInset, stepped by
-            // PlazaGridStep.
-            float halfExtent = CityGeneratorConstants.BlockSize / 2f - CityGeneratorConstants.PlazaGridInset;
-            int steps = Mathf.Max(0, Mathf.FloorToInt(halfExtent / CityGeneratorConstants.PlazaGridStep));
-            int plazaGridSide = steps * 2 + 1;
-            int plazaNodeCount = plazaGridSide * plazaGridSide * plazaBlockCount;
-
-            int totalNodeCount = ringNodeCount + interiorNodeCount + plazaNodeCount;
+            int totalNodeCount = ringNodeCount + interiorNodeCount;
             float occupancy = (float)pedestrianCount / totalNodeCount;
             if (occupancy <= CityGeneratorConstants.PedestrianCountWarningThreshold)
                 return null;

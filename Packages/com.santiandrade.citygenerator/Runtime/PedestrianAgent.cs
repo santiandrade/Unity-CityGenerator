@@ -288,6 +288,13 @@ namespace CityGenerator.Runtime
         /// whose ring touches only one interior intersection) would otherwise see its farthest
         /// random draw be unreachable almost every time — since virtually every node in a large
         /// graph is "far" from it — leaving the agent idling forever instead of ever walking.
+        ///
+        /// SPEC 10: a drawn Interior candidate is tried first, in draw order (not ranked by
+        /// distance) -- straight-line distance from here always favours a spatially localized
+        /// area's boundary over its interior (a point at its edge is, by definition, at least as
+        /// far from any approach direction as a point at its centre), so ranking it alongside Ring
+        /// candidates by that same metric meant a chosen Interior destination was (almost) never
+        /// actually inside it -- observed directly in Play mode.
         /// </summary>
         private void PlanNewDestination()
         {
@@ -308,14 +315,30 @@ namespace CityGenerator.Runtime
                 candidateCount++;
             }
 
-            // Simple insertion sort (descending by distance): candidateCount is at most
-            // DestinationCandidateAttempts, so this is cheaper than allocating for a real sort.
-            for (int i = 1; i < candidateCount; i++)
+            // Partition in place: every Interior candidate first (left in draw order, i.e.
+            // unbiased), then every Ring candidate after. Only the Ring portion gets sorted by
+            // distance below -- see the method doc for why Interior deliberately skips it.
+            int localCandidateCount = 0;
+            for (int i = 0; i < candidateCount; i++)
+            {
+                PedestrianNodeKind kind = network.GetNode(candidateNodes[i]).Kind;
+                if (kind == PedestrianNodeKind.Interior)
+                {
+                    (candidateNodes[localCandidateCount], candidateNodes[i]) = (candidateNodes[i], candidateNodes[localCandidateCount]);
+                    (candidateSqrDistances[localCandidateCount], candidateSqrDistances[i]) = (candidateSqrDistances[i], candidateSqrDistances[localCandidateCount]);
+                    localCandidateCount++;
+                }
+            }
+
+            // Simple insertion sort (descending by distance), Ring candidates only: candidateCount
+            // is at most DestinationCandidateAttempts, so this is cheaper than allocating for a
+            // real sort.
+            for (int i = localCandidateCount + 1; i < candidateCount; i++)
             {
                 int node = candidateNodes[i];
                 float sqrDistance = candidateSqrDistances[i];
                 int j = i - 1;
-                while (j >= 0 && candidateSqrDistances[j] < sqrDistance)
+                while (j >= localCandidateCount && candidateSqrDistances[j] < sqrDistance)
                 {
                     candidateNodes[j + 1] = candidateNodes[j];
                     candidateSqrDistances[j + 1] = candidateSqrDistances[j];
