@@ -72,7 +72,7 @@ Each links to the document explaining why.
 - **Vehicle/pedestrian masks and layers are written per generated instance**, never trusted from the prefab's baked serialized data. ([editor-tool](docs/architecture/editor-tool.md), [pedestrians](docs/architecture/pedestrians.md))
 - **A collider deeper in a user prefab's hierarchy is left completely untouched**; only the root proxy collider gets the `Vehicle`/`Pedestrian` layer. ([runtime-and-traffic](docs/architecture/runtime-and-traffic.md))
 - **Never use `PropertyField` for a UI row created after the window's one-time `Bind()`** — it never binds and renders empty. ([editor-tool](docs/architecture/editor-tool.md))
-- **Don't reintroduce a pedestrian-side POI stop** without a new spec; `PedestrianNetwork` has exactly three node kinds. ([pedestrians](docs/architecture/pedestrians.md))
+- **Don't reintroduce a pedestrian-side POI stop** without a new spec; `PedestrianNetwork` has exactly five node kinds (`Ring`, `Curb`, `Crossing`, `Interior`, `Plaza`). ([pedestrians](docs/architecture/pedestrians.md))
 - **Every vehicle prefab must keep its baked `CarAgent`**, or it silently falls back to identical default tuning. ([demo-content](docs/architecture/demo-content.md))
 - **Layout numbers live in `CityGeneratorConstants`, never inline**; player/camera/pedestrian/crowd tuning lives in `CityGeneratorSettings`, never back in constants. ([editor-tool](docs/architecture/editor-tool.md))
 - **Treat a Performance test failure as a correctness signal, not noise.** ([tests](docs/architecture/tests-scene-and-release.md))

@@ -154,7 +154,7 @@ namespace CityGenerator.Editor
             // The pedestrian network mirrors the traffic network: always generated (so its
             // crossings stay wired to the real traffic lights), independent of includePedestrians.
             Report("Pedestrian network", 0.8f);
-            PedestrianNetwork pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight);
+            PedestrianNetwork pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight, blocks, reservedSlots);
             pedestrianNetwork.Build();
             CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
 

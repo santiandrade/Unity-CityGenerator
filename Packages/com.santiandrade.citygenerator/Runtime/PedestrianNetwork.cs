@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace CityGenerator.Runtime
 {
-    public enum PedestrianNodeKind { Ring, Curb, Crossing }
+    public enum PedestrianNodeKind { Ring, Curb, Crossing, Interior, Plaza }
 
     /// <summary>An undirected node in the pedestrian graph.</summary>
     public struct PedestrianNode
@@ -32,6 +32,11 @@ namespace CityGenerator.Runtime
     /// -> curb chain linking two ring corners across the street, with the crossing node aligned to
     /// the same TrafficLightIntersection matched by <see cref="TrafficNetwork"/> so
     /// <see cref="CanCross"/> reads the actual light state.
+    ///
+    /// Every non-plaza block without a full-block Custom Place also gets a 5-node Interior cross
+    /// (centre + 4 arms) linking that block's own 4 Ring midpoints, and every plaza block gets a
+    /// dense Plaza grid over its footprint instead, tied into the same 4 midpoints -- see
+    /// <see cref="BuildInteriorCross"/>/<see cref="BuildPlazaGrid"/>.
     /// </summary>
     public class PedestrianNetwork : MonoBehaviour
     {
@@ -55,6 +60,16 @@ namespace CityGenerator.Runtime
         // offset) exactly, so the crossing node's fixed lateral position lines up with the
         // already-painted zebra stripe instead of the ring corner's own diagonal offset.
         [SerializeField] private float crossingArmOffset = 7.6f;
+
+        [Header("Interior / Plaza")]
+        [Tooltip("Flattened [bi, bj] -> flag (index = bi * blocksZ + bj), set by CityGeneratorPedestrianBuilder.AddNetworkComponent from BlockCell.isPlaza. Runtime-only bools: Build() must not know about BlockCell (an Editor-only type).")]
+        [SerializeField] private bool[] blockIsPlaza;
+
+        [Tooltip("Flattened [bi, bj] -> flag (index = bi * blocksZ + bj), set by CityGeneratorPedestrianBuilder.AddNetworkComponent from reservedSlots (slot == -1, i.e. a full-block Custom Place).")]
+        [SerializeField] private bool[] blockIsFullyReserved;
+
+        [Tooltip("Spacing of the Plaza node grid. Own copy of CityGeneratorConstants.PlazaGridStep, set by AddNetworkComponent -- that class is Editor-only.")]
+        [SerializeField] private float plazaGridStep = 4f;
 
         [Header("Node datums")]
         [Tooltip("Y of every node except a Crossing node's road midpoint (matches GroundDatumY).")]
@@ -182,11 +197,31 @@ namespace CityGenerator.Runtime
             // min Z), 2 = NE (max X, max Z), 3 = NW (min X, max Z).
             var cornerNode = new int[blocksX, blocksZ, 4];
 
+            // [bi, bj, side] -> node index. Side codes: 0 = S, 1 = E, 2 = N, 3 = W.
+            var midNode = new int[blocksX, blocksZ, 4];
+
             for (int bi = 0; bi < blocksX; bi++)
             {
                 for (int bj = 0; bj < blocksZ; bj++)
                 {
-                    BuildBlockRing(bi, bj, cornerNode);
+                    BuildBlockRing(bi, bj, cornerNode, midNode);
+
+                    // A full-block Custom Place gets neither kind: it already occupies the whole
+                    // block, same as today. Otherwise, exactly one of the two: a dense grid for a
+                    // plaza block, a simple cross-shaped shortcut for a normal one.
+                    if (GetBlockFlag(blockIsFullyReserved, bi, bj, blocksZ))
+                    {
+                        continue;
+                    }
+
+                    if (GetBlockFlag(blockIsPlaza, bi, bj, blocksZ))
+                    {
+                        BuildPlazaGrid(bi, bj, midNode);
+                    }
+                    else
+                    {
+                        BuildInteriorCross(bi, bj, midNode);
+                    }
                 }
             }
 
@@ -256,7 +291,18 @@ namespace CityGenerator.Runtime
         private Vector3 BlockCentre(int bi, int bj)
             => new((axesX[bi] + axesX[bi + 1]) * 0.5f, sidewalkY, (axesZ[bj] + axesZ[bj + 1]) * 0.5f);
 
-        private void BuildBlockRing(int bi, int bj, int[,,] cornerNode)
+        private static bool GetBlockFlag(bool[] flags, int bi, int bj, int blocksZ)
+        {
+            if (flags == null)
+            {
+                return false;
+            }
+
+            int index = bi * blocksZ + bj;
+            return index >= 0 && index < flags.Length && flags[index];
+        }
+
+        private void BuildBlockRing(int bi, int bj, int[,,] cornerNode, int[,,] midNode)
         {
             Vector3 c = BlockCentre(bi, bj);
 
@@ -282,6 +328,119 @@ namespace CityGenerator.Runtime
             cornerNode[bi, bj, 1] = se;
             cornerNode[bi, bj, 2] = ne;
             cornerNode[bi, bj, 3] = nw;
+
+            midNode[bi, bj, 0] = sMid;
+            midNode[bi, bj, 1] = eMid;
+            midNode[bi, bj, 2] = nMid;
+            midNode[bi, bj, 3] = wMid;
+        }
+
+        /// <summary>
+        /// A block's interior shortcut: 5 nodes (centre + 4 arm midpoints) forming a cross,
+        /// connected to the block's own 4 Ring midpoint nodes (never the corners -- same
+        /// convention <see cref="BuildPlazaGrid"/> follows). Gives pedestrians a way to cut
+        /// through a normal block's interior instead of only ever walking its perimeter ring.
+        /// </summary>
+        private void BuildInteriorCross(int bi, int bj, int[,,] midNode)
+        {
+            Vector3 c = BlockCentre(bi, bj);
+
+            // Half the block's building-slot gap (CityGeneratorConstants.BuildingSlotPitch / 2):
+            // derived directly from ringRadius rather than a new field, since exact placement
+            // doesn't matter -- PruneNodesAgainstObstacles/PrunePlacedObstacles block any node
+            // that ends up overlapping a building regardless of its precise offset.
+            float armOffset = ringRadius * 0.5f;
+
+            int centre = AddNode(c, PedestrianNodeKind.Interior);
+            int armS = AddNode(new Vector3(c.x, c.y, c.z - armOffset), PedestrianNodeKind.Interior);
+            int armE = AddNode(new Vector3(c.x + armOffset, c.y, c.z), PedestrianNodeKind.Interior);
+            int armN = AddNode(new Vector3(c.x, c.y, c.z + armOffset), PedestrianNodeKind.Interior);
+            int armW = AddNode(new Vector3(c.x - armOffset, c.y, c.z), PedestrianNodeKind.Interior);
+
+            Connect(centre, armS);
+            Connect(centre, armE);
+            Connect(centre, armN);
+            Connect(centre, armW);
+
+            Connect(armS, midNode[bi, bj, 0]);
+            Connect(armE, midNode[bi, bj, 1]);
+            Connect(armN, midNode[bi, bj, 2]);
+            Connect(armW, midNode[bi, bj, 3]);
+        }
+
+        /// <summary>
+        /// A plaza block's walkable interior: a dense <see cref="plazaGridStep"/>-spaced grid of
+        /// Plaza nodes covering the block's footprint (inset so the outermost row/column stays
+        /// off the block edge), 4-connected to its orthogonal neighbours, tied into the block's 4
+        /// Ring midpoints via nearest-node connections.
+        /// </summary>
+        private void BuildPlazaGrid(int bi, int bj, int[,,] midNode)
+        {
+            Vector3 c = BlockCentre(bi, bj);
+
+            // Own copy of CityGeneratorConstants.PlazaGridInset -- that class is Editor-only, and
+            // this value only ever needs to match here, not be independently tuned.
+            const float plazaGridInset = 2f;
+
+            float halfX = (axesX[bi + 1] - axesX[bi]) * 0.5f - streetHalfWidth - plazaGridInset;
+            float halfZ = (axesZ[bj + 1] - axesZ[bj]) * 0.5f - streetHalfWidth - plazaGridInset;
+            int stepsX = Mathf.Max(0, Mathf.FloorToInt(halfX / plazaGridStep));
+            int stepsZ = Mathf.Max(0, Mathf.FloorToInt(halfZ / plazaGridStep));
+
+            int width = stepsX * 2 + 1;
+            int height = stepsZ * 2 + 1;
+            var grid = new int[width, height];
+
+            for (int gx = 0; gx < width; gx++)
+            {
+                for (int gz = 0; gz < height; gz++)
+                {
+                    Vector3 pos = new(c.x + (gx - stepsX) * plazaGridStep, c.y, c.z + (gz - stepsZ) * plazaGridStep);
+                    grid[gx, gz] = AddNode(pos, PedestrianNodeKind.Plaza);
+                }
+            }
+
+            for (int gx = 0; gx < width; gx++)
+            {
+                for (int gz = 0; gz < height; gz++)
+                {
+                    if (gx + 1 < width)
+                    {
+                        Connect(grid[gx, gz], grid[gx + 1, gz]);
+                    }
+
+                    if (gz + 1 < height)
+                    {
+                        Connect(grid[gx, gz], grid[gx, gz + 1]);
+                    }
+                }
+            }
+
+            for (int m = 0; m < 4; m++)
+            {
+                int ringMid = midNode[bi, bj, m];
+                Vector3 ringPos = nodes[ringMid].Position;
+                int nearest = -1;
+                float bestDistance = float.MaxValue;
+
+                for (int gx = 0; gx < width; gx++)
+                {
+                    for (int gz = 0; gz < height; gz++)
+                    {
+                        float distance = (nodes[grid[gx, gz]].Position - ringPos).sqrMagnitude;
+                        if (distance < bestDistance)
+                        {
+                            bestDistance = distance;
+                            nearest = grid[gx, gz];
+                        }
+                    }
+                }
+
+                if (nearest >= 0)
+                {
+                    Connect(nearest, ringMid);
+                }
+            }
         }
 
         /// <summary>
@@ -477,11 +636,17 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
-        /// Picks a random non-blocked Ring node — the only kind valid as a
-        /// final destination. When <paramref name="requiredComponent"/> is non-negative (item 9),
-        /// only considers nodes in that connected component: on a grid with isolated block rings
-        /// (e.g. gridWidth == 1 or gridHeight == 1, see CLAUDE.md), this stops PlanNewDestination
-        /// from repeatedly drawing candidates FindPath could never reach in the first place.
+        /// Picks a random non-blocked Ring/Interior/Plaza node as a final destination -- Curb and
+        /// Crossing are excluded (mid-crosswalk link nodes, never a place to actually walk to).
+        /// SPEC 10: Interior/Plaza are valid destinations, not just waypoints a route might cross,
+        /// since a same-block Ring-to-Ring path never actually routes through them (BFS ties
+        /// between a block's ring and its interior/plaza always resolve to the ring, whose edges
+        /// are built first) -- without this, the two node kinds would exist in the graph but a
+        /// pedestrian would never actually be observed walking into a block's interior or a plaza.
+        /// When <paramref name="requiredComponent"/> is non-negative (item 9), only considers nodes
+        /// in that connected component: on a grid with isolated block rings (e.g. gridWidth == 1 or
+        /// gridHeight == 1, see CLAUDE.md), this stops PlanNewDestination from repeatedly drawing
+        /// candidates FindPath could never reach in the first place.
         /// </summary>
         public int PickRandomDestination(int requiredComponent = -1)
         {
@@ -493,7 +658,7 @@ namespace CityGenerator.Runtime
                 PedestrianNode node = nodes[candidate];
                 if (node.Blocked)
                     continue;
-                if (node.Kind != PedestrianNodeKind.Ring)
+                if (node.Kind == PedestrianNodeKind.Curb || node.Kind == PedestrianNodeKind.Crossing)
                     continue;
                 if (requiredComponent >= 0 && nodeComponent[candidate] != requiredComponent)
                     continue;
@@ -668,6 +833,8 @@ namespace CityGenerator.Runtime
             PedestrianNodeKind.Ring => new Color(0.2f, 0.9f, 0.3f),
             PedestrianNodeKind.Curb => new Color(0.9f, 0.8f, 0.1f),
             PedestrianNodeKind.Crossing => new Color(1f, 0.4f, 0.1f),
+            PedestrianNodeKind.Interior => new Color(0.3f, 0.6f, 1f),
+            PedestrianNodeKind.Plaza => new Color(0.8f, 0.3f, 0.9f),
             _ => Color.white
         };
     }

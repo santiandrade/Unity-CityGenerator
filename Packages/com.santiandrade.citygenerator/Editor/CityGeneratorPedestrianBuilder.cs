@@ -19,11 +19,36 @@ namespace CityGenerator.Editor
         /// traffic lights exist (it scans the scene for TrafficLightIntersection) and, ideally,
         /// after TrafficNetwork.Build() so CanCross can resolve real light states right away.
         /// </summary>
-        public static PedestrianNetwork AddNetworkComponent(Transform pedestrianNetworkGroup, int gridWidth, int gridHeight)
+        public static PedestrianNetwork AddNetworkComponent(Transform pedestrianNetworkGroup, int gridWidth, int gridHeight, IReadOnlyList<BlockCell> blocks, HashSet<(int gridX, int gridY, int slot)> reservedSlots)
         {
             var network = pedestrianNetworkGroup.gameObject.AddComponent<PedestrianNetwork>();
             network.SetAxes(BuildAxes(gridWidth), BuildAxes(gridHeight));
+
+            // Flattened [bi, bj] -> flag, index = bi * gridHeight + bj (bi == gridX, bj == gridY,
+            // gridHeight == blocksZ), matching PedestrianNetwork's own flattening convention.
+            var isPlaza = new bool[gridWidth * gridHeight];
+            var isFullyReserved = new bool[gridWidth * gridHeight];
+            foreach (BlockCell block in blocks)
+            {
+                int index = block.gridX * gridHeight + block.gridY;
+                isPlaza[index] = block.isPlaza;
+                isFullyReserved[index] = reservedSlots.Contains((block.gridX, block.gridY, -1));
+            }
+
+            var serialized = new SerializedObject(network);
+            ApplyBoolArray(serialized.FindProperty("blockIsPlaza"), isPlaza);
+            ApplyBoolArray(serialized.FindProperty("blockIsFullyReserved"), isFullyReserved);
+            serialized.FindProperty("plazaGridStep").floatValue = CityGeneratorConstants.PlazaGridStep;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
             return network;
+        }
+
+        private static void ApplyBoolArray(SerializedProperty property, bool[] values)
+        {
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                property.GetArrayElementAtIndex(i).boolValue = values[i];
         }
 
         private static float[] BuildAxes(int gridCount)

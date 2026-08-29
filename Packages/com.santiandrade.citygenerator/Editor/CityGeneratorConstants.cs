@@ -101,5 +101,10 @@ namespace CityGenerator.Editor
         // much larger fraction of ring nodes can be filled before it reads as overcrowded than
         // the vehicle case (VehicleDensityWarningThreshold, 0.4).
         public const float PedestrianCountWarningThreshold = 0.7f;
+
+        // Interior/Plaza pedestrian nodes (SPEC 10): spacing of the Plaza node grid and how far
+        // its outermost row/column stays off the block edge.
+        public const float PlazaGridStep = 4f;
+        public const float PlazaGridInset = 2f;
     }
 }
