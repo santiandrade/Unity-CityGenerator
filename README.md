@@ -4,26 +4,27 @@
 
 <img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="City Generator thumbnail" width="100%">
 
-An Editor tool for Unity that procedurally generates a city — roads, sidewalks, road
-markings, buildings, plazas, street furniture, traffic lights, autonomous traffic,
-pedestrians, an optional day/night cycle and a minimap HUD — into a new or existing
-scene. Open it from
-**Tools > City Generator > Open**.
+An Editor tool for Unity that procedurally generates a city in a new or existing
+scene. Open it from **Tools > City Generator > Open**.
 
-The window is split into four tabs: **City** (grid, ground, buildings, plazas, vehicles,
-props, an optional Day/Night Cycle for the generated directional light — start hour, speed
-multiplier, and a colour gradient/intensity curve over the 24 h — and Custom Places:
-manually-placed entries with a title, a prefab, a block/corner picked from a grid preview,
-a fixed orientation, and an optional "Is Point Of Interest" flag that surfaces the entry on
-the minimap, instantiated instead of a random building at that spot), **Player** (Player Prefab, movement, `CharacterController` and camera tuning),
-**Pedestrians** (the pedestrian prefab list, plus their walk/idle behaviour and crowd
-tuning), and **Minimap** (on by default; texture resolution and view radius for the
-in-game minimap HUD) — everything is editable from the window, nothing requires touching
-the package's code.
-
-It ships as the embedded package `com.santiandrade.citygenerator`, installable directly
-from a git URL, with a full set of demo prefabs included so the window is ready to
-generate a city the moment you install it.
+- **Generate a complete city:** roads, sidewalks, road markings, buildings, plazas,
+  street furniture, traffic lights, autonomous traffic, pedestrians, an optional
+  day/night cycle, and a minimap HUD.
+- **Configure everything from the window:**
+  - **City:** grid, ground, buildings, plazas, vehicles, props, an optional Day/Night
+    Cycle for the generated directional light (start hour, speed multiplier, and a
+    colour gradient/intensity curve over the 24 h), and Custom Places.
+  - **Custom Places:** manually placed entries with a title, prefab, block/corner picked
+    from a grid preview, fixed orientation, and an optional "Is Point Of Interest" flag
+    that surfaces the entry on the minimap. They are instantiated instead of a random
+    building at that spot.
+  - **Player:** Player Prefab, movement, `CharacterController`, and camera tuning.
+  - **Pedestrians:** the pedestrian prefab list, walk/idle behaviour, and crowd tuning.
+  - **Minimap:** enabled by default, with texture resolution and view radius controls for
+    the in-game HUD.
+- **Install and generate immediately:** it ships as the embedded package
+  `com.santiandrade.citygenerator`, installable directly from a git URL, with a complete
+  set of demo prefabs included. No package code needs to be touched.
 
 ## Installation
 
