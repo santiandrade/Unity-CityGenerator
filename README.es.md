@@ -4,28 +4,30 @@
 
 <img src="Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png" alt="Miniatura de City Generator" width="100%">
 
-Una herramienta de Editor para Unity que genera proceduralmente una ciudad —
-carreteras, aceras, marcas viales, edificios, plazas, mobiliario urbano, semáforos,
-tráfico autónomo, peatones, un ciclo día/noche opcional y un HUD de minimapa— en una
-escena nueva o existente.
-Ábrela desde **Tools > City Generator > Open**.
+Una herramienta de Editor para Unity que genera proceduralmente una ciudad en una
+escena nueva o existente. Ábrela desde **Tools > City Generator > Open**.
 
-La ventana está dividida en cuatro pestañas: **City** (cuadrícula, suelo, edificios,
-plazas, vehículos, mobiliario, un Day/Night Cycle opcional para la luz direccional
-generada —hora de inicio, multiplicador de velocidad y un gradiente de color/curva de
-intensidad a lo largo de las 24 h— y Custom Places: lugares colocados a mano con un
-título, un prefab, una manzana/esquina elegida en un grid visual, una orientación fija
-y un flag opcional "Is Point Of Interest" que marca la entrada en el minimapa, y que se
-instancian en lugar de un edificio aleatorio en esa posición), **Player** (Player
-Prefab, movimiento, ajuste del `CharacterController` y de la cámara), **Pedestrians**
-(la lista de prefabs de peatones, además de su comportamiento al caminar/esperar y el
-ajuste de la multitud), y **Minimap** (activado por defecto; resolución de textura y
-radio de visión del HUD de minimapa en el juego) — todo se edita desde la ventana, sin
-necesidad de tocar el código del paquete.
-
-Se distribuye como el package embebido `com.santiandrade.citygenerator`, instalable
-directamente desde una git URL, con un conjunto completo de prefabs de demostración
-incluido para que la ventana esté lista para generar una ciudad nada más instalarlo.
+- **Genera una ciudad completa:** carreteras, aceras, marcas viales, edificios, plazas,
+  mobiliario urbano, semáforos, tráfico autónomo, peatones, un ciclo día/noche opcional
+  y un HUD de minimapa.
+- **Configura todo desde la ventana:**
+  - **City:** cuadrícula, suelo, edificios, plazas, vehículos, mobiliario, un Day/Night
+    Cycle opcional para la luz direccional generada (hora de inicio, multiplicador de
+    velocidad y un gradiente de color/curva de intensidad a lo largo de las 24 h) y
+    Custom Places.
+  - **Custom Places:** lugares colocados a mano con título, prefab, una
+    manzana/esquina elegida en un grid visual, orientación fija y un flag opcional
+    "Is Point Of Interest" que marca la entrada en el minimapa. Se instancian en lugar
+    de un edificio aleatorio en esa posición.
+  - **Player:** Player Prefab, movimiento y ajuste del `CharacterController` y la cámara.
+  - **Pedestrians:** la lista de prefabs de peatones, su comportamiento al
+    caminar/esperar y el ajuste de la multitud.
+  - **Minimap:** activado por defecto, con controles para la resolución de textura y el
+    radio de visión del HUD de minimapa en el juego.
+- **Instálala y genera de inmediato:** se distribuye como el package embebido
+  `com.santiandrade.citygenerator`, instalable directamente desde una git URL, con un
+  conjunto completo de prefabs de demostración incluido. No hace falta tocar el código
+  del package.
 
 ## Instalación
 
