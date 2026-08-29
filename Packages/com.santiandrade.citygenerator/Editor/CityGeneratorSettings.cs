@@ -44,7 +44,7 @@ namespace CityGenerator.Editor
         [Tooltip("Spawn pedestrian NPCs. The pedestrian network itself (crossings wired to the traffic lights) is always generated regardless of this toggle.")]
         public bool includePedestrians = true;
         [Tooltip("Number of pedestrian NPCs to spawn, distributed across the Pedestrians list by percentage. Too high relative to the grid's sidewalk ring nodes reads as overcrowded — see the warning above.")]
-        public int pedestrianCount = 90;
+        public int pedestrianCount = 150;
         [Tooltip("Use a fixed seed so the same settings always generate the same layout, prefab choices and placement. Unchecked, every generation is different.")]
         public bool useCustomSeed = false;
         [Tooltip("Seed value used when Custom Seed is enabled.")]

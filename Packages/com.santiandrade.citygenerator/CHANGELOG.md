@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Pedestrians can now cut through a normal block's interior instead of only ever walking its
+  perimeter sidewalk ring: every non-plaza block without a full-block Custom Place gets a 5-node
+  `Interior` cross (block centre + 4 arm midpoints) wired into its own ring. A plaza block or a
+  full-block Custom Place block gets none — pedestrians stay confined to the ring around them.
+- The pedestrian density warning now measures against the network's total node count (ring +
+  interior), not just ring nodes, since ring alone stopped representing a block's real walkable
+  capacity. Default `pedestrianCount` raised to 150 accordingly.
 
 ## [2.5.0] - 2026-08-29
 ### Added

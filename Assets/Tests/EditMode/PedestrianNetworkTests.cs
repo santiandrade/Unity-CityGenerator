@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using CityGenerator.Editor;
 using CityGenerator.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -76,9 +78,11 @@ namespace CityGenerator.Tests.EditMode
         {
             // Node 0 (block (0,0) ring) and a node belonging to the diagonal block (1,1)'s ring
             // are not connected: no TrafficLightIntersection exists in this scene to wire a
-            // crossing chain between blocks.
+            // crossing chain between blocks. Every normal block now also gets a 5-node Interior
+            // cross right after its own 8-node ring (13 nodes/block total), so block index 3's
+            // ring starts at 13 * 3, not 8 * 3.
             var path = new int[64];
-            int otherBlockRingStart = 8 * 3; // block index 3 in row-major (bi,bj) order for a 2x2 grid
+            int otherBlockRingStart = 13 * 3; // block index 3 in row-major (bi,bj) order for a 2x2 grid
             int length = network.FindPath(0, otherBlockRingStart, path);
 
             Assert.AreEqual(0, length);
@@ -99,10 +103,11 @@ namespace CityGenerator.Tests.EditMode
         [Test]
         public void ComponentOf_IsolatedRings_AreDifferentComponents()
         {
-            // Node 0 belongs to block (0,0)'s ring; node 8 is the first node of block (0,1)'s ring
-            // (see BuildBlockRing's fixed 8-nodes-per-block order) -- isolated from each other with
-            // no TrafficLightIntersection to wire a crossing chain between them.
-            Assert.AreNotEqual(network.ComponentOf(0), network.ComponentOf(8));
+            // Node 0 belongs to block (0,0)'s ring; node 13 is the first node of block (0,1)'s
+            // ring (8-node ring + 5-node Interior cross = 13 nodes/block, see BuildBlockRing/
+            // BuildInteriorCross) -- isolated from each other with no TrafficLightIntersection to
+            // wire a crossing chain between them.
+            Assert.AreNotEqual(network.ComponentOf(0), network.ComponentOf(13));
         }
 
         [Test]
@@ -125,6 +130,110 @@ namespace CityGenerator.Tests.EditMode
             // this fixture's graph, so any node index queried here is a Ring node -- CanCross must
             // return true for anything that isn't a real Crossing node tied to an intersection.
             Assert.IsTrue(network.CanCross(0));
+        }
+    }
+
+    /// <summary>
+    /// SPEC 10: covers the three per-block outcomes CityGeneratorPedestrianBuilder.AddNetworkComponent
+    /// drives Build() with -- a normal block, a plaza block, and a block with a full-block Custom
+    /// Place -- using a 3x1 grid so all three sit in one row with no crossings to worry about
+    /// (see PedestrianNetworkTests' own SetUp comment re: 1xN grids). Only a normal block gets an
+    /// Interior cross: both a plaza block and a full-block Custom Place stay confined to their ring.
+    /// </summary>
+    internal class PedestrianNetworkInteriorTests
+    {
+        private GameObject networkGroupObject;
+        private GameObject ground;
+        private PedestrianNetwork network;
+
+        private const float Offset = 2000000f;
+
+        [SetUp]
+        public void SetUp()
+        {
+            ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ground.name = "Ground";
+            ground.transform.position = new Vector3(Offset, -10f, Offset);
+            ground.transform.localScale = new Vector3(1000f, 20f, 1000f);
+            Physics.SyncTransforms();
+
+            networkGroupObject = new GameObject("PedestrianNetworkGroup");
+
+            // Block (0,0) normal, block (1,0) a plaza, block (2,0) a full-block Custom Place.
+            List<BlockCell> blocks = CityGeneratorGrid.BuildBlocks(3, 1, new[] { new Vector2Int(1, 0) });
+            var reservedSlots = new HashSet<(int gridX, int gridY, int slot)> { (2, 0, -1) };
+
+            network = CityGeneratorPedestrianBuilder.AddNetworkComponent(networkGroupObject.transform, 3, 1, blocks, reservedSlots);
+            // Re-anchored away from the origin, same reasoning as PedestrianNetworkTests' Offset.
+            network.SetAxes(
+                new float[] { Offset - 84f, Offset - 28f, Offset + 28f, Offset + 84f },
+                new float[] { Offset - 28f, Offset + 28f });
+            network.Build();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (networkGroupObject != null) Object.DestroyImmediate(networkGroupObject);
+            if (ground != null) Object.DestroyImmediate(ground);
+        }
+
+        [Test]
+        public void Build_NormalBlock_GetsExactlyFiveInteriorNodesConnectedToItsRing()
+        {
+            Assert.AreEqual(5, CountKind(PedestrianNodeKind.Interior));
+
+            // Block (0,0): ring 0-7 (sw,sMid,se,eMid,ne,nMid,nw,wMid), interior 8-12 (centre,armS,armE,armN,armW).
+            const int centre = 8, armS = 9, armE = 10, armN = 11, armW = 12;
+            const int sMid = 1, eMid = 3, nMid = 5, wMid = 7;
+
+            Assert.AreEqual(PedestrianNodeKind.Interior, network.GetNode(centre).Kind);
+            CollectionAssert.Contains(network.GetNode(centre).Neighbours, armS);
+            CollectionAssert.Contains(network.GetNode(centre).Neighbours, armE);
+            CollectionAssert.Contains(network.GetNode(centre).Neighbours, armN);
+            CollectionAssert.Contains(network.GetNode(centre).Neighbours, armW);
+
+            CollectionAssert.Contains(network.GetNode(armS).Neighbours, sMid);
+            CollectionAssert.Contains(network.GetNode(armE).Neighbours, eMid);
+            CollectionAssert.Contains(network.GetNode(armN).Neighbours, nMid);
+            CollectionAssert.Contains(network.GetNode(armW).Neighbours, wMid);
+        }
+
+        [Test]
+        public void Build_PlazaBlock_GetsNoInteriorNodes()
+        {
+            // Block (1,0) starts at index 13 (block (0,0)'s 8 ring + 5 interior nodes) and is only
+            // its own 8-node ring -- a plaza block stays confined to its ring, same as a
+            // full-block Custom Place.
+            const int plazaBlockStart = 13;
+            for (int i = plazaBlockStart; i < plazaBlockStart + 8; i++)
+            {
+                Assert.AreEqual(PedestrianNodeKind.Ring, network.GetNode(i).Kind);
+            }
+        }
+
+        [Test]
+        public void Build_FullBlockCustomPlace_GetsNoInteriorNodes()
+        {
+            // Block (2,0) starts at index 21 (13 + 8-node ring from block (1,0), the plaza block,
+            // which itself got no Interior nodes) and is only its own 8-node ring.
+            const int reservedBlockStart = 13 + 8;
+            Assert.AreEqual(29, network.NodeCount);
+            for (int i = reservedBlockStart; i < reservedBlockStart + 8; i++)
+            {
+                Assert.AreEqual(PedestrianNodeKind.Ring, network.GetNode(i).Kind);
+            }
+        }
+
+        private int CountKind(PedestrianNodeKind kind)
+        {
+            int count = 0;
+            for (int i = 0; i < network.NodeCount; i++)
+            {
+                if (network.GetNode(i).Kind == kind)
+                    count++;
+            }
+            return count;
         }
     }
 
