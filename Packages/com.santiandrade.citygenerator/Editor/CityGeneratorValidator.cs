@@ -186,8 +186,35 @@ namespace CityGenerator.Editor
 
             ValidateCustomPlaces(settings, issues);
             ValidateMinimap(settings, issues);
+            ValidateAudio(settings, issues);
 
             return !issues.Exists(issue => !issue.isWarning);
+        }
+
+        /// <summary>Blocking: an enabled Ambience/Plazas card with no entries, or an entry missing its clip, would silently play nothing — same "required field" treatment as every other prefab list in the tool.</summary>
+        private static void ValidateAudio(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
+        {
+            if (settings.audio.ambience.enabled)
+            {
+                if (settings.audio.ambience.clips.Count == 0)
+                    issues.Add(new CityGeneratorValidationIssue("audio.ambience.clips", "Audio: Ambience is enabled but has no clip entries."));
+                for (int i = 0; i < settings.audio.ambience.clips.Count; i++)
+                {
+                    if (settings.audio.ambience.clips[i].clip == null)
+                        issues.Add(new CityGeneratorValidationIssue("audio.ambience.clips", $"Audio: Ambience entry {i + 1} is missing its clip."));
+                }
+            }
+
+            if (settings.audio.plazaAudio.enabled)
+            {
+                if (settings.audio.plazaAudio.clips.Count == 0)
+                    issues.Add(new CityGeneratorValidationIssue("audio.plazaAudio.clips", "Audio: Plazas is enabled but has no clip entries."));
+                for (int i = 0; i < settings.audio.plazaAudio.clips.Count; i++)
+                {
+                    if (settings.audio.plazaAudio.clips[i].clip == null)
+                        issues.Add(new CityGeneratorValidationIssue("audio.plazaAudio.clips", $"Audio: Plazas entry {i + 1} is missing its clip."));
+                }
+            }
         }
 
         // Both non-blocking: neither condition breaks generation, they just warn about a

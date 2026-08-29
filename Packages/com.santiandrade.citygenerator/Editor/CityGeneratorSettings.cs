@@ -23,6 +23,7 @@ namespace CityGenerator.Editor
         public List<CustomPlaceEntry> customPlaces = new();
         public MinimapSettings minimap = MinimapSettings.Default();
         public DayNightSettings dayNight = DayNightSettings.Default();
+        public AudioSettings audio = AudioSettings.Default();
     }
 
     [Serializable]
@@ -335,7 +336,7 @@ namespace CityGenerator.Editor
 
         public static DayNightSettings Default() => new DayNightSettings
         {
-            enabled = false,
+            enabled = true,
             startHour = 10f,
             speedMultiplier = 30f,
             lightColorOverTime = DefaultColorGradient(),
@@ -374,5 +375,74 @@ namespace CityGenerator.Editor
                 new Keyframe(0.75f, 0.6f),
                 new Keyframe(1f, 0.1f));
         }
+    }
+
+    // Consumed by CityGeneratorAudioBuilder: BuildAmbience creates one 2D AudioSource per
+    // AmbienceClipEntry as a direct child of cityRoot; BuildPlazaAudio creates one 3D
+    // AudioSource per PlazaAudioClipEntry inside every plaza block's own group. Ambience has no
+    // default plaza-audio counterpart in DefaultAssets — plazaAudio.clips starts empty.
+    [Serializable]
+    internal struct AudioSettings
+    {
+        public AmbienceSettings ambience;
+        public PlazaAudioSettings plazaAudio;
+
+        public static AudioSettings Default() => new AudioSettings
+        {
+            ambience = AmbienceSettings.Default(),
+            plazaAudio = PlazaAudioSettings.Default(),
+        };
+    }
+
+    [Serializable]
+    internal struct AmbienceSettings
+    {
+        [Tooltip("Whether ambience audio plays in the generated city. On by default.")]
+        public bool enabled;
+        [Tooltip("Clips that loop simultaneously as scene ambience, each at its own volume, regardless of camera position.")]
+        public List<AmbienceClipEntry> clips;
+
+        public static AmbienceSettings Default() => new AmbienceSettings
+        {
+            enabled = true,
+            clips = new List<AmbienceClipEntry> { new AmbienceClipEntry { clip = null, volume = 1f } },
+        };
+    }
+
+    [Serializable]
+    internal struct AmbienceClipEntry
+    {
+        [Tooltip("Ambience clip for this entry. Required.")]
+        public AudioClip clip;
+        [Tooltip("This entry's own volume, independent of the other entries in the list.")]
+        [Range(0f, 1f)] public float volume;
+    }
+
+    [Serializable]
+    internal struct PlazaAudioSettings
+    {
+        [Tooltip("Whether each generated plaza gets its own positional audio source. On by default.")]
+        public bool enabled;
+        [Tooltip("Clips that loop simultaneously at every plaza's position, each at its own volume and hearing range.")]
+        public List<PlazaAudioClipEntry> clips;
+
+        public static PlazaAudioSettings Default() => new PlazaAudioSettings
+        {
+            enabled = true,
+            clips = new List<PlazaAudioClipEntry>(),
+        };
+    }
+
+    [Serializable]
+    internal struct PlazaAudioClipEntry
+    {
+        [Tooltip("Plaza clip for this entry. Required.")]
+        public AudioClip clip;
+        [Tooltip("This entry's own volume, independent of the other entries in the list.")]
+        [Range(0f, 1f)] public float volume;
+        [Tooltip("AudioSource.minDistance: distance at which attenuation starts.")]
+        public float minDistance;
+        [Tooltip("AudioSource.maxDistance: distance at which the clip stops being audible.")]
+        public float maxDistance;
     }
 }

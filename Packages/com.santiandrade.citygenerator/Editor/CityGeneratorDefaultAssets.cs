@@ -116,8 +116,20 @@ namespace CityGenerator.Editor
             settings.props.trafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight.prefab");
             settings.props.lampPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Lamp.prefab");
             settings.props.binPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Bin.prefab");
+
+            settings.audio.ambience.clips = new List<AmbienceClipEntry>
+            {
+                new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/city-ambiance.wav"), volume = 1f },
+            };
+
+            settings.audio.plazaAudio.clips = new List<PlazaAudioClipEntry>
+            {
+                new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/plaza-ambiance-fountain.wav"), volume = 1f, minDistance = 4f, maxDistance = 20f },
+                new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/plaza-ambiance-birds.wav"), volume = 1f, minDistance = 20f, maxDistance = 50f },
+            };
         }
 
         private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        private static AudioClip LoadAudioClip(string path) => AssetDatabase.LoadAssetAtPath<AudioClip>(path);
     }
 }

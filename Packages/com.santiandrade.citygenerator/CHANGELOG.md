@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New "Audio" tab with two cards: Ambience (2D looping clips that play regardless of camera
+  position) and Plazas (3D positional clips, one AudioSource per configured entry per generated
+  plaza block, with logarithmic rolloff and a per-entry min/max distance). Both are on by
+  default; Ambience ships with a default `city-ambiance.wav` clip at volume 1.
+- Ambience/Plazas volume sliders now have a numeric field next to them for typing an exact value,
+  kept in sync with the slider in both directions.
+- Plazas ships with two default clips: `plaza-ambiance-fountain.wav` (volume 1, 4/20m min/max
+  distance) and `plaza-ambiance-birds.wav` (volume 1, 20/50m min/max distance).
+
+### Fixed
+
+- "Set Current Selection As Default" never captured `settings.audio` (Ambience/Plazas clip lists),
+  so running it silently dropped the tool's default audio wiring; "Reset to Defaults" (and a freshly
+  opened window) would then leave Ambience's clip empty and Plazas' clip list empty instead of the
+  documented defaults. `CityGeneratorDefaultAssetsWriter` now regenerates both lists, matching the
+  existing pattern for every other prefab/asset list.
+- Audio: editing a Plaza clip entry's Min Distance/Max Distance in the tool UI silently kept the
+  entry's previous value instead of the typed one, so generated cities always used stale/default
+  distances regardless of what was configured. Caused by the row holding onto a `SerializedProperty`
+  captured when the row was built, which goes stale once anything else in the window edits the
+  shared `SerializedObject` in between; the Ambience/Plazas clip lists now re-fetch each property by
+  array index at write time instead, matching `CityGeneratorWeightedPrefabList`'s already-safe
+  pattern.
+
 ### Changed
 
 - Day/Night Cycle: the Directional Light's yaw is now forced to -110° (was -90°) on every

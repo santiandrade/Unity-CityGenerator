@@ -47,6 +47,8 @@ namespace CityGenerator.Tests.EditMode
             settings.ground.roadLinePrefab = MakePrefabLike("RoadLine");
             settings.ground.crosswalkLinePrefab = MakePrefabLike("Crosswalk");
             settings.vegetation.density = 0f; // avoid the unrelated "no prefabs" issue in tests not about vegetation
+            settings.audio.ambience.enabled = false; // avoid the unrelated "missing clip" issue in tests not about audio
+            settings.audio.plazaAudio.enabled = false; // avoid the unrelated "no clip entries" issue in tests not about audio
             return settings;
         }
 
