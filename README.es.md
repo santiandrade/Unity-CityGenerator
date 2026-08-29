@@ -44,7 +44,7 @@ Para una instalación reproducible fijada a una versión concreta, añade `#vX.Y
 tag de la [página de Releases](https://github.com/santiandrade/Unity-CityGenerator/releases)
 — por ejemplo, `...citygenerator#v1.0.1` para esa versión exacta.
 
-## Actualizar
+### Actualizar
 
 Si instalaste el package **sin** tag `#vX.Y.Z` (siguiendo la punta de la rama por
 defecto), Package Manager puede detectar y aplicar la actualización por ti: abre
