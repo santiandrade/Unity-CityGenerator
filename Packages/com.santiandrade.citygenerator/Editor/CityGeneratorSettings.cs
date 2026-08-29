@@ -336,7 +336,7 @@ namespace CityGenerator.Editor
 
         public static DayNightSettings Default() => new DayNightSettings
         {
-            enabled = false,
+            enabled = true,
             startHour = 10f,
             speedMultiplier = 30f,
             lightColorOverTime = DefaultColorGradient(),

@@ -111,10 +111,17 @@ namespace CityGenerator.Editor
             AppendAssignment(sb, "settings.props.trafficLightPrefab", BuildGameObjectExpr(settings.props.trafficLightPrefab, warnings, "Props > Traffic Light Prefab"));
             AppendAssignment(sb, "settings.props.lampPrefab", BuildGameObjectExpr(settings.props.lampPrefab, warnings, "Props > Lamp Prefab"));
             AppendAssignment(sb, "settings.props.binPrefab", BuildGameObjectExpr(settings.props.binPrefab, warnings, "Props > Bin Prefab"));
+            sb.AppendLine();
+
+            AppendAmbienceClips(sb, settings.audio.ambience.clips, warnings);
+            sb.AppendLine();
+
+            AppendPlazaAudioClips(sb, settings.audio.plazaAudio.clips, warnings);
 
             sb.AppendLine("        }");
             sb.AppendLine();
             sb.AppendLine("        private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);");
+            sb.AppendLine("        private static AudioClip LoadAudioClip(string path) => AssetDatabase.LoadAssetAtPath<AudioClip>(path);");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             return sb.ToString();
@@ -199,6 +206,46 @@ namespace CityGenerator.Editor
                 sb.AppendLine("                },");
             }
             sb.AppendLine("            };");
+        }
+
+        private static void AppendAmbienceClips(StringBuilder sb, List<AmbienceClipEntry> clips, List<string> warnings)
+        {
+            sb.AppendLine("            settings.audio.ambience.clips = new List<AmbienceClipEntry>");
+            sb.AppendLine("            {");
+            foreach (AmbienceClipEntry entry in clips)
+            {
+                string expression = BuildAudioClipExpr(entry.clip, warnings, "Audio > Ambience");
+                if (expression == null)
+                    continue;
+                sb.AppendLine($"                new() {{ clip = {expression}, volume = {FormatFloat(entry.volume)}f }},");
+            }
+            sb.AppendLine("            };");
+        }
+
+        private static void AppendPlazaAudioClips(StringBuilder sb, List<PlazaAudioClipEntry> clips, List<string> warnings)
+        {
+            sb.AppendLine("            settings.audio.plazaAudio.clips = new List<PlazaAudioClipEntry>");
+            sb.AppendLine("            {");
+            foreach (PlazaAudioClipEntry entry in clips)
+            {
+                string expression = BuildAudioClipExpr(entry.clip, warnings, "Audio > Plazas");
+                if (expression == null)
+                    continue;
+                sb.AppendLine($"                new() {{ clip = {expression}, volume = {FormatFloat(entry.volume)}f, minDistance = {FormatFloat(entry.minDistance)}f, maxDistance = {FormatFloat(entry.maxDistance)}f }},");
+            }
+            sb.AppendLine("            };");
+        }
+
+        private static string BuildAudioClipExpr(AudioClip clip, List<string> warnings, string fieldLabel)
+        {
+            if (clip == null)
+                return null;
+            string relative = RelativeToRoot(clip);
+            if (relative != null)
+                return $"LoadAudioClip($\"{{DefaultAssetsRoot}}/{relative}\")";
+            string fullPath = AssetDatabase.GetAssetPath(clip);
+            warnings.Add($"{fieldLabel} ('{clip.name}') lives outside {DefaultAssetsRoot}/ (at '{fullPath}'). The generated default now hardcodes that path, which won't resolve in another project — move the asset into DefaultAssets/ and run \"Set Current Selection As Default\" again.");
+            return $"LoadAudioClip(\"{Escape(fullPath)}\")";
         }
 
         // Prefabs assigned from outside DefaultAssetsRoot still get a working default (the tool
@@ -323,6 +370,13 @@ namespace CityGenerator.Editor
             source = ReplaceInMethodBody(source, "DayNightSettings Default()", "enabled", dayNight.enabled ? "true" : "false");
             source = ReplaceInMethodBody(source, "DayNightSettings Default()", "startHour", FormatFloat(dayNight.startHour) + "f");
             source = ReplaceInMethodBody(source, "DayNightSettings Default()", "speedMultiplier", FormatFloat(dayNight.speedMultiplier) + "f");
+
+            // ambience.clips/plazaAudio.clips themselves are rewritten wholesale in ApplyTo (see
+            // BuildDefaultAssetsSource), same as every other asset list; only the on/off toggles
+            // are struct Default() object-initializer assignments, so they need the same scoped
+            // replace as DayNightSettings above.
+            source = ReplaceInMethodBody(source, "AmbienceSettings Default()", "enabled", settings.audio.ambience.enabled ? "true" : "false");
+            source = ReplaceInMethodBody(source, "PlazaAudioSettings Default()", "enabled", settings.audio.plazaAudio.enabled ? "true" : "false");
 
             return source;
         }
