@@ -177,10 +177,17 @@
 }
 
 .cg-grid-preview {
-    height: 110px;
+    height: 200px;
     background-color: var(--cg-surface-alt);
     border-radius: 3px;
     margin: 4px 0 2px 0;
+}
+
+/* The City tab's own grid preview gets even more room than the base size every picker (including
+   each Custom Place row's own single-selection picker) already got, so individual blocks are
+   actually readable while editing plazas or a Customize shape. */
+.cg-grid-preview--main {
+    height: 320px;
 }
 
 .cg-grid-preview__caption {

@@ -28,6 +28,7 @@ namespace CityGenerator.Editor.UI
         private readonly List<CityGeneratorGridPreview> gridPreviews = new();
         private SerializedProperty listProperty;
         private SerializedProperty shapeMaskProperty;
+        private SerializedProperty plazaMaskProperty;
         private int gridWidth = 1;
         private int gridHeight = 1;
 
@@ -70,6 +71,18 @@ namespace CityGenerator.Editor.UI
             shapeMaskProperty = customBlockCellsProperty;
             foreach (CityGeneratorGridPreview preview in gridPreviews)
                 preview.SetShapeMask(shapeMaskProperty);
+        }
+
+        /// <summary>
+        /// Overlays the General Options grid's configured plazas (<c>general.plazaCells</c>) on
+        /// every row's picker, painted green, so the user has a visual reference for where plazas
+        /// already sit while placing a Custom Place. Pass <c>null</c> to disable.
+        /// </summary>
+        public void SetPlazaMask(SerializedProperty plazaCellsProperty)
+        {
+            plazaMaskProperty = plazaCellsProperty;
+            foreach (CityGeneratorGridPreview preview in gridPreviews)
+                preview.SetPlazaMask(plazaMaskProperty);
         }
 
         private void AddEntry()
@@ -156,6 +169,7 @@ namespace CityGenerator.Editor.UI
                     () => occupiesFullBlockProperty.boolValue,
                     onChanged);
                 preview.SetShapeMask(shapeMaskProperty);
+                preview.SetPlazaMask(plazaMaskProperty);
                 row.Add(preview);
                 gridPreviews.Add(preview);
 

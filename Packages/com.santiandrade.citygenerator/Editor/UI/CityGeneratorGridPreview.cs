@@ -109,6 +109,17 @@ namespace CityGenerator.Editor.UI
             MarkDirtyRepaint();
         }
 
+        /// <summary>
+        /// SingleSelectQuadrant mode only: overlays the General Options grid's configured plazas
+        /// (<c>general.plazaCells</c>) as a reference so the user can see where plazas already sit
+        /// while placing a Custom Place. Pass <c>null</c> to disable.
+        /// </summary>
+        public void SetPlazaMask(SerializedProperty plazaCellsProperty)
+        {
+            this.plazaCellsProperty = plazaCellsProperty;
+            MarkDirtyRepaint();
+        }
+
         public void SetGrid(int width, int height)
         {
             if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit || shapeCellsProperty != null)
@@ -454,6 +465,7 @@ namespace CityGenerator.Editor.UI
 
             Color streetColor = new Color(0f, 0f, 0f, 0.15f);
             Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
+            Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
             Color selectedColor = new Color(0.85f, 0.6f, 0.2f, 0.75f);
             Color quadrantColor = new Color(0.95f, 0.75f, 0.3f, 0.9f);
             Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
@@ -465,6 +477,7 @@ namespace CityGenerator.Editor.UI
             bool occupiesFullBlock = occupiesFullBlockGetter != null && occupiesFullBlockGetter();
             int cornerSlot = cornerSlotProperty != null ? cornerSlotProperty.intValue : -1;
             HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
+            HashSet<Vector2Int> plazaCells = plazaCellsProperty != null ? ReadPlazaCells() : null;
 
             float inset = cellSize * 0.08f;
 
@@ -487,7 +500,9 @@ namespace CityGenerator.Editor.UI
                     }
 
                     bool isSelected = positionAssigned && selectedCell.x == x && selectedCell.y == gy;
-                    DrawRect(painter, isSelected ? selectedColor : blockColor, cx, cy, size, size);
+                    bool isPlaza = plazaCells != null && plazaCells.Contains(cell);
+                    Color cellColor = isSelected ? selectedColor : (isPlaza ? plazaColor : blockColor);
+                    DrawRect(painter, cellColor, cx, cy, size, size);
 
                     if (isSelected && !occupiesFullBlock && cornerSlot >= 0)
                     {

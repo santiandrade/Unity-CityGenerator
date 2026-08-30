@@ -284,6 +284,7 @@ namespace CityGenerator.Editor
             gridHeaderRow.Add(customizeButton);
 
             gridPreview = new CityGeneratorGridPreview();
+            gridPreview.AddToClassList("cg-grid-preview--main");
             gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
             content.Add(gridPreview);
             gridPreviewCaption = new Label();
@@ -748,6 +749,7 @@ namespace CityGenerator.Editor
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
+            customPlaceList.SetPlazaMask(FindProperty("general.plazaCells"));
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
             ambienceCard.SetBadge(FindProperty("audio.ambience.enabled").boolValue
@@ -888,21 +890,38 @@ namespace CityGenerator.Editor
         /// </summary>
         private string GetVehicleDensityWarning()
         {
+            bool useCustomGrid = FindProperty("general.useCustomGrid").boolValue;
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
             int vehicleCount = FindProperty("general.vehicleCount").intValue;
             if (vehicleCount <= 0)
                 return null;
 
-            int validNodes = TrafficNetwork.EstimateValidSpawnNodeCount(gridWidth + 1, gridHeight + 1);
+            int validNodes = useCustomGrid
+                ? TrafficNetwork.EstimateValidSpawnNodeCountCustom(ReadCustomBlockCells())
+                : TrafficNetwork.EstimateValidSpawnNodeCount(gridWidth + 1, gridHeight + 1);
+            if (validNodes <= 0)
+                return null;
+
             float occupancy = (float)vehicleCount / validNodes;
             if (occupancy <= CityGeneratorConstants.VehicleDensityWarningThreshold)
                 return null;
 
             int recommendedMax = Mathf.FloorToInt(validNodes * CityGeneratorConstants.VehicleDensityWarningThreshold);
+            string gridDescription = useCustomGrid ? "this custom shape" : $"this {gridWidth}x{gridHeight} grid";
             return $"{vehicleCount} vehicles is {occupancy:P0} of this grid's {validNodes} spawn points. " +
                    $"Traffic has no route planning, so it tends to gridlock above ~{CityGeneratorConstants.VehicleDensityWarningThreshold:P0} " +
-                   $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
+                   $"(recommended max ~{recommendedMax} for {gridDescription}).";
+        }
+
+        /// <summary>Reads <c>general.customBlockCells</c> into a plain list, for the Custom Grid density estimators.</summary>
+        private List<Vector2Int> ReadCustomBlockCells()
+        {
+            SerializedProperty property = FindProperty("general.customBlockCells");
+            var cells = new List<Vector2Int>(property.arraySize);
+            for (int i = 0; i < property.arraySize; i++)
+                cells.Add(property.GetArrayElementAtIndex(i).vector2IntValue);
+            return cells;
         }
 
         /// <summary>
@@ -916,13 +935,14 @@ namespace CityGenerator.Editor
         /// </summary>
         private string GetPedestrianDensityWarning()
         {
+            bool useCustomGrid = FindProperty("general.useCustomGrid").boolValue;
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
             int pedestrianCount = FindProperty("general.pedestrianCount").intValue;
             if (pedestrianCount <= 0)
                 return null;
 
-            int totalBlocks = gridWidth * gridHeight;
+            int totalBlocks = useCustomGrid ? FindProperty("general.customBlockCells").arraySize : gridWidth * gridHeight;
             int plazaBlockCount = FindProperty("general.plazaCells").arraySize;
             int normalBlockCount = totalBlocks - plazaBlockCount;
 
@@ -930,14 +950,18 @@ namespace CityGenerator.Editor
             int interiorNodeCount = 5 * normalBlockCount;
 
             int totalNodeCount = ringNodeCount + interiorNodeCount;
+            if (totalNodeCount <= 0)
+                return null;
+
             float occupancy = (float)pedestrianCount / totalNodeCount;
             if (occupancy <= CityGeneratorConstants.PedestrianCountWarningThreshold)
                 return null;
 
             int recommendedMax = Mathf.FloorToInt(totalNodeCount * CityGeneratorConstants.PedestrianCountWarningThreshold);
+            string gridDescription = useCustomGrid ? "this custom shape" : $"this {gridWidth}x{gridHeight} grid";
             return $"{pedestrianCount} pedestrians is {occupancy:P0} of this grid's ~{totalNodeCount} walkable spawn/route points. " +
                    $"Above ~{CityGeneratorConstants.PedestrianCountWarningThreshold:P0} the crowd starts reading as overcrowded " +
-                   $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
+                   $"(recommended max ~{recommendedMax} for {gridDescription}).";
         }
 
         /// <summary>

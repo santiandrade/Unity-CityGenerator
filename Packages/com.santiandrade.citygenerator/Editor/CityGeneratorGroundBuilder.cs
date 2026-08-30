@@ -44,6 +44,11 @@ namespace CityGenerator.Editor
                 CityGeneratorBoundsUtility.ScaleToFootprint(instance, CityGeneratorConstants.CellPitch, CityGeneratorConstants.CellPitch);
                 index++;
 
+                bool northOpen = !cellSet.Contains(cell + new Vector2Int(0, 1));
+                bool southOpen = !cellSet.Contains(cell + new Vector2Int(0, -1));
+                bool eastOpen = !cellSet.Contains(cell + new Vector2Int(1, 0));
+                bool westOpen = !cellSet.Contains(cell + new Vector2Int(-1, 0));
+
                 foreach (Vector2Int dir in Neighbors4)
                 {
                     if (cellSet.Contains(cell + dir))
@@ -58,6 +63,24 @@ namespace CityGenerator.Editor
                     float w = horizontal ? CityGeneratorConstants.RoadBaseMargin : CityGeneratorConstants.CellPitch;
                     float d = horizontal ? CityGeneratorConstants.CellPitch : CityGeneratorConstants.RoadBaseMargin;
                     CityGeneratorBoundsUtility.ScaleToFootprint(marginInstance, w, d);
+                    index++;
+                }
+
+                // A convex corner (two perpendicular open edges) leaves a RoadBaseMargin-square
+                // gap diagonally beyond the cell that neither edge strip above covers.
+                foreach (Vector2Int corner in new[] { new Vector2Int(1, 1), new Vector2Int(1, -1), new Vector2Int(-1, 1), new Vector2Int(-1, -1) })
+                {
+                    bool xOpen = corner.x > 0 ? eastOpen : westOpen;
+                    bool zOpen = corner.y > 0 ? northOpen : southOpen;
+                    if (!xOpen || !zOpen)
+                        continue;
+
+                    Vector3 cornerOffset = new Vector3(corner.x, 0f, corner.y) * (CityGeneratorConstants.CellPitch / 2f + CityGeneratorConstants.RoadBaseMargin / 2f);
+                    Vector3 cornerCenter = center + cornerOffset;
+
+                    GameObject cornerInstance = InstantiatePrefab(roadBasePrefab, roadsGroup, $"Road_Base_{index}_Corner");
+                    cornerInstance.transform.localPosition = new Vector3(cornerCenter.x, CityGeneratorConstants.RoadBaseY, cornerCenter.z);
+                    CityGeneratorBoundsUtility.ScaleToFootprint(cornerInstance, CityGeneratorConstants.RoadBaseMargin, CityGeneratorConstants.RoadBaseMargin);
                     index++;
                 }
             }
@@ -82,8 +105,8 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Custom Grid overload (SPEC 11): dashes are drawn only on street segments adjacent to at
-        /// least one real block; zebra crossings only at intersections with all 4 surrounding
-        /// cells real (same rule as the traffic light criterion).
+        /// least one real block; zebra crossings only at intersections with at least 3 real arms
+        /// (same rule as the traffic light criterion).
         /// </summary>
         public static void BuildRoadMarkings(GameObject dashPrefab, GameObject zebraPrefab, Transform markingsGroup, IReadOnlyCollection<Vector2Int> blockCells)
         {
@@ -92,12 +115,19 @@ namespace CityGenerator.Editor
             BuildZebraCrossingsCustom(zebraPrefab, markingsGroup, cellSet);
         }
 
-        private static bool IsFourWayIntersection(HashSet<Vector2Int> cells, int i, int j)
+        // An intersection needs a crossing/light only when it's a real decision point (at least 3
+        // real arms: a full 4-way or a T-intersection) -- a plain straight-through point (2
+        // opposite arms) or a perpendicular L-corner (exactly 2 arms, a street simply bending 90
+        // degrees with only one possible way through) never has crossing traffic. Mirrors
+        // CityGeneratorTrafficBuilder's identical rule for placing traffic lights.
+        private static bool HasCrossTraffic(HashSet<Vector2Int> cells, int i, int j)
         {
-            return cells.Contains(new Vector2Int(i - 1, j - 1))
-                && cells.Contains(new Vector2Int(i, j - 1))
-                && cells.Contains(new Vector2Int(i - 1, j))
-                && cells.Contains(new Vector2Int(i, j));
+            bool east = cells.Contains(new Vector2Int(i, j - 1)) || cells.Contains(new Vector2Int(i, j));
+            bool west = cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i - 1, j));
+            bool north = cells.Contains(new Vector2Int(i - 1, j)) || cells.Contains(new Vector2Int(i, j));
+            bool south = cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i, j - 1));
+            int realArmCount = (east ? 1 : 0) + (west ? 1 : 0) + (north ? 1 : 0) + (south ? 1 : 0);
+            return realArmCount >= 3;
         }
 
         private static void BuildDashesCustom(GameObject dashPrefab, Transform group, HashSet<Vector2Int> cells)
@@ -117,8 +147,8 @@ namespace CityGenerator.Editor
 
                     float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(canvas, k);
                     float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(canvas, k + 1);
-                    bool excludeStart = IsFourWayIntersection(cells, k, j);
-                    bool excludeEnd = IsFourWayIntersection(cells, k + 1, j);
+                    bool excludeStart = HasCrossTraffic(cells, k, j);
+                    bool excludeEnd = HasCrossTraffic(cells, k + 1, j);
                     PlaceDashSegment(dashPrefab, group, segmentStart, z, isVertical: false,
                         excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
                 }
@@ -136,8 +166,8 @@ namespace CityGenerator.Editor
 
                     float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(canvas, k);
                     float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(canvas, k + 1);
-                    bool excludeStart = IsFourWayIntersection(cells, i, k);
-                    bool excludeEnd = IsFourWayIntersection(cells, i, k + 1);
+                    bool excludeStart = HasCrossTraffic(cells, i, k);
+                    bool excludeEnd = HasCrossTraffic(cells, i, k + 1);
                     PlaceDashSegment(dashPrefab, group, segmentStart, x, isVertical: true,
                         excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
                 }
@@ -148,21 +178,28 @@ namespace CityGenerator.Editor
         {
             int canvas = CityGeneratorConstants.MaxGridSize;
             int zebraIndex = 0;
-            for (int i = 1; i < canvas; i++)
+            for (int i = 0; i <= canvas; i++)
             {
-                for (int j = 1; j < canvas; j++)
+                for (int j = 0; j <= canvas; j++)
                 {
-                    if (!IsFourWayIntersection(cells, i, j))
+                    bool east = cells.Contains(new Vector2Int(i, j - 1)) || cells.Contains(new Vector2Int(i, j));
+                    bool west = cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i - 1, j));
+                    bool north = cells.Contains(new Vector2Int(i - 1, j)) || cells.Contains(new Vector2Int(i, j));
+                    bool south = cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i, j - 1));
+                    int realArmCount = (east ? 1 : 0) + (west ? 1 : 0) + (north ? 1 : 0) + (south ? 1 : 0);
+                    if (realArmCount < 3)
                         continue;
 
                     float x = CityGeneratorGrid.GetStreetAxisPosition(canvas, i);
                     float z = CityGeneratorGrid.GetStreetAxisPosition(canvas, j);
                     Vector3 intersection = new Vector3(x, CityGeneratorConstants.MarkingY, z);
 
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.right, ref zebraIndex);
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.left, ref zebraIndex);
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.forward, ref zebraIndex);
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.back, ref zebraIndex);
+                    // Only the arms that actually have a street get a crossing stripe -- a T-intersection
+                    // has no crosswalk on the side with no road to cross into.
+                    if (east) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.right, ref zebraIndex);
+                    if (west) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.left, ref zebraIndex);
+                    if (north) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.forward, ref zebraIndex);
+                    if (south) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.back, ref zebraIndex);
                 }
             }
         }
@@ -175,14 +212,13 @@ namespace CityGenerator.Editor
 
             for (int j = 0; j <= gridHeight; j++)
             {
-                bool rowHasCrossings = j >= 1 && j <= gridHeight - 1;
                 float z = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, j);
                 for (int k = 0; k < gridWidth; k++)
                 {
                     float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, k);
                     float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, k + 1);
-                    bool excludeStart = rowHasCrossings && k >= 1;
-                    bool excludeEnd = rowHasCrossings && k <= gridWidth - 2;
+                    bool excludeStart = HasCrossTrafficRect(k, j, gridWidth, gridHeight);
+                    bool excludeEnd = HasCrossTrafficRect(k + 1, j, gridWidth, gridHeight);
                     PlaceDashSegment(dashPrefab, group, segmentStart, z, isVertical: false,
                         excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
                 }
@@ -190,18 +226,26 @@ namespace CityGenerator.Editor
 
             for (int i = 0; i <= gridWidth; i++)
             {
-                bool columnHasCrossings = i >= 1 && i <= gridWidth - 1;
                 float x = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, i);
                 for (int k = 0; k < gridHeight; k++)
                 {
                     float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, k);
                     float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, k + 1);
-                    bool excludeStart = columnHasCrossings && k >= 1;
-                    bool excludeEnd = columnHasCrossings && k <= gridHeight - 2;
+                    bool excludeStart = HasCrossTrafficRect(i, k, gridWidth, gridHeight);
+                    bool excludeEnd = HasCrossTrafficRect(i, k + 1, gridWidth, gridHeight);
                     PlaceDashSegment(dashPrefab, group, segmentStart, x, isVertical: true,
                         excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
                 }
             }
+        }
+
+        // Rectangular-grid counterpart of HasCrossTraffic: an intersection needs a crossing/light
+        // only when it has at least 3 real arms (bounded by the grid edge) -- a perimeter corner
+        // (exactly 2 perpendicular arms) never has crossing traffic.
+        private static bool HasCrossTrafficRect(int i, int j, int gridWidth, int gridHeight)
+        {
+            int realArmCount = (i < gridWidth ? 1 : 0) + (i > 0 ? 1 : 0) + (j < gridHeight ? 1 : 0) + (j > 0 ? 1 : 0);
+            return realArmCount >= 3;
         }
 
         // A dash is skipped if it falls within a crosswalk's exclusion radius of an intersection
@@ -235,23 +279,34 @@ namespace CityGenerator.Editor
             }
         }
 
-        // Zebra crossings only mark intersections fully surrounded by blocks (both axis indices
-        // strictly interior), matching the reference city's 4 signalled inner crossings.
+        // Zebra crossings mark every intersection with at least 3 real arms (a full 4-way, or a
+        // T-intersection along the grid's own border) -- a perimeter corner (exactly 2
+        // perpendicular arms) never has crossing traffic. Mirrors the traffic light criterion.
         private static void BuildZebraCrossings(GameObject zebraPrefab, Transform group, int gridWidth, int gridHeight)
         {
             int zebraIndex = 0;
-            for (int i = 1; i < gridWidth; i++)
+            for (int i = 0; i <= gridWidth; i++)
             {
-                for (int j = 1; j < gridHeight; j++)
+                for (int j = 0; j <= gridHeight; j++)
                 {
+                    bool east = i < gridWidth;
+                    bool west = i > 0;
+                    bool north = j < gridHeight;
+                    bool south = j > 0;
+                    int realArmCount = (east ? 1 : 0) + (west ? 1 : 0) + (north ? 1 : 0) + (south ? 1 : 0);
+                    if (realArmCount < 3)
+                        continue;
+
                     float x = CityGeneratorGrid.GetStreetAxisPosition(gridWidth, i);
                     float z = CityGeneratorGrid.GetStreetAxisPosition(gridHeight, j);
                     Vector3 intersection = new Vector3(x, CityGeneratorConstants.MarkingY, z);
 
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.right, ref zebraIndex);
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.left, ref zebraIndex);
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.forward, ref zebraIndex);
-                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.back, ref zebraIndex);
+                    // Only the arms that actually have a street get a crossing stripe -- a
+                    // T-intersection has no crosswalk on the side with no road to cross into.
+                    if (east) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.right, ref zebraIndex);
+                    if (west) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.left, ref zebraIndex);
+                    if (north) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.forward, ref zebraIndex);
+                    if (south) PlaceZebraArm(zebraPrefab, group, intersection, Vector3.back, ref zebraIndex);
                 }
             }
         }

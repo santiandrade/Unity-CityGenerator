@@ -51,7 +51,13 @@ namespace CityGenerator.Runtime
 
         // Set by BuildFromBlockCells; gates Neighbour()'s extra shape-adjacency check so the
         // rectangular SetAxes/Build() path (useCustomShape == false) is completely unaffected.
-        private bool useCustomShape;
+        // Both must be [SerializeField]: a plain private field survives only until the next
+        // domain reload/scene reload, at which point Awake() rebuilds the graph from scratch and
+        // silently fell back to the unrestricted rectangular rule (every segment "real") -- the
+        // custom shape's ground/markings stayed correct (baked into static geometry) while cars
+        // roamed the whole MaxGridSize canvas, including holes with no road built at all.
+        [SerializeField] private bool useCustomShape;
+        [SerializeField] private List<Vector2Int> customBlockCellsList = new List<Vector2Int>();
         private HashSet<Vector2Int> customBlockCells;
 
         [Tooltip("Lane offset from the street axis. Must fit within the roadway.")]
@@ -126,8 +132,77 @@ namespace CityGenerator.Runtime
             return 8 * axesXCount * axesZCount - 2 * axesXCount - 2 * axesZCount;
         }
 
+        /// <summary>
+        /// Custom Grid counterpart of <see cref="EstimateValidSpawnNodeCount"/>: mirrors
+        /// <see cref="BuildFromBlockCells"/>'s own entry/exit validity rules (an entry only
+        /// counts if it has at least one usable exit; an exit only counts if its street segment
+        /// is real) instead of assuming every intersection of a full rectangle is usable.
+        /// </summary>
+        public static int EstimateValidSpawnNodeCountCustom(IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            var cells = new HashSet<Vector2Int>(blockCells);
+            int lines = MaxGridSize + 1;
+            int count = 0;
+
+            bool IsUsed(int i, int j) =>
+                cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i, j - 1)) ||
+                cells.Contains(new Vector2Int(i - 1, j)) || cells.Contains(new Vector2Int(i, j));
+
+            bool SegmentReal(int i, int j, int k)
+            {
+                switch (k)
+                {
+                    case 0: return cells.Contains(new Vector2Int(i, j - 1)) || cells.Contains(new Vector2Int(i, j));
+                    case 1: return cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i - 1, j));
+                    case 2: return cells.Contains(new Vector2Int(i - 1, j)) || cells.Contains(new Vector2Int(i, j));
+                    default: return cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i, j - 1));
+                }
+            }
+
+            bool InBounds(int i, int j, int k)
+            {
+                switch (k)
+                {
+                    case 0: return i + 1 < lines;
+                    case 1: return i - 1 >= 0;
+                    case 2: return j + 1 < lines;
+                    default: return j - 1 >= 0;
+                }
+            }
+
+            for (int i = 0; i < lines; i++)
+            {
+                for (int j = 0; j < lines; j++)
+                {
+                    if (!IsUsed(i, j))
+                        continue;
+
+                    for (int k = 0; k < 4; k++)
+                    {
+                        bool hasStraight = InBounds(i, j, k) && SegmentReal(i, j, k);
+                        bool hasRight = InBounds(i, j, RightOf[k]) && SegmentReal(i, j, RightOf[k]);
+                        bool hasLeft = InBounds(i, j, LeftOf[k]) && SegmentReal(i, j, LeftOf[k]);
+
+                        if (hasStraight || hasRight || hasLeft)
+                            count++; // entry
+
+                        if (hasStraight)
+                            count++; // exit reachable by the corresponding straight segment
+                    }
+                }
+            }
+
+            return count;
+        }
+
         private void Awake()
         {
+            // customBlockCells is a runtime-only HashSet (not itself serializable); rebuild it
+            // from the serialized list before Build() reads it, since Awake() is exactly the
+            // point where a domain reload/scene reload has just wiped it back to null.
+            if (useCustomShape)
+                customBlockCells = new HashSet<Vector2Int>(customBlockCellsList);
+
             Build();
         }
 
@@ -141,6 +216,7 @@ namespace CityGenerator.Runtime
             axesX = newAxesX;
             axesZ = newAxesZ;
             useCustomShape = false;
+            customBlockCellsList.Clear();
             customBlockCells = null;
         }
 
@@ -156,6 +232,7 @@ namespace CityGenerator.Runtime
         public void BuildFromBlockCells(IReadOnlyCollection<Vector2Int> blockCells)
         {
             customBlockCells = new HashSet<Vector2Int>(blockCells);
+            customBlockCellsList = new List<Vector2Int>(blockCells);
             useCustomShape = true;
 
             int axisCount = MaxGridSize + 1;
@@ -291,6 +368,18 @@ namespace CityGenerator.Runtime
                         for (int k = 0; k < 4; k++)
                             nodes[NodeIndex(i, j, k, true)].IsEntry = false;
                     }
+                }
+
+                // An intersection can touch a real block through one arm while another arm's
+                // entry sits at a corner with no real segment reaching it at all (e.g. a shape
+                // that only touches this intersection diagonally): that entry has zero exits of
+                // its own, so a vehicle spawned there has nowhere to go and just sits stranded
+                // over unbuilt ground. Only an entry that can actually go somewhere is spawn-safe.
+                for (int i = 0; i < nodes.Length; i++)
+                {
+                    Node node = nodes[i];
+                    if (node.IsEntry && node.Exits.Count == 0)
+                        node.IsEntry = false;
                 }
             }
 

@@ -109,7 +109,14 @@ namespace CityGenerator.Runtime
 
         // Set by BuildFromBlockCells; gates Build()'s block loop so the rectangular
         // SetAxes/Build() path (useCustomShape == false) is completely unaffected.
-        private bool useCustomShape;
+        // Must be [SerializeField] (with the cell sets mirrored into plain serializable lists):
+        // a plain private field is wiped back to its default the moment a domain reload/scene
+        // reload runs Awake() again, silently falling back to the rectangular rule -- see
+        // TrafficNetwork's identical fix for the matching "cars driving over unbuilt ground" bug.
+        [SerializeField] private bool useCustomShape;
+        [SerializeField] private List<Vector2Int> customBlockCellsList = new List<Vector2Int>();
+        [SerializeField] private List<Vector2Int> customPlazaCellsList = new List<Vector2Int>();
+        [SerializeField] private List<Vector2Int> customFullyReservedCellsList = new List<Vector2Int>();
         private HashSet<Vector2Int> customBlockCells;
         private HashSet<Vector2Int> customPlazaCells;
         private HashSet<Vector2Int> customFullyReservedCells;
@@ -153,6 +160,16 @@ namespace CityGenerator.Runtime
 
         private void Awake()
         {
+            // The HashSets are runtime-only (not themselves serializable); rebuild them from the
+            // serialized lists before Build() reads them, since Awake() is exactly the point
+            // where a domain reload/scene reload has just wiped them back to null.
+            if (useCustomShape)
+            {
+                customBlockCells = new HashSet<Vector2Int>(customBlockCellsList);
+                customPlazaCells = new HashSet<Vector2Int>(customPlazaCellsList);
+                customFullyReservedCells = new HashSet<Vector2Int>(customFullyReservedCellsList);
+            }
+
             Build();
         }
 
@@ -164,6 +181,9 @@ namespace CityGenerator.Runtime
             axesX = newAxesX;
             axesZ = newAxesZ;
             useCustomShape = false;
+            customBlockCellsList.Clear();
+            customPlazaCellsList.Clear();
+            customFullyReservedCellsList.Clear();
             customBlockCells = null;
             customPlazaCells = null;
             customFullyReservedCells = null;
@@ -174,13 +194,17 @@ namespace CityGenerator.Runtime
         /// only real blocks (<paramref name="blockCells"/>) get a ring/interior cross -- mirroring
         /// TrafficNetwork.BuildFromBlockCells. Crossings self-restrict already: BuildCrossings only
         /// adds a crosswalk arm where a TrafficLightIntersection actually exists nearby, and those
-        /// are only placed at real 4-way intersections for a custom shape.
+        /// are only placed at real decision points (3+ real arms: a 4-way or a T-intersection) for
+        /// a custom shape.
         /// </summary>
         public void BuildFromBlockCells(IReadOnlyCollection<Vector2Int> blockCells, IReadOnlyCollection<Vector2Int> plazaCells, IReadOnlyCollection<Vector2Int> fullyReservedCells)
         {
             customBlockCells = new HashSet<Vector2Int>(blockCells);
             customPlazaCells = new HashSet<Vector2Int>(plazaCells);
             customFullyReservedCells = new HashSet<Vector2Int>(fullyReservedCells);
+            customBlockCellsList = new List<Vector2Int>(blockCells);
+            customPlazaCellsList = new List<Vector2Int>(plazaCells);
+            customFullyReservedCellsList = new List<Vector2Int>(fullyReservedCells);
             useCustomShape = true;
 
             int axisCount = MaxGridSize + 1;
@@ -269,12 +293,18 @@ namespace CityGenerator.Runtime
                 }
             }
 
+            // Every intersection is a candidate now, including the grid's own border (a
+            // T-intersection there needs a crossing on its 3 real arms just like an interior
+            // 4-way) -- BuildCrossings itself skips any arm whose block is out of range or a
+            // shape hole, and FindNearestIntersection already skips an intersection with no
+            // matching TrafficLightIntersection (never placed at a perimeter corner, exactly 2
+            // arms), so widening this loop can't add crossings where there's no real one.
             var intersections = FindObjectsByType<TrafficLightIntersection>(FindObjectsInactive.Exclude);
-            for (int i = 1; i < axesX.Length - 1; i++)
+            for (int i = 0; i < axesX.Length; i++)
             {
-                for (int j = 1; j < axesZ.Length - 1; j++)
+                for (int j = 0; j < axesZ.Length; j++)
                 {
-                    BuildCrossings(i, j, cornerNode, intersections);
+                    BuildCrossings(i, j, blocksX, blocksZ, cornerNode, intersections);
                 }
             }
 
@@ -334,6 +364,18 @@ namespace CityGenerator.Runtime
 
         private Vector3 BlockCentre(int bi, int bj)
             => new((axesX[bi] + axesX[bi + 1]) * 0.5f, sidewalkY, (axesZ[bj] + axesZ[bj + 1]) * 0.5f);
+
+        // Whether block (bi, bj) actually has a ring built for it: in range, and (for a Custom
+        // Grid shape) a real cell rather than a hole cornerNode was never populated for.
+        private bool BlockExists(int bi, int bj, int blocksX, int blocksZ)
+        {
+            if (bi < 0 || bi >= blocksX || bj < 0 || bj >= blocksZ)
+            {
+                return false;
+            }
+
+            return !useCustomShape || customBlockCells.Contains(new Vector2Int(bi, bj));
+        }
 
         private static bool GetBlockFlag(bool[] flags, int bi, int bj, int blocksZ)
         {
@@ -417,7 +459,7 @@ namespace CityGenerator.Runtime
         /// each arm direction, a curb -> crossing -> curb chain linking the two ring corners it
         /// faces, with the crossing node's Intersection/CrossingAxisIsX set for CanCross.
         /// </summary>
-        private void BuildCrossings(int i, int j, int[,,] cornerNode, TrafficLightIntersection[] intersections)
+        private void BuildCrossings(int i, int j, int blocksX, int blocksZ, int[,,] cornerNode, TrafficLightIntersection[] intersections)
         {
             Vector3 centre = new(axesX[i], sidewalkY, axesZ[j]);
             TrafficLightIntersection matched = FindNearestIntersection(centre, intersections);
@@ -436,6 +478,14 @@ namespace CityGenerator.Runtime
                 int blockAJ = axisIsX ? j : (dir.z > 0f ? j : j - 1);
                 int blockBI = axisIsX ? blockAI : i - 1;
                 int blockBJ = axisIsX ? j - 1 : blockAJ;
+
+                // This arm faces off the grid entirely (a border/T-intersection's outward side)
+                // or into a Custom Grid shape hole: there's no block ring corner to connect to,
+                // so no crosswalk arm can exist that way.
+                if (!BlockExists(blockAI, blockAJ, blocksX, blocksZ) || !BlockExists(blockBI, blockBJ, blocksX, blocksZ))
+                {
+                    continue;
+                }
 
                 int cornerA = cornerNode[blockAI, blockAJ, NearestCornerCode(blockAI, blockAJ, i, j)];
                 int cornerB = cornerNode[blockBI, blockBJ, NearestCornerCode(blockBI, blockBJ, i, j)];
