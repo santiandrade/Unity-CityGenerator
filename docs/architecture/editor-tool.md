@@ -6,14 +6,16 @@ Detail behind the "The tool" section of the root `CLAUDE.md`. Namespace `CityGen
 
 `Tools > City Generator > Open`. Holds the entire configuration in a single `[SerializeField] CityGeneratorSettings settings`, which is why state survives closing/reopening the window within an Editor session; **deliberately not a `ScriptableObject`** (see the discarded decisions in `specs/01-city-generator-tool.md`).
 
-Built with **UI Toolkit** (`CreateGUI`, not `OnGUI`): `Editor/UI/CityGeneratorWindow.uxml` is the structural skeleton (banner, tab bar, scrollable card container per tab, footer) cloned into `rootVisualElement`, styled by `CityGeneratorWindow.uss` plus a theme sheet (`_Dark`/`_Light`, picked by `EditorGUIUtility.isProSkin`) that only redefines `--cg-*` color variables.
+Built with **UI Toolkit** (`CreateGUI`, not `OnGUI`): `Editor/UI/CityGeneratorWindow.uxml` is the structural skeleton (banner, tab bar, scrollable card container per tab, footer) cloned into `rootVisualElement`, styled by `CityGeneratorWindow.uss` plus a theme sheet (`_Dark`/`_Light`, picked by `EditorGUIUtility.isProSkin`) that only redefines `--cg-*` color variables. The footer's `cg-summary-line` label (`~N buildings · N vehicles · N pedestrians · N custom places`) sits above the build/rebuild/reset buttons and is refreshed on every `RefreshDynamicUi` pass regardless of which tab is active, so it's independent of the per-tab card layout above it.
 
-Four tabs:
+Six tabs:
 
-- **City** — general/ground/plaza/buildings/vegetation/vehicles/props, plus the Custom Places card (last on the tab) — see `custom-places.md`.
+- **City** — general/ground/plaza/buildings/vegetation/props, plus the Custom Places card (last on the tab) — see `custom-places.md`.
 - **Player** — Player Prefab + Input Actions (moved here from General), a Player card for movement/`CharacterController`/input action names, a Camera card for `ThirdPersonCamera` orbit/collision/field-of-view tuning.
-- **Pedestrians** — the weighted pedestrian list, a Behaviour card for pace/jitter/stop tuning and the animation reference speeds, a Crowd card for `PedestrianManager` separation/avoidance/staggering.
+- **Traffic** — between Player and Pedestrians. A Traffic card for `general.includeTraffic` ("Enabled") and `general.vehicleCount` ("Vehicle Count"), plus the vehicle-density `HelpBox`; a Vehicles card for the weighted vehicle prefab list. Both fields still live under `GeneralSettings`/segment `general` — resolved to this tab/card via `RegisterCardPathAlias`, the same mechanism `general.playerPrefab` uses for the Player tab.
+- **Pedestrians** — a Pedestrian Settings card for `general.includePedestrians` ("Enabled") and `general.pedestrianCount` ("Pedestrian Count"), plus the pedestrian-density and isolated-blocks `HelpBox`es (moved from the City tab's General card via `RegisterCardPathAlias`, same mechanism as Traffic above); the weighted pedestrian list; a Behaviour card for pace/jitter/stop tuning and the animation reference speeds; a Crowd card for `PedestrianManager` separation/avoidance/staggering.
 - **Minimap** — `enabled` (on by default), `textureResolution`, `viewRadiusMeters`, with two non-blocking `HelpBox`es (resolution above a warning threshold, view radius larger than the grid's covered world size) — see "Minimap" below.
+- **Audio** — an Ambience card and a Plazas card, each `enabled` plus a weighted audio clip list.
 
 Switched by `CityGeneratorTabBar`, a hand-rolled tab strip (**not** `UnityEngine.UIElements.TabView`) so it can stay themed with `--cg-*` and mark a tab red when a card on it has a validation error; selection persisted in `EditorPrefs`. Every section is built in code as a `CityGeneratorCard` (collapsible, open/closed state persisted per-card in `EditorPrefs`, badge summarising its content, turns red when one of its fields fails validation).
 

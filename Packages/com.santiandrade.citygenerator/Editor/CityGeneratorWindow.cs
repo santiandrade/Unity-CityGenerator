@@ -22,6 +22,7 @@ namespace CityGenerator.Editor
 
         private const string TabCity = "city";
         private const string TabPlayer = "player";
+        private const string TabTraffic = "traffic";
         private const string TabPedestrians = "pedestrians";
         private const string TabMinimap = "minimap";
         private const string TabAudio = "audio";
@@ -50,8 +51,10 @@ namespace CityGenerator.Editor
         private CityGeneratorCard generalCard;
         private CityGeneratorCard buildingsCard;
         private CityGeneratorCard vegetationCard;
+        private CityGeneratorCard trafficCard;
         private CityGeneratorCard vehiclesCard;
         private CityGeneratorCard pedestriansCard;
+        private CityGeneratorCard pedestrianSettingsCard;
         private CityGeneratorCard playerCard;
         private CityGeneratorCard cameraCard;
         private CityGeneratorCard pedestrianBehaviourCard;
@@ -178,6 +181,7 @@ namespace CityGenerator.Editor
             VisualElement tabsContainer = rootVisualElement.Q<VisualElement>("cg-tabs");
             VisualElement cityContainer = rootVisualElement.Q<VisualElement>("cg-cards-city");
             VisualElement playerContainer = rootVisualElement.Q<VisualElement>("cg-cards-player");
+            VisualElement trafficContainer = rootVisualElement.Q<VisualElement>("cg-cards-traffic");
             VisualElement pedestriansContainer = rootVisualElement.Q<VisualElement>("cg-cards-pedestrians");
             VisualElement minimapContainer = rootVisualElement.Q<VisualElement>("cg-cards-minimap");
             VisualElement audioContainer = rootVisualElement.Q<VisualElement>("cg-cards-audio");
@@ -185,6 +189,7 @@ namespace CityGenerator.Editor
             tabBar = new CityGeneratorTabBar(tabsContainer);
             tabBar.AddTab(TabCity, "City", cityContainer);
             tabBar.AddTab(TabPlayer, "Player", playerContainer);
+            tabBar.AddTab(TabTraffic, "Traffic", trafficContainer);
             tabBar.AddTab(TabPedestrians, "Pedestrians", pedestriansContainer);
             tabBar.AddTab(TabMinimap, "Minimap", minimapContainer);
             tabBar.AddTab(TabAudio, "Audio", audioContainer);
@@ -194,7 +199,6 @@ namespace CityGenerator.Editor
             BuildPlazaCard(cityContainer);
             BuildBuildingsCard(cityContainer);
             BuildVegetationCard(cityContainer);
-            BuildVehiclesCard(cityContainer);
             BuildPropsCard(cityContainer);
             BuildCustomPlacesCard(cityContainer);
             BuildDayNightCard(cityContainer);
@@ -202,6 +206,10 @@ namespace CityGenerator.Editor
             BuildPlayerCard(playerContainer);
             BuildCameraCard(playerContainer);
 
+            BuildTrafficCard(trafficContainer);
+            BuildVehiclesCard(trafficContainer);
+
+            BuildPedestrianSettingsCard(pedestriansContainer);
             BuildPedestriansCard(pedestriansContainer);
             BuildPedestrianBehaviourCard(pedestriansContainer);
             BuildCrowdCard(pedestriansContainer);
@@ -260,25 +268,6 @@ namespace CityGenerator.Editor
             content.Add(CreateIntSlider(FindProperty("general.gridHeight"), "Grid Height", MinGridSize, MaxGridSize));
             content.Add(CreateIntSlider(FindProperty("general.buildingsPerBlock"), "Buildings Per Block", 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock));
 
-            summaryLine = new Label();
-            summaryLine.AddToClassList("cg-summary-line");
-            content.Add(summaryLine);
-
-            content.Add(CreateField("general.includeTraffic"));
-            content.Add(CreateField("general.vehicleCount"));
-            vehicleDensityWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
-            vehicleDensityWarning.style.display = DisplayStyle.None;
-            content.Add(vehicleDensityWarning);
-
-            content.Add(CreateField("general.includePedestrians"));
-            content.Add(CreateField("general.pedestrianCount"));
-            pedestrianDensityWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
-            pedestrianDensityWarning.style.display = DisplayStyle.None;
-            content.Add(pedestrianDensityWarning);
-            isolatedBlocksWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
-            isolatedBlocksWarning.style.display = DisplayStyle.None;
-            content.Add(isolatedBlocksWarning);
-
             content.Add(CreateField("general.useCustomSeed", "Custom Seed"));
             PropertyField seedField = CreateField("general.seed", "Seed");
             content.Add(seedField);
@@ -322,12 +311,45 @@ namespace CityGenerator.Editor
             vegetationCard.ContentContainer.Add(CreateField("vegetation.density"));
         }
 
+        private void BuildTrafficCard(VisualElement parent)
+        {
+            trafficCard = AddCard(parent, "traffic", "Traffic", "d_WheelCollider Icon", defaultExpanded: true, TabTraffic);
+            VisualElement content = trafficCard.ContentContainer;
+
+            content.Add(CreateField("general.includeTraffic", "Enabled"));
+            content.Add(CreateField("general.vehicleCount", "Vehicle Count"));
+            vehicleDensityWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            vehicleDensityWarning.style.display = DisplayStyle.None;
+            content.Add(vehicleDensityWarning);
+
+            RegisterCardPathAlias("general.includeTraffic", trafficCard, TabTraffic);
+            RegisterCardPathAlias("general.vehicleCount", trafficCard, TabTraffic);
+        }
+
         private void BuildVehiclesCard(VisualElement parent)
         {
-            vehiclesCard = AddCard(parent, "vehicles", "Vehicles", "d_WheelCollider Icon", defaultExpanded: false, TabCity);
+            vehiclesCard = AddCard(parent, "vehicles", "Vehicles", "d_WheelCollider Icon", defaultExpanded: false, TabTraffic);
             var list = new CityGeneratorWeightedPrefabList(RefreshDynamicUi);
             list.Bind(FindProperty("vehicles"));
             vehiclesCard.ContentContainer.Add(list);
+        }
+
+        private void BuildPedestrianSettingsCard(VisualElement parent)
+        {
+            pedestrianSettingsCard = AddCard(parent, "pedestrianSettings", "Pedestrian Settings", "d_Avatar Icon", defaultExpanded: true, TabPedestrians);
+            VisualElement content = pedestrianSettingsCard.ContentContainer;
+
+            content.Add(CreateField("general.includePedestrians", "Enabled"));
+            content.Add(CreateField("general.pedestrianCount", "Pedestrian Count"));
+            pedestrianDensityWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            pedestrianDensityWarning.style.display = DisplayStyle.None;
+            content.Add(pedestrianDensityWarning);
+            isolatedBlocksWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            isolatedBlocksWarning.style.display = DisplayStyle.None;
+            content.Add(isolatedBlocksWarning);
+
+            RegisterCardPathAlias("general.includePedestrians", pedestrianSettingsCard, TabPedestrians);
+            RegisterCardPathAlias("general.pedestrianCount", pedestrianSettingsCard, TabPedestrians);
         }
 
         private void BuildPedestriansCard(VisualElement parent)
@@ -506,6 +528,7 @@ namespace CityGenerator.Editor
             validationPanel = rootVisualElement.Q<VisualElement>("cg-validation-panel");
             resultPanel = rootVisualElement.Q<VisualElement>("cg-result-panel");
             resultPanel.style.display = DisplayStyle.None;
+            summaryLine = rootVisualElement.Q<Label>("cg-summary-line");
 
             buildNewSceneButton = rootVisualElement.Q<Button>("cg-build-new-scene-button");
             buildNewSceneButton.tooltip = BuildNewSceneButtonTooltip;
@@ -608,6 +631,7 @@ namespace CityGenerator.Editor
             generalCard.SetBadge($"{gridWidth} x {gridHeight}");
             buildingsCard.SetBadge($"{FindProperty("buildingPrefabs").arraySize} prefabs");
             vegetationCard.SetBadge($"{FindProperty("vegetation.prefabs").arraySize} prefabs");
+            trafficCard.SetBadge(FindProperty("general.includeTraffic").boolValue ? $"{vehicleCount} vehicles" : "Disabled");
             vehiclesCard.SetBadge($"{FindProperty("vehicles").arraySize} entries");
             pedestriansCard.SetBadge($"{FindProperty("pedestrians").arraySize} entries");
 
@@ -638,7 +662,8 @@ namespace CityGenerator.Editor
             float totalSize = gridWidth * CityGeneratorConstants.CellPitch;
             float totalSizeZ = gridHeight * CityGeneratorConstants.CellPitch;
             gridPreviewCaption.text = $"{blockCount} blocks ({plazaCount} plaza) · {totalSize:0}m x {totalSizeZ:0}m";
-            summaryLine.text = $"~{estimatedBuildings} buildings · {vehicleCount} vehicles · {pedestrianCount} pedestrians";
+            int customPlaceCount = FindProperty("customPlaces").arraySize;
+            summaryLine.text = $"~{estimatedBuildings} buildings · {vehicleCount} vehicles · {pedestrianCount} pedestrians · {customPlaceCount} custom places";
 
             bool useCustomSeed = FindProperty("general.useCustomSeed").boolValue;
             seedField.style.display = useCustomSeed ? DisplayStyle.Flex : DisplayStyle.None;
@@ -714,6 +739,7 @@ namespace CityGenerator.Editor
 
             tabBar.SetHasError(TabCity, tabsWithErrors.Contains(TabCity));
             tabBar.SetHasError(TabPlayer, tabsWithErrors.Contains(TabPlayer));
+            tabBar.SetHasError(TabTraffic, tabsWithErrors.Contains(TabTraffic));
             tabBar.SetHasError(TabPedestrians, tabsWithErrors.Contains(TabPedestrians));
             tabBar.SetHasError(TabMinimap, tabsWithErrors.Contains(TabMinimap));
             tabBar.SetHasError(TabAudio, tabsWithErrors.Contains(TabAudio));

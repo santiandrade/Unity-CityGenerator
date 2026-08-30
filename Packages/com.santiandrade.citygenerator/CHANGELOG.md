@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+
+- New "Traffic" tab, between Player and Pedestrians: a Traffic card ("Enabled", "Vehicle Count")
+  and a Vehicles card (the weighted vehicle prefab list), both moved out of the City tab's General
+  card / vehicles card.
+- New "Pedestrian Settings" card on the Pedestrians tab ("Enabled", "Pedestrian Count", plus the
+  pedestrian-density and isolated-blocks `HelpBox`es), moved out of the City tab's General card.
+- The "~N buildings · N vehicles · N pedestrians" summary line moved out of the City tab's General
+  card and into the footer, above the build/rebuild/reset buttons, so it stays visible on every tab;
+  it now also reports the custom place count.
 
 ## [2.6.0] - 2026-08-30
 ### Added
