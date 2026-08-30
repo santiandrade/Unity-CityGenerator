@@ -129,7 +129,7 @@ namespace CityGenerator.Editor
 
             Report("Player spawn", 0.55f);
             Vector3 playerSpawnPosition = CityGeneratorPlayerSpawner.FindSpawnPosition(
-                settings.general.playerPrefab, blocks, playerAvoidObstacles, random, cityRoot, cache);
+                settings.general.playerEnabled ? settings.general.playerPrefab : null, blocks, playerAvoidObstacles, random, cityRoot, cache);
 
             cache.DestroyRemainingProbes();
 

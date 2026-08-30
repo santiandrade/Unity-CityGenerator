@@ -49,10 +49,12 @@ namespace CityGenerator.Editor
         public bool useCustomSeed = false;
         [Tooltip("Seed value used when Custom Seed is enabled.")]
         public int seed = 0;
-        [Tooltip("Optional character prefab controlled by the player. If set, it's spawned inside a plaza (or a random block) and Input Actions becomes required. Its tuning comes from the Player tab, applied to the generated instance regardless of what the prefab already carries.")]
-        public GameObject playerPrefab; // optional
-        [Tooltip("Input Actions asset driving the Player Prefab's Move/Sprint/Jump and the generated camera's Look input. Required if Player Prefab is set.")]
-        public InputActionAsset inputActions; // required if playerPrefab is set (drives the generated camera's Look input)
+        [Tooltip("Spawn a player-controlled character in the generated city. When on, Player Prefab and Input Actions become required.")]
+        public bool playerEnabled = true;
+        [Tooltip("Character prefab controlled by the player. Spawned inside a plaza (or a random block). Its tuning comes from the Player tab, applied to the generated instance regardless of what the prefab already carries. Required if Player is enabled.")]
+        public GameObject playerPrefab; // required if playerEnabled
+        [Tooltip("Input Actions asset driving the Player Prefab's Move/Sprint/Jump and the generated camera's Look input. Required if Player is enabled.")]
+        public InputActionAsset inputActions; // required if playerEnabled
     }
 
     [Serializable]

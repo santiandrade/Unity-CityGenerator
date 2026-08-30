@@ -6,8 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Player > Player card gained an "Enabled" toggle (`general.playerEnabled`). Player Prefab and
+  Input Actions are now only required when it's on, and no player is spawned when it's off, even
+  if a Player Prefab is still assigned.
+
 ### Changed
 
+- New "Player Settings" card on the Player tab, holding everything the Player card used to have
+  except Player Prefab and Input Actions (which stayed on the Player card alongside the new
+  Enabled toggle).
 - New "Traffic" tab, between Player and Pedestrians: a Traffic card ("Enabled", "Vehicle Count")
   and a Vehicles card (the weighted vehicle prefab list), both moved out of the City tab's General
   card / vehicles card.

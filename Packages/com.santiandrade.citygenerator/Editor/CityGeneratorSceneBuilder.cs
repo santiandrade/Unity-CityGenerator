@@ -41,7 +41,7 @@ namespace CityGenerator.Editor
                 CreateDirectionalLight(scene, settings.dayNight);
 
                 GameObject player = null;
-                if (settings.general.playerPrefab != null)
+                if (settings.general.playerEnabled && settings.general.playerPrefab != null)
                 {
                     player = (GameObject)PrefabUtility.InstantiatePrefab(settings.general.playerPrefab, scene);
                     player.name = "Player";

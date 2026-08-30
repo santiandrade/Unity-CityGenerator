@@ -291,6 +291,7 @@ namespace CityGenerator.Editor
             source = ReplaceField(source, "gridWidth", settings.general.gridWidth.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "gridHeight", settings.general.gridHeight.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "buildingsPerBlock", settings.general.buildingsPerBlock.ToString(CultureInfo.InvariantCulture));
+            source = ReplaceField(source, "playerEnabled", settings.general.playerEnabled ? "true" : "false");
             source = ReplaceField(source, "includeTraffic", settings.general.includeTraffic ? "true" : "false");
             source = ReplaceField(source, "vehicleCount", settings.general.vehicleCount.ToString(CultureInfo.InvariantCulture));
             source = ReplaceField(source, "includePedestrians", settings.general.includePedestrians ? "true" : "false");

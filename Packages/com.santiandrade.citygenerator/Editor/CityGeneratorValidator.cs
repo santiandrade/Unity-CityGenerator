@@ -45,8 +45,11 @@ namespace CityGenerator.Editor
             if (settings.general.plazaCells.Count > 0 && settings.plaza.lawnPrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("plaza.lawnPrefab", "Plaza: Lawn prefab is required when at least one plaza cell is selected."));
 
-            if (settings.general.playerPrefab != null && settings.general.inputActions == null)
-                issues.Add(new CityGeneratorValidationIssue("general.inputActions", "General: Input Actions asset is required when Player Prefab is set (otherwise the generated camera silently gets no input)."));
+            if (settings.general.playerEnabled && settings.general.playerPrefab == null)
+                issues.Add(new CityGeneratorValidationIssue("general.playerPrefab", "Player: Player Prefab is required when Player is enabled."));
+
+            if (settings.general.playerEnabled && settings.general.inputActions == null)
+                issues.Add(new CityGeneratorValidationIssue("general.inputActions", "Player: Input Actions asset is required when Player is enabled (otherwise the generated camera silently gets no input)."));
 
             for (int i = 0; i < settings.buildingPrefabs.Count; i++)
             {

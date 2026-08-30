@@ -56,6 +56,7 @@ namespace CityGenerator.Editor
         private CityGeneratorCard pedestriansCard;
         private CityGeneratorCard pedestrianSettingsCard;
         private CityGeneratorCard playerCard;
+        private CityGeneratorCard playerSettingsCard;
         private CityGeneratorCard cameraCard;
         private CityGeneratorCard pedestrianBehaviourCard;
         private CityGeneratorCard crowdCard;
@@ -204,6 +205,7 @@ namespace CityGenerator.Editor
             BuildDayNightCard(cityContainer);
 
             BuildPlayerCard(playerContainer);
+            BuildPlayerSettingsCard(playerContainer);
             BuildCameraCard(playerContainer);
 
             BuildTrafficCard(trafficContainer);
@@ -385,14 +387,23 @@ namespace CityGenerator.Editor
 
         private void BuildPlayerCard(VisualElement parent)
         {
-            playerCard = AddCard(parent, "player", "Player", "d_CharacterController Icon", defaultExpanded: true, TabPlayer);
+            playerCard = AddCard(parent, "playerEnable", "Player", "d_CharacterController Icon", defaultExpanded: true, TabPlayer);
             VisualElement content = playerCard.ContentContainer;
 
-            content.Add(CreateField("general.playerPrefab", "Player Prefab"));
-            AddRequiredField(content, "general.inputActions", "Input Actions (if Player Prefab is set)",
-                () => FindProperty("general.playerPrefab").objectReferenceValue != null);
+            content.Add(CreateField("general.playerEnabled", "Enabled"));
+            AddRequiredField(content, "general.playerPrefab", "Player Prefab (if Enabled)",
+                () => FindProperty("general.playerEnabled").boolValue);
+            AddRequiredField(content, "general.inputActions", "Input Actions (if Enabled)",
+                () => FindProperty("general.playerEnabled").boolValue);
+            RegisterCardPathAlias("general.playerEnabled", playerCard, TabPlayer);
             RegisterCardPathAlias("general.playerPrefab", playerCard, TabPlayer);
             RegisterCardPathAlias("general.inputActions", playerCard, TabPlayer);
+        }
+
+        private void BuildPlayerSettingsCard(VisualElement parent)
+        {
+            playerSettingsCard = AddCard(parent, "player", "Player Settings", "d_CharacterController Icon", defaultExpanded: true, TabPlayer);
+            VisualElement content = playerSettingsCard.ContentContainer;
 
             content.Add(CreateField("player.walkSpeed"));
             content.Add(CreateField("player.runSpeed"));
@@ -635,9 +646,11 @@ namespace CityGenerator.Editor
             vehiclesCard.SetBadge($"{FindProperty("vehicles").arraySize} entries");
             pedestriansCard.SetBadge($"{FindProperty("pedestrians").arraySize} entries");
 
+            playerCard.SetBadge(FindProperty("general.playerEnabled").boolValue ? "Enabled" : "Disabled");
+
             float walkSpeed = FindProperty("player.walkSpeed").floatValue;
             float runSpeed = FindProperty("player.runSpeed").floatValue;
-            playerCard.SetBadge($"{walkSpeed:0.#} / {runSpeed:0.#} m/s");
+            playerSettingsCard.SetBadge($"{walkSpeed:0.#} / {runSpeed:0.#} m/s");
             cameraCard.SetBadge($"FOV {FindProperty("camera.fieldOfView").floatValue:0}°");
 
             float paceFraction = FindProperty("pedestrianBehaviour.paceFraction").floatValue;
@@ -838,8 +851,8 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Non-blocking warning: Behaviour > Walk/Run Reference Speed are calibration anchors for
-        /// CharacterAnimator.controller's Locomotion blend tree, and must match Player > Walk/Run
-        /// Speed (see CityGeneratorSettings.PedestrianBehaviourSettings) or pedestrians foot-slide.
+        /// CharacterAnimator.controller's Locomotion blend tree, and must match Player Settings >
+        /// Walk/Run Speed (see CityGeneratorSettings.PedestrianBehaviourSettings) or pedestrians foot-slide.
         /// </summary>
         private string GetReferenceSpeedMismatchWarning()
         {
@@ -851,7 +864,7 @@ namespace CityGenerator.Editor
             if (Mathf.Approximately(playerWalkSpeed, walkReferenceSpeed) && Mathf.Approximately(playerRunSpeed, runReferenceSpeed))
                 return null;
 
-            return $"Walk/Run Reference Speed ({walkReferenceSpeed:0.##}/{runReferenceSpeed:0.##}) no longer match Player > Walk/Run Speed " +
+            return $"Walk/Run Reference Speed ({walkReferenceSpeed:0.##}/{runReferenceSpeed:0.##}) no longer match Player Settings > Walk/Run Speed " +
                    $"({playerWalkSpeed:0.##}/{playerRunSpeed:0.##}). CharacterAnimator.controller's Locomotion blend tree is calibrated " +
                    "against these, so pedestrians will foot-slide until they're aligned again.";
         }
