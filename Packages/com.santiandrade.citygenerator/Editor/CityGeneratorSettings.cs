@@ -35,6 +35,10 @@ namespace CityGenerator.Editor
         public int gridHeight = 5;
         [Tooltip("Block (x, y) coordinates picked by clicking the grid preview above; a plaza block gets the Plaza layout (lawn/centerpiece/benches) instead of buildings. Actual default filled by CityGeneratorDefaultAssets.ApplyTo.")]
         public List<Vector2Int> plazaCells = new();
+        [Tooltip("When true, the city footprint is the arbitrary shape in customBlockCells instead of the gridWidth x gridHeight rectangle.")]
+        public bool useCustomGrid;
+        [Tooltip("Which cells exist within the fixed CityGeneratorConstants.MaxGridSize x MaxGridSize canvas. Only meaningful/read when useCustomGrid is true. Reset to a single centre cell every time Customize mode is (re)entered.")]
+        public List<Vector2Int> customBlockCells = new();
         [Tooltip("How many of the 4 fixed 22 m corner slots each non-plaza block fills (0-4). Below 4, which corners are filled is shuffled per block.")]
         public int buildingsPerBlock = 4; // clamped 0-4
         [Tooltip("Generate the traffic network, lights and vehicles.")]

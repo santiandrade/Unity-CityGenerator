@@ -27,6 +27,17 @@ namespace CityGenerator.Editor
             return network;
         }
 
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): adds the component without setting axes yet -- the
+        /// caller must call <see cref="TrafficNetwork.BuildFromBlockCells"/> directly (instead of
+        /// <see cref="TrafficNetwork.Build"/>) once all traffic lights exist, since that method
+        /// both sets the axes and builds the graph in one call.
+        /// </summary>
+        public static TrafficNetwork AddNetworkComponent(Transform trafficNetworkGroup)
+        {
+            return trafficNetworkGroup.gameObject.AddComponent<TrafficNetwork>();
+        }
+
         private static float[] BuildAxes(int gridCount)
         {
             var axes = new float[gridCount + 1];
@@ -70,6 +81,61 @@ namespace CityGenerator.Editor
                     Vector3 centre = new(
                         CityGeneratorGrid.GetStreetAxisPosition(gridWidth, i), 0f,
                         CityGeneratorGrid.GetStreetAxisPosition(gridHeight, j));
+
+                    Transform intersectionGroup = GetOrCreateGroup(trafficLightsGroup, $"Intersection_{i}_{j}");
+                    var lights = new TrafficLight[4];
+
+                    for (int k = 0; k < 4; k++)
+                    {
+                        Vector3 corner = (Dirs[k] + RightOfDir(Dirs[k])) * CityGeneratorConstants.TrafficLightCornerOffset;
+                        Vector3 position = centre + corner;
+                        position.y = CityGeneratorConstants.GroundDatumY;
+                        Quaternion rotation = Quaternion.LookRotation(-Dirs[k], Vector3.up);
+
+                        var instance = (GameObject)PrefabUtility.InstantiatePrefab(trafficLightPrefab, intersectionGroup);
+                        instance.name = "TrafficLight_" + k;
+                        instance.transform.position = position;
+                        instance.transform.rotation = rotation;
+
+                        placed.Add(instance);
+                        lights[k] = instance.GetComponent<TrafficLight>();
+                    }
+
+                    var intersectionComponent = intersectionGroup.gameObject.AddComponent<TrafficLightIntersection>();
+                    WireIntersection(intersectionComponent, lights, intersectionIndex, random);
+                    intersectionIndex++;
+                }
+            }
+
+            return placed;
+        }
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): places lights only at intersections with all 4
+        /// surrounding cells being real blocks, over the fixed MaxGridSize canvas (same rule the
+        /// zebra crossings and dash exclusion use in CityGeneratorGroundBuilder).
+        /// </summary>
+        public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, IReadOnlyCollection<Vector2Int> blockCells, System.Random random)
+        {
+            var cellSet = new HashSet<Vector2Int>(blockCells);
+            var placed = new List<GameObject>();
+            int intersectionIndex = 0;
+            int canvas = CityGeneratorConstants.MaxGridSize;
+
+            for (int i = 1; i < canvas; i++)
+            {
+                for (int j = 1; j < canvas; j++)
+                {
+                    bool isFourWay = cellSet.Contains(new Vector2Int(i - 1, j - 1))
+                        && cellSet.Contains(new Vector2Int(i, j - 1))
+                        && cellSet.Contains(new Vector2Int(i - 1, j))
+                        && cellSet.Contains(new Vector2Int(i, j));
+                    if (!isFourWay)
+                        continue;
+
+                    Vector3 centre = new(
+                        CityGeneratorGrid.GetStreetAxisPosition(canvas, i), 0f,
+                        CityGeneratorGrid.GetStreetAxisPosition(canvas, j));
 
                     Transform intersectionGroup = GetOrCreateGroup(trafficLightsGroup, $"Intersection_{i}_{j}");
                     var lights = new TrafficLight[4];

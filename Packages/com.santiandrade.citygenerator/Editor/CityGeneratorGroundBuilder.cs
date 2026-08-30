@@ -21,6 +21,48 @@ namespace CityGenerator.Editor
             CityGeneratorBoundsUtility.ScaleToFootprint(instance, width, depth);
         }
 
+        private static readonly Vector2Int[] Neighbors4 = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): one full-pitch road base tile per real block (so
+        /// adjacent tiles abut exactly, with no gap or double-cover), plus a margin strip beyond
+        /// any edge that has no neighboring block -- reproducing the rectangular path's outer
+        /// RoadBaseMargin at the shape's own contour instead of a fixed rectangle.
+        /// </summary>
+        public static void BuildRoadBase(GameObject roadBasePrefab, Transform roadsGroup, IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            var cellSet = new HashSet<Vector2Int>(blockCells);
+            int canvas = CityGeneratorConstants.MaxGridSize;
+            int index = 0;
+
+            foreach (Vector2Int cell in cellSet)
+            {
+                Vector3 center = CityGeneratorGrid.GetBlockCenter(cell.x, cell.y, canvas, canvas);
+
+                GameObject instance = InstantiatePrefab(roadBasePrefab, roadsGroup, $"Road_Base_{index}");
+                instance.transform.localPosition = new Vector3(center.x, CityGeneratorConstants.RoadBaseY, center.z);
+                CityGeneratorBoundsUtility.ScaleToFootprint(instance, CityGeneratorConstants.CellPitch, CityGeneratorConstants.CellPitch);
+                index++;
+
+                foreach (Vector2Int dir in Neighbors4)
+                {
+                    if (cellSet.Contains(cell + dir))
+                        continue;
+
+                    bool horizontal = dir.x != 0;
+                    Vector3 edgeOffset = new Vector3(dir.x, 0f, dir.y) * (CityGeneratorConstants.CellPitch / 2f + CityGeneratorConstants.RoadBaseMargin / 2f);
+                    Vector3 marginCenter = center + edgeOffset;
+
+                    GameObject marginInstance = InstantiatePrefab(roadBasePrefab, roadsGroup, $"Road_Base_{index}_Margin");
+                    marginInstance.transform.localPosition = new Vector3(marginCenter.x, CityGeneratorConstants.RoadBaseY, marginCenter.z);
+                    float w = horizontal ? CityGeneratorConstants.RoadBaseMargin : CityGeneratorConstants.CellPitch;
+                    float d = horizontal ? CityGeneratorConstants.CellPitch : CityGeneratorConstants.RoadBaseMargin;
+                    CityGeneratorBoundsUtility.ScaleToFootprint(marginInstance, w, d);
+                    index++;
+                }
+            }
+        }
+
         public static void BuildSidewalks(GameObject sidewalkPrefab, Transform sidewalksGroup, IReadOnlyList<BlockCell> blocks)
         {
             foreach (BlockCell block in blocks)
@@ -36,6 +78,93 @@ namespace CityGenerator.Editor
         {
             BuildDashes(dashPrefab, markingsGroup, gridWidth, gridHeight);
             BuildZebraCrossings(zebraPrefab, markingsGroup, gridWidth, gridHeight);
+        }
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): dashes are drawn only on street segments adjacent to at
+        /// least one real block; zebra crossings only at intersections with all 4 surrounding
+        /// cells real (same rule as the traffic light criterion).
+        /// </summary>
+        public static void BuildRoadMarkings(GameObject dashPrefab, GameObject zebraPrefab, Transform markingsGroup, IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            var cellSet = new HashSet<Vector2Int>(blockCells);
+            BuildDashesCustom(dashPrefab, markingsGroup, cellSet);
+            BuildZebraCrossingsCustom(zebraPrefab, markingsGroup, cellSet);
+        }
+
+        private static bool IsFourWayIntersection(HashSet<Vector2Int> cells, int i, int j)
+        {
+            return cells.Contains(new Vector2Int(i - 1, j - 1))
+                && cells.Contains(new Vector2Int(i, j - 1))
+                && cells.Contains(new Vector2Int(i - 1, j))
+                && cells.Contains(new Vector2Int(i, j));
+        }
+
+        private static void BuildDashesCustom(GameObject dashPrefab, Transform group, HashSet<Vector2Int> cells)
+        {
+            int canvas = CityGeneratorConstants.MaxGridSize;
+            int dashIndex = 0;
+
+            for (int j = 0; j <= canvas; j++)
+            {
+                float z = CityGeneratorGrid.GetStreetAxisPosition(canvas, j);
+                for (int k = 0; k < canvas; k++)
+                {
+                    bool south = cells.Contains(new Vector2Int(k, j - 1));
+                    bool north = cells.Contains(new Vector2Int(k, j));
+                    if (!south && !north)
+                        continue;
+
+                    float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(canvas, k);
+                    float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(canvas, k + 1);
+                    bool excludeStart = IsFourWayIntersection(cells, k, j);
+                    bool excludeEnd = IsFourWayIntersection(cells, k + 1, j);
+                    PlaceDashSegment(dashPrefab, group, segmentStart, z, isVertical: false,
+                        excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
+                }
+            }
+
+            for (int i = 0; i <= canvas; i++)
+            {
+                float x = CityGeneratorGrid.GetStreetAxisPosition(canvas, i);
+                for (int k = 0; k < canvas; k++)
+                {
+                    bool west = cells.Contains(new Vector2Int(i - 1, k));
+                    bool east = cells.Contains(new Vector2Int(i, k));
+                    if (!west && !east)
+                        continue;
+
+                    float segmentStart = CityGeneratorGrid.GetStreetAxisPosition(canvas, k);
+                    float segmentEnd = CityGeneratorGrid.GetStreetAxisPosition(canvas, k + 1);
+                    bool excludeStart = IsFourWayIntersection(cells, i, k);
+                    bool excludeEnd = IsFourWayIntersection(cells, i, k + 1);
+                    PlaceDashSegment(dashPrefab, group, segmentStart, x, isVertical: true,
+                        excludeStart, segmentStart, excludeEnd, segmentEnd, ref dashIndex);
+                }
+            }
+        }
+
+        private static void BuildZebraCrossingsCustom(GameObject zebraPrefab, Transform group, HashSet<Vector2Int> cells)
+        {
+            int canvas = CityGeneratorConstants.MaxGridSize;
+            int zebraIndex = 0;
+            for (int i = 1; i < canvas; i++)
+            {
+                for (int j = 1; j < canvas; j++)
+                {
+                    if (!IsFourWayIntersection(cells, i, j))
+                        continue;
+
+                    float x = CityGeneratorGrid.GetStreetAxisPosition(canvas, i);
+                    float z = CityGeneratorGrid.GetStreetAxisPosition(canvas, j);
+                    Vector3 intersection = new Vector3(x, CityGeneratorConstants.MarkingY, z);
+
+                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.right, ref zebraIndex);
+                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.left, ref zebraIndex);
+                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.forward, ref zebraIndex);
+                    PlaceZebraArm(zebraPrefab, group, intersection, Vector3.back, ref zebraIndex);
+                }
+            }
         }
 
         // Horizontal streets (constant Z, running along X): gridHeight + 1 axis lines, each split

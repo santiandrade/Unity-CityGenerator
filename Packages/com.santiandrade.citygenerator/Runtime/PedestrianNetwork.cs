@@ -102,6 +102,18 @@ namespace CityGenerator.Runtime
         [Header("Debugging")]
         [SerializeField] private bool drawGraph = true;
 
+        // Own copies of the geometry needed by BuildFromBlockCells, same reasoning as the comment
+        // above (CityGeneratorConstants is Editor-only) and matching TrafficNetwork's equivalent copies.
+        private const float CellPitch = 56f;
+        private const int MaxGridSize = 10;
+
+        // Set by BuildFromBlockCells; gates Build()'s block loop so the rectangular
+        // SetAxes/Build() path (useCustomShape == false) is completely unaffected.
+        private bool useCustomShape;
+        private HashSet<Vector2Int> customBlockCells;
+        private HashSet<Vector2Int> customPlazaCells;
+        private HashSet<Vector2Int> customFullyReservedCells;
+
         private static readonly Vector3[] Dirs = { Vector3.right, Vector3.left, Vector3.forward, Vector3.back };
 
         private readonly List<PedestrianNode> nodes = new();
@@ -151,6 +163,36 @@ namespace CityGenerator.Runtime
         {
             axesX = newAxesX;
             axesZ = newAxesZ;
+            useCustomShape = false;
+            customBlockCells = null;
+            customPlazaCells = null;
+            customFullyReservedCells = null;
+        }
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): builds the graph over the fixed MaxGridSize canvas, but
+        /// only real blocks (<paramref name="blockCells"/>) get a ring/interior cross -- mirroring
+        /// TrafficNetwork.BuildFromBlockCells. Crossings self-restrict already: BuildCrossings only
+        /// adds a crosswalk arm where a TrafficLightIntersection actually exists nearby, and those
+        /// are only placed at real 4-way intersections for a custom shape.
+        /// </summary>
+        public void BuildFromBlockCells(IReadOnlyCollection<Vector2Int> blockCells, IReadOnlyCollection<Vector2Int> plazaCells, IReadOnlyCollection<Vector2Int> fullyReservedCells)
+        {
+            customBlockCells = new HashSet<Vector2Int>(blockCells);
+            customPlazaCells = new HashSet<Vector2Int>(plazaCells);
+            customFullyReservedCells = new HashSet<Vector2Int>(fullyReservedCells);
+            useCustomShape = true;
+
+            int axisCount = MaxGridSize + 1;
+            var axes = new float[axisCount];
+            for (int i = 0; i < axisCount; i++)
+            {
+                axes[i] = (i - MaxGridSize / 2f) * CellPitch;
+            }
+
+            axesX = axes;
+            axesZ = axes;
+            Build();
         }
 
         private void EnsureBuilt()
@@ -201,12 +243,24 @@ namespace CityGenerator.Runtime
             {
                 for (int bj = 0; bj < blocksZ; bj++)
                 {
+                    if (useCustomShape && !customBlockCells.Contains(new Vector2Int(bi, bj)))
+                    {
+                        continue;
+                    }
+
                     BuildBlockRing(bi, bj, cornerNode, midNode);
 
                     // A full-block Custom Place already occupies the whole block, and a plaza
                     // block stays confined to its ring -- neither gets an Interior cross. Only a
                     // normal block does.
-                    if (GetBlockFlag(blockIsFullyReserved, bi, bj, blocksZ) || GetBlockFlag(blockIsPlaza, bi, bj, blocksZ))
+                    bool isFullyReserved = useCustomShape
+                        ? customFullyReservedCells.Contains(new Vector2Int(bi, bj))
+                        : GetBlockFlag(blockIsFullyReserved, bi, bj, blocksZ);
+                    bool isPlaza = useCustomShape
+                        ? customPlazaCells.Contains(new Vector2Int(bi, bj))
+                        : GetBlockFlag(blockIsPlaza, bi, bj, blocksZ);
+
+                    if (isFullyReserved || isPlaza)
                     {
                         continue;
                     }

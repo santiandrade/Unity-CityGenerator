@@ -27,6 +27,7 @@ namespace CityGenerator.Editor.UI
         private readonly Action onChanged;
         private readonly List<CityGeneratorGridPreview> gridPreviews = new();
         private SerializedProperty listProperty;
+        private SerializedProperty shapeMaskProperty;
         private int gridWidth = 1;
         private int gridHeight = 1;
 
@@ -57,6 +58,18 @@ namespace CityGenerator.Editor.UI
             gridHeight = Mathf.Max(1, height);
             foreach (CityGeneratorGridPreview preview in gridPreviews)
                 preview.SetGrid(gridWidth, gridHeight);
+        }
+
+        /// <summary>
+        /// Custom Grid (SPEC 11): overlays a shape mask on every row's picker so a hole is painted
+        /// semi-transparent and ignores clicks, matching the main grid preview's "Define Plazas"
+        /// submode. Pass <c>null</c> to disable (plain rectangular behaviour).
+        /// </summary>
+        public void SetShapeMask(SerializedProperty customBlockCellsProperty)
+        {
+            shapeMaskProperty = customBlockCellsProperty;
+            foreach (CityGeneratorGridPreview preview in gridPreviews)
+                preview.SetShapeMask(shapeMaskProperty);
         }
 
         private void AddEntry()
@@ -142,6 +155,7 @@ namespace CityGenerator.Editor.UI
                     entry.FindPropertyRelative("positionAssigned"),
                     () => occupiesFullBlockProperty.boolValue,
                     onChanged);
+                preview.SetShapeMask(shapeMaskProperty);
                 row.Add(preview);
                 gridPreviews.Add(preview);
 

@@ -43,6 +43,16 @@ namespace CityGenerator.Editor
             return network;
         }
 
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): adds the component without setting axes yet -- the
+        /// caller must call <see cref="PedestrianNetwork.BuildFromBlockCells"/> directly (instead
+        /// of <see cref="PedestrianNetwork.Build"/>) once the traffic network/lights exist.
+        /// </summary>
+        public static PedestrianNetwork AddNetworkComponent(Transform pedestrianNetworkGroup)
+        {
+            return pedestrianNetworkGroup.gameObject.AddComponent<PedestrianNetwork>();
+        }
+
         private static void ApplyBoolArray(SerializedProperty property, bool[] values)
         {
             property.arraySize = values.Length;

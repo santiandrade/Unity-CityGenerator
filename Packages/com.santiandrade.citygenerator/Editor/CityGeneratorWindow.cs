@@ -11,8 +11,6 @@ namespace CityGenerator.Editor
 {
     internal class CityGeneratorWindow : EditorWindow
     {
-        private const int MinGridSize = 1;
-        private const int MaxGridSize = 10;
         private const string UiFolder = "Packages/com.santiandrade.citygenerator/Editor/UI/";
         private const string UxmlPath = UiFolder + "CityGeneratorWindow.uxml";
         private const string UssPath = UiFolder + "CityGeneratorWindow.uss";
@@ -72,6 +70,15 @@ namespace CityGenerator.Editor
         private HelpBox referenceSpeedMismatchWarning;
         private CityGeneratorGridPreview gridPreview;
         private Label gridPreviewCaption;
+        private Label gridPreviewHint;
+        private Button customizeButton;
+        private VisualElement customSubmodeSelector;
+        private Button defineAreaButton;
+        private Button definePlazasButton;
+        private VisualElement gridSizeSliders;
+        // Local UI-only state (not persisted in GeneralSettings): which Customize submode is
+        // active. Always reset to "Define City Area" on (re)entering Customize.
+        private bool customAreaSubmode = true;
         private Label summaryLine;
         private HelpBox vehicleDensityWarning;
         private HelpBox pedestrianDensityWarning;
@@ -256,18 +263,40 @@ namespace CityGenerator.Editor
             generalCard = AddCard(parent, "general", "General Options", "d_SceneAsset Icon", defaultExpanded: true, TabCity);
             VisualElement content = generalCard.ContentContainer;
 
+            var gridHeaderRow = new VisualElement();
+            gridHeaderRow.AddToClassList("cg-grid-header-row");
+            content.Add(gridHeaderRow);
+
+            customSubmodeSelector = new VisualElement();
+            customSubmodeSelector.AddToClassList("cg-grid-submode-selector");
+            defineAreaButton = new Button(() => SetCustomAreaSubmode(true)) { text = "Define City Area" };
+            definePlazasButton = new Button(() => SetCustomAreaSubmode(false)) { text = "Define Plazas" };
+            customSubmodeSelector.Add(defineAreaButton);
+            customSubmodeSelector.Add(definePlazasButton);
+            gridHeaderRow.Add(customSubmodeSelector);
+
+            var headerSpacer = new VisualElement();
+            headerSpacer.AddToClassList("cg-grid-header-row__spacer");
+            gridHeaderRow.Add(headerSpacer);
+
+            customizeButton = new Button(ToggleCustomizeMode) { text = "Customize" };
+            customizeButton.tooltip = "Replace the rectangular grid with a hand-edited, arbitrarily shaped city footprint.";
+            gridHeaderRow.Add(customizeButton);
+
             gridPreview = new CityGeneratorGridPreview();
             gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
             content.Add(gridPreview);
             gridPreviewCaption = new Label();
             gridPreviewCaption.AddToClassList("cg-grid-preview__caption");
             content.Add(gridPreviewCaption);
-            var gridPreviewHint = new Label("Click a block above to toggle it as a plaza.");
+            gridPreviewHint = new Label("Click a block above to toggle it as a plaza.");
             gridPreviewHint.AddToClassList("cg-grid-preview__caption");
             content.Add(gridPreviewHint);
 
-            content.Add(CreateIntSlider(FindProperty("general.gridWidth"), "Grid Width", MinGridSize, MaxGridSize));
-            content.Add(CreateIntSlider(FindProperty("general.gridHeight"), "Grid Height", MinGridSize, MaxGridSize));
+            gridSizeSliders = new VisualElement();
+            gridSizeSliders.Add(CreateIntSlider(FindProperty("general.gridWidth"), "Grid Width", CityGeneratorConstants.MinGridSize, CityGeneratorConstants.MaxGridSize));
+            gridSizeSliders.Add(CreateIntSlider(FindProperty("general.gridHeight"), "Grid Height", CityGeneratorConstants.MinGridSize, CityGeneratorConstants.MaxGridSize));
+            content.Add(gridSizeSliders);
             content.Add(CreateIntSlider(FindProperty("general.buildingsPerBlock"), "Buildings Per Block", 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock));
 
             content.Add(CreateField("general.useCustomSeed", "Custom Seed"));
@@ -276,6 +305,45 @@ namespace CityGenerator.Editor
             // Visibility only, re-applied every RefreshDynamicUi pass (see below) rather than a
             // dedicated poll, since a settings change already triggers that refresh.
             this.seedField = seedField;
+        }
+
+        /// <summary>
+        /// "Customize"/"Exit Customize": the single deliberate blocking dialog in the tool, since
+        /// entering Customize mode is destructive (resets customBlockCells/plazaCells).
+        /// </summary>
+        private void ToggleCustomizeMode()
+        {
+            SerializedProperty useCustomGridProperty = FindProperty("general.useCustomGrid");
+            useCustomGridProperty.serializedObject.Update();
+
+            if (!useCustomGridProperty.boolValue)
+            {
+                if (!EditorUtility.DisplayDialog("Enter Customize mode?", "This resets the current grid", "Continue", "Cancel"))
+                    return;
+
+                SerializedProperty customBlockCellsProperty = FindProperty("general.customBlockCells");
+                SerializedProperty plazaCellsProperty = FindProperty("general.plazaCells");
+                customBlockCellsProperty.ClearArray();
+                int centre = CityGeneratorConstants.MaxGridSize / 2;
+                customBlockCellsProperty.InsertArrayElementAtIndex(0);
+                customBlockCellsProperty.GetArrayElementAtIndex(0).vector2IntValue = new Vector2Int(centre, centre);
+                plazaCellsProperty.ClearArray();
+                useCustomGridProperty.boolValue = true;
+                customAreaSubmode = true;
+            }
+            else
+            {
+                useCustomGridProperty.boolValue = false;
+            }
+
+            useCustomGridProperty.serializedObject.ApplyModifiedProperties();
+            RefreshDynamicUi();
+        }
+
+        private void SetCustomAreaSubmode(bool defineArea)
+        {
+            customAreaSubmode = defineArea;
+            RefreshDynamicUi();
         }
 
         private void BuildGroundCard(VisualElement parent)
@@ -631,15 +699,17 @@ namespace CityGenerator.Editor
             if (serializedWindow == null)
                 return;
 
+            bool useCustomGrid = FindProperty("general.useCustomGrid").boolValue;
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
             int plazaCount = FindProperty("general.plazaCells").arraySize;
-            int blockCount = gridWidth * gridHeight;
+            int customBlockCount = FindProperty("general.customBlockCells").arraySize;
+            int blockCount = useCustomGrid ? customBlockCount : gridWidth * gridHeight;
             int buildingsPerBlock = FindProperty("general.buildingsPerBlock").intValue;
             int vehicleCount = FindProperty("general.vehicleCount").intValue;
             int pedestrianCount = FindProperty("general.pedestrianCount").intValue;
 
-            generalCard.SetBadge($"{gridWidth} x {gridHeight}");
+            generalCard.SetBadge(useCustomGrid ? $"{customBlockCount} blocks (custom)" : $"{gridWidth} x {gridHeight}");
             buildingsCard.SetBadge($"{FindProperty("buildingPrefabs").arraySize} prefabs");
             vegetationCard.SetBadge($"{FindProperty("vegetation.prefabs").arraySize} prefabs");
             trafficCard.SetBadge(FindProperty("general.includeTraffic").boolValue ? $"{vehicleCount} vehicles" : "Disabled");
@@ -657,8 +727,27 @@ namespace CityGenerator.Editor
             pedestrianBehaviourCard.SetBadge($"{paceFraction:P0} pace");
             crowdCard.SetBadge($"{FindProperty("crowd.staggerMinAgentCount").intValue}+ staggered");
 
+            customizeButton.text = useCustomGrid ? "Exit Customize" : "Customize";
+            customSubmodeSelector.style.display = useCustomGrid ? DisplayStyle.Flex : DisplayStyle.None;
+            gridSizeSliders.style.display = useCustomGrid ? DisplayStyle.None : DisplayStyle.Flex;
+            defineAreaButton.SetEnabled(!customAreaSubmode);
+            definePlazasButton.SetEnabled(customAreaSubmode);
+
+            if (useCustomGrid && customAreaSubmode)
+            {
+                gridPreview.BindCustomArea(FindProperty("general.customBlockCells"), RefreshDynamicUi);
+                gridPreviewHint.text = "Click a \"+\" to add a block adjacent to the shape, or a \"-\" to remove a block without splitting it or emptying the shape.";
+            }
+            else
+            {
+                gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
+                gridPreview.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
+                gridPreviewHint.text = "Click a block above to toggle it as a plaza.";
+            }
+
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
+            customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
             ambienceCard.SetBadge(FindProperty("audio.ambience.enabled").boolValue
@@ -672,8 +761,28 @@ namespace CityGenerator.Editor
                 : "Off");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
             int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
-            float totalSize = gridWidth * CityGeneratorConstants.CellPitch;
-            float totalSizeZ = gridHeight * CityGeneratorConstants.CellPitch;
+            float totalSize;
+            float totalSizeZ;
+            if (useCustomGrid)
+            {
+                SerializedProperty customCellsProperty = FindProperty("general.customBlockCells");
+                int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+                for (int i = 0; i < customCellsProperty.arraySize; i++)
+                {
+                    Vector2Int cell = customCellsProperty.GetArrayElementAtIndex(i).vector2IntValue;
+                    minX = Mathf.Min(minX, cell.x); maxX = Mathf.Max(maxX, cell.x);
+                    minY = Mathf.Min(minY, cell.y); maxY = Mathf.Max(maxY, cell.y);
+                }
+                int spanX = customCellsProperty.arraySize > 0 ? maxX - minX + 1 : 0;
+                int spanY = customCellsProperty.arraySize > 0 ? maxY - minY + 1 : 0;
+                totalSize = spanX * CityGeneratorConstants.CellPitch;
+                totalSizeZ = spanY * CityGeneratorConstants.CellPitch;
+            }
+            else
+            {
+                totalSize = gridWidth * CityGeneratorConstants.CellPitch;
+                totalSizeZ = gridHeight * CityGeneratorConstants.CellPitch;
+            }
             gridPreviewCaption.text = $"{blockCount} blocks ({plazaCount} plaza) · {totalSize:0}m x {totalSizeZ:0}m";
             int customPlaceCount = FindProperty("customPlaces").arraySize;
             summaryLine.text = $"~{estimatedBuildings} buildings · {vehicleCount} vehicles · {pedestrianCount} pedestrians · {customPlaceCount} custom places";

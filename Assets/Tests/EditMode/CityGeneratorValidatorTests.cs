@@ -460,6 +460,47 @@ namespace CityGenerator.Tests.EditMode
         }
 
         [Test]
+        public void ValidateDetailed_CustomGrid_CustomPlaceOnRemovedBlock_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.useCustomGrid = true;
+            settings.general.customBlockCells = new List<Vector2Int> { new(5, 5) };
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("Kiosk"),
+                blockCell = new Vector2Int(6, 6), // not in customBlockCells
+                cornerSlot = 0,
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "customPlaces" && !i.isWarning && i.message.Contains("no longer exists in the custom grid shape")));
+        }
+
+        [Test]
+        public void ValidateDetailed_CustomGrid_CustomPlaceOnRealBlock_HasNoBlockingIssues()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.useCustomGrid = true;
+            settings.general.customBlockCells = new List<Vector2Int> { new(5, 5) };
+            settings.customPlaces.Add(new CustomPlaceEntry
+            {
+                title = "Kiosk",
+                prefab = MakePrefabLike("Kiosk"),
+                blockCell = new Vector2Int(5, 5),
+                cornerSlot = 0,
+                positionAssigned = true,
+            });
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
+        }
+
+        [Test]
         public void ValidateDetailed_ValidCustomPlace_HasNoBlockingIssues()
         {
             CityGeneratorSettings settings = MakeMinimalValidSettings();

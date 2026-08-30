@@ -42,6 +42,18 @@ namespace CityGenerator.Runtime
         [Tooltip("Street axis coordinates along Z, in ascending order.")]
         [SerializeField] private float[] axesZ = { -84f, -28f, 28f, 84f };
 
+        // Own copies of the layout geometry needed by BuildFromBlockCells (not read from
+        // CityGeneratorConstants: that class is Editor-only/internal, and every other Runtime
+        // script in the tool already keeps its own copy of the numbers it needs -- see
+        // PedestrianNetwork's equivalent comment).
+        private const float CellPitch = 56f;
+        private const int MaxGridSize = 10;
+
+        // Set by BuildFromBlockCells; gates Neighbour()'s extra shape-adjacency check so the
+        // rectangular SetAxes/Build() path (useCustomShape == false) is completely unaffected.
+        private bool useCustomShape;
+        private HashSet<Vector2Int> customBlockCells;
+
         [Tooltip("Lane offset from the street axis. Must fit within the roadway.")]
         [SerializeField] private float laneOffset = 2.6f;
 
@@ -128,6 +140,56 @@ namespace CityGenerator.Runtime
         {
             axesX = newAxesX;
             axesZ = newAxesZ;
+            useCustomShape = false;
+            customBlockCells = null;
+        }
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): builds the graph over the fixed MaxGridSize canvas,
+        /// but a street segment between two intersections only exists (i.e. <see cref="Neighbour"/>
+        /// allows it) when it is adjacent to at least one real block in <paramref name="blockCells"/>.
+        /// A street ending where a block has no neighbour in that direction is a dead end, handled
+        /// exactly like today's outer-edge intersections (no outgoing exit that way). An
+        /// intersection touching no real block at all gets no usable entry, so it is never offered
+        /// as a vehicle spawn point.
+        /// </summary>
+        public void BuildFromBlockCells(IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            customBlockCells = new HashSet<Vector2Int>(blockCells);
+            useCustomShape = true;
+
+            int axisCount = MaxGridSize + 1;
+            var axes = new float[axisCount];
+            for (int i = 0; i < axisCount; i++)
+            {
+                axes[i] = (i - MaxGridSize / 2f) * CellPitch;
+            }
+
+            axesX = axes;
+            axesZ = axes;
+            Build();
+        }
+
+        private bool IsUsedIntersection(int i, int j)
+        {
+            return customBlockCells.Contains(new Vector2Int(i - 1, j - 1))
+                || customBlockCells.Contains(new Vector2Int(i, j - 1))
+                || customBlockCells.Contains(new Vector2Int(i - 1, j))
+                || customBlockCells.Contains(new Vector2Int(i, j));
+        }
+
+        // Whether the street segment leading out of intersection (i, j) in direction k is
+        // adjacent to at least one real block -- mirrors CityGeneratorGroundBuilder's dash/zebra
+        // adjacency rule exactly, so the drawn markings and the drivable graph always agree.
+        private bool IsStreetSegmentReal(int i, int j, int k)
+        {
+            switch (k)
+            {
+                case 0: return customBlockCells.Contains(new Vector2Int(i, j - 1)) || customBlockCells.Contains(new Vector2Int(i, j));
+                case 1: return customBlockCells.Contains(new Vector2Int(i - 1, j - 1)) || customBlockCells.Contains(new Vector2Int(i - 1, j));
+                case 2: return customBlockCells.Contains(new Vector2Int(i - 1, j)) || customBlockCells.Contains(new Vector2Int(i, j));
+                default: return customBlockCells.Contains(new Vector2Int(i - 1, j - 1)) || customBlockCells.Contains(new Vector2Int(i, j - 1));
+            }
         }
 
         private void EnsureBuilt()
@@ -210,6 +272,24 @@ namespace CityGenerator.Runtime
                                 Weight = RouteWeight(turnWeight, i, j, li, lj)
                             });
                         }
+                    }
+                }
+            }
+
+            if (useCustomShape)
+            {
+                // An intersection touching no real block at all (fully outside the shape) must
+                // never be offered as a vehicle spawn point -- BuildVehicles treats any IsEntry
+                // node as spawn-safe regardless of its exit count.
+                for (int i = 0; i < nx; i++)
+                {
+                    for (int j = 0; j < nz; j++)
+                    {
+                        if (IsUsedIntersection(i, j))
+                            continue;
+
+                        for (int k = 0; k < 4; k++)
+                            nodes[NodeIndex(i, j, k, true)].IsEntry = false;
                     }
                 }
             }
@@ -491,7 +571,12 @@ namespace CityGenerator.Runtime
                 default: nj = j - 1; break;
             }
 
-            return ni >= 0 && ni < axesX.Length && nj >= 0 && nj < axesZ.Length;
+            if (ni < 0 || ni >= axesX.Length || nj < 0 || nj >= axesZ.Length)
+            {
+                return false;
+            }
+
+            return !useCustomShape || IsStreetSegmentReal(i, j, k);
         }
 
         /// <summary>Point where a vehicle arriving at this crossing entry stops.</summary>

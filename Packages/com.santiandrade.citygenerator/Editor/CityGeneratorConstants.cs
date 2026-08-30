@@ -101,5 +101,11 @@ namespace CityGenerator.Editor
         // much larger fraction of ring nodes can be filled before it reads as overcrowded than
         // the vehicle case (VehicleDensityWarningThreshold, 0.4).
         public const float PedestrianCountWarningThreshold = 0.7f;
+
+        // Grid Width/Height slider bounds, and the fixed canvas size for Custom Grid's
+        // "Customize" mode (SPEC 11) -- a custom shape is always edited on a MaxGridSize x
+        // MaxGridSize canvas regardless of the previous gridWidth/gridHeight.
+        public const int MinGridSize = 1;
+        public const int MaxGridSize = 10;
     }
 }

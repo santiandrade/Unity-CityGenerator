@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 
+- Custom Grid: a "Customize" button on the General Options card's grid preview replaces the
+  rectangular `Grid Width` x `Grid Height` footprint with an arbitrarily shaped, hand-edited
+  poliomino (no islands) on a fixed 10x10 canvas. A "Define City Area" / "Define Plazas" selector
+  switches the preview between adding/removing blocks (with live "+"/"-" affordances gated by
+  contiguity) and toggling plazas on the real blocks only. Streets, sidewalks, road markings,
+  traffic lights/network and the pedestrian network are all generated to match the shape's
+  contour instead of a full rectangle; the minimap frames the shape's own bounding box. A Custom
+  Place whose block is removed under it is flagged as a blocking validation error, same as an
+  out-of-range block on a grid resize.
 - Player > Player card gained an "Enabled" toggle (`general.playerEnabled`). Player Prefab and
   Input Actions are now only required when it's on, and no player is spawned when it's off, even
   if a Player Prefab is still assigned.

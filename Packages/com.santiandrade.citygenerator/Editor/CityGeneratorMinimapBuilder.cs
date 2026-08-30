@@ -89,6 +89,42 @@ namespace CityGenerator.Editor
             float width = gridWidth * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
             float depth = gridHeight * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
             Vector3 worldCenter = cityRoot.TransformPoint(Vector3.zero);
+            BuildCore(settings, cityRoot, width, depth, worldCenter, pointsOfInterest);
+        }
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): frames the minimum rectangle that actually wraps the
+        /// real blocks in <paramref name="blockCells"/> instead of the fixed MaxGridSize canvas, so
+        /// a small or corner-hugging shape doesn't get a mostly-empty minimap.
+        /// </summary>
+        public static void Build(MinimapSettings settings, Transform cityRoot, IReadOnlyCollection<Vector2Int> blockCells, List<PointOfInterestEntry> pointsOfInterest)
+        {
+            if (!settings.enabled || blockCells.Count == 0)
+                return;
+
+            int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+            foreach (Vector2Int cell in blockCells)
+            {
+                minX = Mathf.Min(minX, cell.x);
+                maxX = Mathf.Max(maxX, cell.x);
+                minY = Mathf.Min(minY, cell.y);
+                maxY = Mathf.Max(maxY, cell.y);
+            }
+
+            int canvas = CityGeneratorConstants.MaxGridSize;
+            Vector3 minCorner = CityGeneratorGrid.GetBlockCenter(minX, minY, canvas, canvas);
+            Vector3 maxCorner = CityGeneratorGrid.GetBlockCenter(maxX, maxY, canvas, canvas);
+
+            float width = (maxCorner.x - minCorner.x) + CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            float depth = (maxCorner.z - minCorner.z) + CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            var localCenter = new Vector3((minCorner.x + maxCorner.x) / 2f, 0f, (minCorner.z + maxCorner.z) / 2f);
+            Vector3 worldCenter = cityRoot.TransformPoint(localCenter);
+
+            BuildCore(settings, cityRoot, width, depth, worldCenter, pointsOfInterest);
+        }
+
+        private static void BuildCore(MinimapSettings settings, Transform cityRoot, float width, float depth, Vector3 worldCenter, List<PointOfInterestEntry> pointsOfInterest)
+        {
 
             // Excluding Vehicle/Pedestrian by Camera.cullingMask alone doesn't work: that layer is
             // assigned only to each instance's root sensor/proxy collider (see the invariant that a

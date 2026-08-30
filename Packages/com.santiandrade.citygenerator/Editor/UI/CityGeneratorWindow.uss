@@ -158,6 +158,24 @@
 
 /* ---------- Grid preview / summary ---------- */
 
+.cg-grid-header-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.cg-grid-header-row__spacer {
+    flex-grow: 1;
+}
+
+.cg-grid-submode-selector {
+    flex-direction: row;
+}
+
+.cg-grid-submode-selector Button {
+    margin-right: 2px;
+}
+
 .cg-grid-preview {
     height: 110px;
     background-color: var(--cg-surface-alt);

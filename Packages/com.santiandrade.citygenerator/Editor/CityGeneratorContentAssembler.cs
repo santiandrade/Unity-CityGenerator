@@ -86,12 +86,22 @@ namespace CityGenerator.Editor
             Transform pedestrianNetworkGroup = GetOrCreateGroup(cityRoot, "PedestrianNetwork");
 
             Report("Grid", 0f);
-            List<BlockCell> blocks = CityGeneratorGrid.BuildBlocks(gridWidth, gridHeight, settings.general.plazaCells);
+            List<BlockCell> blocks = settings.general.useCustomGrid
+                ? CityGeneratorGrid.BuildBlocks(settings.general.customBlockCells, settings.general.plazaCells)
+                : CityGeneratorGrid.BuildBlocks(gridWidth, gridHeight, settings.general.plazaCells);
 
             Report("Ground", 0.1f);
-            CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, gridWidth, gridHeight);
+            if (settings.general.useCustomGrid)
+            {
+                CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, settings.general.customBlockCells);
+                CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, settings.general.customBlockCells);
+            }
+            else
+            {
+                CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, gridWidth, gridHeight);
+                CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
+            }
             CityGeneratorGroundBuilder.BuildSidewalks(settings.ground.sidewalkPrefab, sidewalks, blocks);
-            CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
 
             Report("Custom places", 0.2f);
             (List<GameObject> builtCustomPlaces, HashSet<(int gridX, int gridY, int slot)> reservedSlots, List<PointOfInterestEntry> pointsOfInterest) =
@@ -136,9 +146,20 @@ namespace CityGenerator.Editor
             // The traffic network and its lights are always generated (every 4-way intersection
             // stays regulated), even when traffic itself is switched off.
             Report("Traffic network", 0.6f);
-            TrafficNetwork network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup, gridWidth, gridHeight);
-            List<GameObject> trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, gridWidth, gridHeight, random);
-            network.Build();
+            TrafficNetwork network;
+            List<GameObject> trafficLightInstances;
+            if (settings.general.useCustomGrid)
+            {
+                network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup);
+                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, settings.general.customBlockCells, random);
+                network.BuildFromBlockCells(settings.general.customBlockCells);
+            }
+            else
+            {
+                network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup, gridWidth, gridHeight);
+                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, gridWidth, gridHeight, random);
+                network.Build();
+            }
 
             List<GameObject> vehicleInstances = new();
             if (settings.general.includeTraffic)
@@ -154,8 +175,23 @@ namespace CityGenerator.Editor
             // The pedestrian network mirrors the traffic network: always generated (so its
             // crossings stay wired to the real traffic lights), independent of includePedestrians.
             Report("Pedestrian network", 0.8f);
-            PedestrianNetwork pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight, blocks, reservedSlots);
-            pedestrianNetwork.Build();
+            PedestrianNetwork pedestrianNetwork;
+            if (settings.general.useCustomGrid)
+            {
+                pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup);
+                var fullyReservedCells = new List<Vector2Int>();
+                foreach (var slot in reservedSlots)
+                {
+                    if (slot.slot == -1)
+                        fullyReservedCells.Add(new Vector2Int(slot.gridX, slot.gridY));
+                }
+                pedestrianNetwork.BuildFromBlockCells(settings.general.customBlockCells, settings.general.plazaCells, fullyReservedCells);
+            }
+            else
+            {
+                pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight, blocks, reservedSlots);
+                pedestrianNetwork.Build();
+            }
             CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
 
             List<GameObject> pedestrianInstances = new();
@@ -172,7 +208,10 @@ namespace CityGenerator.Editor
             // POI list — CityGeneratorSceneBuilder finalises it into a saved PNG asset once the
             // generated scene's path is known (not yet the case here, mid-Assemble).
             Report("Minimap", 0.97f);
-            CityGeneratorMinimapBuilder.Build(settings.minimap, cityRoot, gridWidth, gridHeight, pointsOfInterest);
+            if (settings.general.useCustomGrid)
+                CityGeneratorMinimapBuilder.Build(settings.minimap, cityRoot, settings.general.customBlockCells, pointsOfInterest);
+            else
+                CityGeneratorMinimapBuilder.Build(settings.minimap, cityRoot, gridWidth, gridHeight, pointsOfInterest);
 
             Report("Audio", 0.99f);
             CityGeneratorAudioBuilder.BuildAmbience(cityRoot, settings.audio.ambience);
