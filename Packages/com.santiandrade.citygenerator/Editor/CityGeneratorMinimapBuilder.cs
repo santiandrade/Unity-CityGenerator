@@ -270,7 +270,12 @@ namespace CityGenerator.Editor
                 camera.nearClipPlane = 0.1f;
                 camera.farClipPlane = SnapshotCameraHeight + SnapshotFarClipMargin;
                 camera.clearFlags = CameraClearFlags.SolidColor;
-                camera.backgroundColor = Color.black;
+                // Kept in sync with MinimapWindow.mat's _OutOfBoundsColor (currently hex 434343):
+                // the HUD keeps the player centred, so its window reaches past the snapshot near a
+                // city edge, and that material paints the out-of-range remainder with this same
+                // colour. Matching the two makes the area beyond the city read as one continuous
+                // background. If the material's colour changes again, update this to match.
+                camera.backgroundColor = new Color(67f / 255f, 67f / 255f, 67f / 255f);
                 camera.allowHDR = false;
                 camera.allowMSAA = false;
                 camera.useOcclusionCulling = false;

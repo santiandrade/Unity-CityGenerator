@@ -65,6 +65,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The minimap no longer smears its border pixels across the HUD when the player gets close to a
+  city edge. `MinimapHUD` keeps the player exactly centred, so its `uvRect` window necessarily
+  reaches past the snapshot within View Radius of an edge, and the snapshot's `Clamp` wrap mode
+  then repeated its outermost row/column outwards -- stretching whatever sat on that border (an
+  empty block's grass, a strip of sidewalk) over the rest of the map. The map image now uses a new
+  `MinimapWindow` material whose shader paints anything outside the snapshot with the capture
+  camera's own background colour instead.
+
 - Vehicles no longer strand themselves at the city's outer edge. A vehicle's *initial* target
   comes from a blind spatial search (`TrafficNetwork.FindNodeAhead`), not from the graph, so one
   spawned on a perimeter entry facing out of the city locked onto the outward-facing exit node
