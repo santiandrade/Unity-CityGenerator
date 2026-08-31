@@ -15,6 +15,8 @@ namespace CityGenerator.Editor.UI
         PlazaMultiToggle,
         /// <summary>A Custom Place entry's own picker: clicking a cell selects it as the single chosen block, and (unless the entry occupies the full block) which quadrant within it was clicked.</summary>
         SingleSelectQuadrant,
+        /// <summary>Custom Grid's "Define City Area" submode (SPEC 11): the fixed MaxGridSize canvas is painted as real blocks/holes; clicking a valid "+" hole or "-" removable block edits general.customBlockCells directly.</summary>
+        CustomAreaEdit,
     }
 
     /// <summary>
@@ -42,6 +44,10 @@ namespace CityGenerator.Editor.UI
         private SerializedProperty cornerSlotProperty;
         private SerializedProperty positionAssignedProperty;
         private Func<bool> occupiesFullBlockGetter;
+
+        // CustomAreaEdit mode (data source), and shared as the shape-mask overlay applied on top
+        // of PlazaMultiToggle/SingleSelectQuadrant by SetShapeMask.
+        private SerializedProperty shapeCellsProperty;
 
         public CityGeneratorGridPreview()
         {
@@ -78,10 +84,55 @@ namespace CityGenerator.Editor.UI
             tooltip = "Click a block to place this entry there; click a corner of the block for a quadrant slot.";
         }
 
+        /// <summary>
+        /// Binds this preview as Custom Grid's "Define City Area" submode: the fixed MaxGridSize
+        /// canvas is painted as real blocks/holes; clicking a "+" hole adds it and clicking a "-"
+        /// removable block removes it, both written directly to <paramref name="customBlockCellsProperty"/>.
+        /// </summary>
+        public void BindCustomArea(SerializedProperty customBlockCellsProperty, Action onChanged)
+        {
+            mode = CityGeneratorGridPreviewMode.CustomAreaEdit;
+            shapeCellsProperty = customBlockCellsProperty;
+            this.onChanged = onChanged;
+            tooltip = "Click a \"+\" to add a block, or a \"-\" to remove one.";
+        }
+
+        /// <summary>
+        /// Overlays a shape mask on top of an already-bound PlazaMultiToggle/SingleSelectQuadrant
+        /// preview: any cell outside <paramref name="customBlockCellsProperty"/> is painted
+        /// semi-transparent and ignores clicks. Pass <c>null</c> to disable (plain rectangular
+        /// behaviour). Does not change <see cref="mode"/>.
+        /// </summary>
+        public void SetShapeMask(SerializedProperty customBlockCellsProperty)
+        {
+            shapeCellsProperty = customBlockCellsProperty;
+            MarkDirtyRepaint();
+        }
+
+        /// <summary>
+        /// SingleSelectQuadrant mode only: overlays the General Options grid's configured plazas
+        /// (<c>general.plazaCells</c>) as a reference so the user can see where plazas already sit
+        /// while placing a Custom Place. Pass <c>null</c> to disable.
+        /// </summary>
+        public void SetPlazaMask(SerializedProperty plazaCellsProperty)
+        {
+            this.plazaCellsProperty = plazaCellsProperty;
+            MarkDirtyRepaint();
+        }
+
         public void SetGrid(int width, int height)
         {
-            width = Mathf.Max(1, width);
-            height = Mathf.Max(1, height);
+            if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit || shapeCellsProperty != null)
+            {
+                width = CityGeneratorConstants.MaxGridSize;
+                height = CityGeneratorConstants.MaxGridSize;
+            }
+            else
+            {
+                width = Mathf.Max(1, width);
+                height = Mathf.Max(1, height);
+            }
+
             if (gridWidth == width && gridHeight == height)
                 return;
 
@@ -145,19 +196,65 @@ namespace CityGenerator.Editor.UI
             // cell is clicked on here would land one Z row away from where it visually sits once
             // generated and viewed from above.
             int gy = gridHeight - 1 - row;
+            var cell = new Vector2Int(gx, gy);
 
-            if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
+            if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit)
             {
-                TogglePlazaCell(new Vector2Int(gx, gy));
+                EditCustomAreaCell(cell);
+            }
+            else if (shapeCellsProperty != null && !ReadShapeCells().Contains(cell))
+            {
+                // Outside the shape mask: a hole is not clickable in PlazaMultiToggle/SingleSelectQuadrant.
+            }
+            else if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
+            {
+                TogglePlazaCell(cell);
             }
             else
             {
                 float cellLocalX = local.x - (originX + gx * cellSize);
                 float cellLocalY = local.y - (originY + row * cellSize);
-                SelectSingleCell(new Vector2Int(gx, gy), cellLocalX, cellLocalY, cellSize);
+                SelectSingleCell(cell, cellLocalX, cellLocalY, cellSize);
             }
 
             evt.StopPropagation();
+        }
+
+        private void EditCustomAreaCell(Vector2Int cell)
+        {
+            if (shapeCellsProperty == null)
+                return;
+
+            shapeCellsProperty.serializedObject.Update();
+            var existing = ReadShapeCells();
+
+            if (existing.Contains(cell))
+            {
+                if (!CityGeneratorGrid.CanRemoveWithoutSplitting(existing, cell))
+                    return;
+
+                for (int i = 0; i < shapeCellsProperty.arraySize; i++)
+                {
+                    if (shapeCellsProperty.GetArrayElementAtIndex(i).vector2IntValue == cell)
+                    {
+                        shapeCellsProperty.DeleteArrayElementAtIndex(i);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                if (!CityGeneratorGrid.IsValidAddition(existing, cell))
+                    return;
+
+                int index = shapeCellsProperty.arraySize;
+                shapeCellsProperty.InsertArrayElementAtIndex(index);
+                shapeCellsProperty.GetArrayElementAtIndex(index).vector2IntValue = cell;
+            }
+
+            shapeCellsProperty.serializedObject.ApplyModifiedProperties();
+            MarkDirtyRepaint();
+            onChanged?.Invoke();
         }
 
         private void TogglePlazaCell(Vector2Int cell)
@@ -223,10 +320,83 @@ namespace CityGenerator.Editor.UI
 
         private void OnGenerateVisualContent(MeshGenerationContext context)
         {
-            if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
+            if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit)
+                DrawCustomAreaEdit(context);
+            else if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
                 DrawPlazaMultiToggle(context);
             else
                 DrawSingleSelection(context);
+        }
+
+        private void DrawCustomAreaEdit(MeshGenerationContext context)
+        {
+            Rect area = contentRect;
+            if (area.width <= 0f || area.height <= 0f)
+                return;
+
+            Painter2D painter = context.painter2D;
+
+            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
+            float totalWidth = cellSize * gridWidth;
+            float totalHeight = cellSize * gridHeight;
+            float originX = (area.width - totalWidth) * 0.5f;
+            float originY = (area.height - totalHeight) * 0.5f;
+
+            Color streetColor = new Color(0f, 0f, 0f, 0.15f);
+            Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
+            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
+            Color iconColor = new Color(1f, 1f, 1f, 0.9f);
+
+            DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
+
+            HashSet<Vector2Int> existing = ReadShapeCells();
+            float inset = cellSize * 0.08f;
+
+            for (int y = 0; y < gridHeight; y++)
+            {
+                int gy = gridHeight - 1 - y;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    var cell = new Vector2Int(x, gy);
+                    bool isReal = existing.Contains(cell);
+
+                    float cx = originX + x * cellSize + inset;
+                    float cy = originY + y * cellSize + inset;
+                    float size = cellSize - inset * 2f;
+                    DrawRect(painter, isReal ? blockColor : holeColor, cx, cy, size, size);
+
+                    if (isReal)
+                    {
+                        if (CityGeneratorGrid.CanRemoveWithoutSplitting(existing, cell))
+                            DrawMinusIcon(painter, iconColor, cx, cy, size);
+                    }
+                    else if (CityGeneratorGrid.IsValidAddition(existing, cell))
+                    {
+                        DrawPlusIcon(painter, iconColor, cx, cy, size);
+                    }
+                }
+            }
+        }
+
+        private static void DrawPlusIcon(Painter2D painter, Color color, float cx, float cy, float size)
+        {
+            float barLength = size * 0.5f;
+            float barThickness = size * 0.12f;
+            float centerX = cx + size * 0.5f;
+            float centerY = cy + size * 0.5f;
+
+            DrawRect(painter, color, centerX - barLength * 0.5f, centerY - barThickness * 0.5f, barLength, barThickness);
+            DrawRect(painter, color, centerX - barThickness * 0.5f, centerY - barLength * 0.5f, barThickness, barLength);
+        }
+
+        private static void DrawMinusIcon(Painter2D painter, Color color, float cx, float cy, float size)
+        {
+            float barLength = size * 0.5f;
+            float barThickness = size * 0.12f;
+            float centerX = cx + size * 0.5f;
+            float centerY = cy + size * 0.5f;
+
+            DrawRect(painter, color, centerX - barLength * 0.5f, centerY - barThickness * 0.5f, barLength, barThickness);
         }
 
         private void DrawPlazaMultiToggle(MeshGenerationContext context)
@@ -246,10 +416,12 @@ namespace CityGenerator.Editor.UI
             Color streetColor = new Color(0f, 0f, 0f, 0.15f);
             Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
             Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
+            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
 
             DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
 
             HashSet<Vector2Int> plazaCells = ReadPlazaCells();
+            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
             float inset = cellSize * 0.08f;
 
             // Screen row y=0 is the top of the picture; it must show the block that renders at
@@ -260,11 +432,18 @@ namespace CityGenerator.Editor.UI
                 int gy = gridHeight - 1 - y;
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    bool isPlaza = plazaCells.Contains(new Vector2Int(x, gy));
-
+                    var cell = new Vector2Int(x, gy);
                     float cx = originX + x * cellSize + inset;
                     float cy = originY + y * cellSize + inset;
                     float size = cellSize - inset * 2f;
+
+                    if (shapeCells != null && !shapeCells.Contains(cell))
+                    {
+                        DrawRect(painter, holeColor, cx, cy, size, size);
+                        continue;
+                    }
+
+                    bool isPlaza = plazaCells.Contains(cell);
                     DrawRect(painter, isPlaza ? plazaColor : blockColor, cx, cy, size, size);
                 }
             }
@@ -286,8 +465,10 @@ namespace CityGenerator.Editor.UI
 
             Color streetColor = new Color(0f, 0f, 0f, 0.15f);
             Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
+            Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
             Color selectedColor = new Color(0.85f, 0.6f, 0.2f, 0.75f);
             Color quadrantColor = new Color(0.95f, 0.75f, 0.3f, 0.9f);
+            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
 
             DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
 
@@ -295,6 +476,8 @@ namespace CityGenerator.Editor.UI
             Vector2Int selectedCell = blockCellProperty != null ? blockCellProperty.vector2IntValue : new Vector2Int(-1, -1);
             bool occupiesFullBlock = occupiesFullBlockGetter != null && occupiesFullBlockGetter();
             int cornerSlot = cornerSlotProperty != null ? cornerSlotProperty.intValue : -1;
+            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
+            HashSet<Vector2Int> plazaCells = plazaCellsProperty != null ? ReadPlazaCells() : null;
 
             float inset = cellSize * 0.08f;
 
@@ -305,12 +488,21 @@ namespace CityGenerator.Editor.UI
                 int gy = gridHeight - 1 - y;
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    bool isSelected = positionAssigned && selectedCell.x == x && selectedCell.y == gy;
-
+                    var cell = new Vector2Int(x, gy);
                     float cx = originX + x * cellSize + inset;
                     float cy = originY + y * cellSize + inset;
                     float size = cellSize - inset * 2f;
-                    DrawRect(painter, isSelected ? selectedColor : blockColor, cx, cy, size, size);
+
+                    if (shapeCells != null && !shapeCells.Contains(cell))
+                    {
+                        DrawRect(painter, holeColor, cx, cy, size, size);
+                        continue;
+                    }
+
+                    bool isSelected = positionAssigned && selectedCell.x == x && selectedCell.y == gy;
+                    bool isPlaza = plazaCells != null && plazaCells.Contains(cell);
+                    Color cellColor = isSelected ? selectedColor : (isPlaza ? plazaColor : blockColor);
+                    DrawRect(painter, cellColor, cx, cy, size, size);
 
                     if (isSelected && !occupiesFullBlock && cornerSlot >= 0)
                     {
@@ -333,6 +525,17 @@ namespace CityGenerator.Editor.UI
 
             for (int i = 0; i < plazaCellsProperty.arraySize; i++)
                 result.Add(plazaCellsProperty.GetArrayElementAtIndex(i).vector2IntValue);
+            return result;
+        }
+
+        private HashSet<Vector2Int> ReadShapeCells()
+        {
+            var result = new HashSet<Vector2Int>();
+            if (shapeCellsProperty == null)
+                return result;
+
+            for (int i = 0; i < shapeCellsProperty.arraySize; i++)
+                result.Add(shapeCellsProperty.GetArrayElementAtIndex(i).vector2IntValue);
             return result;
         }
 

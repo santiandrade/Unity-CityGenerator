@@ -27,6 +27,17 @@ namespace CityGenerator.Editor
             return network;
         }
 
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): adds the component without setting axes yet -- the
+        /// caller must call <see cref="TrafficNetwork.BuildFromBlockCells"/> directly (instead of
+        /// <see cref="TrafficNetwork.Build"/>) once all traffic lights exist, since that method
+        /// both sets the axes and builds the graph in one call.
+        /// </summary>
+        public static TrafficNetwork AddNetworkComponent(Transform trafficNetworkGroup)
+        {
+            return trafficNetworkGroup.gameObject.AddComponent<TrafficNetwork>();
+        }
+
         private static float[] BuildAxes(int gridCount)
         {
             var axes = new float[gridCount + 1];
@@ -54,19 +65,29 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
-        /// Places 4 traffic lights (one per arm) at every intersection fully surrounded by
-        /// blocks (both axis indices strictly interior — the same set as the zebra crossings),
-        /// wired into a <see cref="TrafficLightIntersection"/> that cycles east-west vs north-south.
+        /// Places lights at every intersection with at least 3 real arms (a full 4-way, always
+        /// true for a strictly interior intersection, or a T-intersection along the grid's own
+        /// border) -- a real decision point where one flow must yield to another. A perimeter
+        /// corner (exactly 2 perpendicular arms, a street simply bending 90 degrees with only one
+        /// possible way through) never needs one. Only the arms that actually exist within the
+        /// grid get a physical light instantiated. Mirrors CityGeneratorGroundBuilder's identical
+        /// rule for zebra crossings/dash exclusion, so the drawn markings and the signalled set
+        /// always agree.
         /// </summary>
         public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, int gridWidth, int gridHeight, System.Random random)
         {
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
 
-            for (int i = 1; i < gridWidth; i++)
+            for (int i = 0; i <= gridWidth; i++)
             {
-                for (int j = 1; j < gridHeight; j++)
+                for (int j = 0; j <= gridHeight; j++)
                 {
+                    bool[] armReal = { i < gridWidth, i > 0, j < gridHeight, j > 0 };
+                    int realArmCount = (armReal[0] ? 1 : 0) + (armReal[1] ? 1 : 0) + (armReal[2] ? 1 : 0) + (armReal[3] ? 1 : 0);
+                    if (realArmCount < 3)
+                        continue;
+
                     Vector3 centre = new(
                         CityGeneratorGrid.GetStreetAxisPosition(gridWidth, i), 0f,
                         CityGeneratorGrid.GetStreetAxisPosition(gridHeight, j));
@@ -76,6 +97,9 @@ namespace CityGenerator.Editor
 
                     for (int k = 0; k < 4; k++)
                     {
+                        if (!armReal[k])
+                            continue;
+
                         Vector3 corner = (Dirs[k] + RightOfDir(Dirs[k])) * CityGeneratorConstants.TrafficLightCornerOffset;
                         Vector3 position = centre + corner;
                         position.y = CityGeneratorConstants.GroundDatumY;
@@ -97,6 +121,88 @@ namespace CityGenerator.Editor
             }
 
             return placed;
+        }
+
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): places lights at every intersection with at least 3
+        /// real arms (a full 4-way or a T-intersection) -- a real decision point where one flow
+        /// must yield to another. A plain straight-through point (2 opposite arms) or a
+        /// perpendicular L-corner (exactly 2 arms, a single street simply bending 90 degrees, so a
+        /// car arriving there has only one possible way to continue) never needs one, over the
+        /// fixed MaxGridSize canvas. Only the arms that actually exist get a physical light
+        /// instantiated; the same rule is mirrored by CityGeneratorGroundBuilder for zebra
+        /// crossings/dash exclusion, so the drawn markings and the signalled set always agree.
+        /// </summary>
+        public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, IReadOnlyCollection<Vector2Int> blockCells, System.Random random)
+        {
+            var cellSet = new HashSet<Vector2Int>(blockCells);
+            var placed = new List<GameObject>();
+            int intersectionIndex = 0;
+            int canvas = CityGeneratorConstants.MaxGridSize;
+
+            for (int i = 0; i <= canvas; i++)
+            {
+                for (int j = 0; j <= canvas; j++)
+                {
+                    var armReal = new bool[4];
+                    int realArmCount = 0;
+                    for (int k = 0; k < 4; k++)
+                    {
+                        armReal[k] = IsStreetSegmentReal(cellSet, i, j, k);
+                        if (armReal[k])
+                            realArmCount++;
+                    }
+
+                    if (realArmCount < 3)
+                        continue;
+
+                    Vector3 centre = new(
+                        CityGeneratorGrid.GetStreetAxisPosition(canvas, i), 0f,
+                        CityGeneratorGrid.GetStreetAxisPosition(canvas, j));
+
+                    Transform intersectionGroup = GetOrCreateGroup(trafficLightsGroup, $"Intersection_{i}_{j}");
+                    var lights = new TrafficLight[4];
+
+                    for (int k = 0; k < 4; k++)
+                    {
+                        if (!armReal[k])
+                            continue;
+
+                        Vector3 corner = (Dirs[k] + RightOfDir(Dirs[k])) * CityGeneratorConstants.TrafficLightCornerOffset;
+                        Vector3 position = centre + corner;
+                        position.y = CityGeneratorConstants.GroundDatumY;
+                        Quaternion rotation = Quaternion.LookRotation(-Dirs[k], Vector3.up);
+
+                        var instance = (GameObject)PrefabUtility.InstantiatePrefab(trafficLightPrefab, intersectionGroup);
+                        instance.name = "TrafficLight_" + k;
+                        instance.transform.position = position;
+                        instance.transform.rotation = rotation;
+
+                        placed.Add(instance);
+                        lights[k] = instance.GetComponent<TrafficLight>();
+                    }
+
+                    var intersectionComponent = intersectionGroup.gameObject.AddComponent<TrafficLightIntersection>();
+                    WireIntersection(intersectionComponent, lights, intersectionIndex, random);
+                    intersectionIndex++;
+                }
+            }
+
+            return placed;
+        }
+
+        // Mirrors TrafficNetwork.IsStreetSegmentReal / CityGeneratorGroundBuilder.HasCrossTraffic's
+        // per-arm building block exactly, so the placed lights, the drawn markings and the
+        // drivable graph all agree on which arms of an intersection are real.
+        private static bool IsStreetSegmentReal(HashSet<Vector2Int> cells, int i, int j, int k)
+        {
+            switch (k)
+            {
+                case 0: return cells.Contains(new Vector2Int(i, j - 1)) || cells.Contains(new Vector2Int(i, j));
+                case 1: return cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i - 1, j));
+                case 2: return cells.Contains(new Vector2Int(i - 1, j)) || cells.Contains(new Vector2Int(i, j));
+                default: return cells.Contains(new Vector2Int(i - 1, j - 1)) || cells.Contains(new Vector2Int(i, j - 1));
+            }
         }
 
         private static void WireIntersection(TrafficLightIntersection component, TrafficLight[] lights, int intersectionIndex, System.Random random)

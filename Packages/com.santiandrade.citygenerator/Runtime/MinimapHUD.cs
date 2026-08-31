@@ -12,6 +12,15 @@ namespace CityGenerator.Runtime
     /// <see cref="MinimapData.worldSize"/> on its own, so the two stay in sync by construction.
     /// The map itself never rotates (north stays up) — only <see cref="playerMarker"/> rotates, to
     /// reflect the player's yaw.
+    /// <para>
+    /// The window is always centred on the player, so near a city edge it necessarily reaches past
+    /// the snapshot: <see cref="UpdateMapWindow"/> writes a <see cref="RawImage.uvRect"/> that
+    /// leaves the [0, 1] range. That is handled in the prefab's material, not here — the map
+    /// <see cref="RawImage"/> uses <c>DefaultAssets/Materials/MinimapWindow.mat</c>, whose shader
+    /// paints anything outside [0, 1] with the snapshot's own background colour. Swapping it back
+    /// to the stock UI material brings back the bug it fixes: the snapshot's Clamp wrap mode smears
+    /// its outermost row/column of pixels across the rest of the minimap.
+    /// </para>
     /// </summary>
     public class MinimapHUD : MonoBehaviour
     {
@@ -71,6 +80,9 @@ namespace CityGenerator.Runtime
             float u0 = (playerPosition.x - worldOrigin.x - viewRadiusMeters) / worldSize.x;
             float v0 = (playerPosition.z - worldOrigin.y - viewRadiusMeters) / worldSize.y;
 
+            // Deliberately not clamped into [0, 1]: keeping the player exactly at the HUD's centre
+            // matters more than staying inside the snapshot, and the out-of-range remainder is
+            // painted as background by MinimapWindow.mat (see the class remarks).
             mapImage.uvRect = new Rect(u0, v0, uWidth, vHeight);
         }
 

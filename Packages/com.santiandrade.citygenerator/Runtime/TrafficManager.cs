@@ -28,14 +28,37 @@ namespace CityGenerator.Runtime
         private readonly HashSet<CarAgent> agents = new();
         private int frameIndex;
 
-        public void Register(CarAgent agent) => agents.Add(agent);
+        // CarAgent.Tick can synchronously disable its own component (a Custom Grid dead end has
+        // nowhere to send the car — see AdvanceToNextNode), which fires OnDisable -> Unregister
+        // -> agents.Remove within the same foreach that is ticking it. Update iterates this
+        // snapshot instead of the live set, rebuilt only when membership actually changes, so a
+        // mid-frame Unregister never invalidates the enumeration in progress.
+        private CarAgent[] agentsSnapshot = System.Array.Empty<CarAgent>();
+        private bool agentsSnapshotDirty;
 
-        public void Unregister(CarAgent agent) => agents.Remove(agent);
+        public void Register(CarAgent agent)
+        {
+            if (agents.Add(agent))
+                agentsSnapshotDirty = true;
+        }
+
+        public void Unregister(CarAgent agent)
+        {
+            if (agents.Remove(agent))
+                agentsSnapshotDirty = true;
+        }
 
         private void Update()
         {
             if (agents.Count == 0)
                 return;
+
+            if (agentsSnapshotDirty)
+            {
+                agentsSnapshot = new CarAgent[agents.Count];
+                agents.CopyTo(agentsSnapshot);
+                agentsSnapshotDirty = false;
+            }
 
             float dt = Time.deltaTime;
             bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
@@ -43,7 +66,7 @@ namespace CityGenerator.Runtime
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
             float sqrStaggerDistance = staggerDistance * staggerDistance;
 
-            foreach (CarAgent agent in agents)
+            foreach (CarAgent agent in agentsSnapshot)
             {
                 bool runSensor = true;
 

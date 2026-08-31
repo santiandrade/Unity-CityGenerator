@@ -11,7 +11,14 @@ namespace CityGenerator.Editor
         public const float CellPitch = 56f;
         public const float StreetWidth = CellPitch - BlockSize;
 
-        public const float RoadBaseMargin = 6f;
+        // Width of the sidewalk band that closes the city at its outer contour: the city always
+        // ends in sidewalk, never in bare asphalt, so the perimeter street has a walkable far
+        // side exactly like every interior one.
+        public const float PerimeterSidewalkWidth = 6f;
+
+        // Ground extent beyond the outermost street axis: the outer half of that street plus the
+        // perimeter sidewalk laid on top of it.
+        public const float RoadBaseMargin = StreetWidth / 2f + PerimeterSidewalkWidth;
         public const float RoadBaseY = -0.05f;
         public const float SidewalkY = 0.09f;
         public const float MarkingY = 0.012f;
@@ -101,5 +108,11 @@ namespace CityGenerator.Editor
         // much larger fraction of ring nodes can be filled before it reads as overcrowded than
         // the vehicle case (VehicleDensityWarningThreshold, 0.4).
         public const float PedestrianCountWarningThreshold = 0.7f;
+
+        // Grid Width/Height slider bounds, and the fixed canvas size for Custom Grid's
+        // "Customize" mode (SPEC 11) -- a custom shape is always edited on a MaxGridSize x
+        // MaxGridSize canvas regardless of the previous gridWidth/gridHeight.
+        public const int MinGridSize = 1;
+        public const int MaxGridSize = 10;
     }
 }

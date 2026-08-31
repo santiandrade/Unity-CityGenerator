@@ -646,17 +646,21 @@ namespace CityGenerator.Runtime
             int next = network.PickNextNode(targetNode);
             if (next < 0)
             {
-                // No exits (shouldn't happen on a grid): fall back to the nearest lane.
-                next = network.FindNodeAhead(transform.position, transform.forward);
+                // A genuine dead end: on a full rectangular grid this never happens (every
+                // reachable node has a further exit), but a Custom Grid shape can legitimately
+                // end a street at its own boundary. CarAgent has no route planning or reversing,
+                // so there's nowhere safe to send it -- disable rather than fall back to a blind
+                // "nearest node ahead" search across the whole network, which used to latch onto
+                // an unrelated, disconnected canvas node possibly far outside the built shape and
+                // drive the vehicle off-road into empty space to reach it.
+                enabled = false;
+                return;
             }
 
-            if (next >= 0)
-            {
-                network.LaneOccupancy?.Leave(this, fromNode, targetNode);
-                fromNode = targetNode;
-                targetNode = next;
-                network.LaneOccupancy?.Enter(this, fromNode, targetNode);
-            }
+            network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+            fromNode = targetNode;
+            targetNode = next;
+            network.LaneOccupancy?.Enter(this, fromNode, targetNode);
         }
 
         private void OnDrawGizmosSelected()

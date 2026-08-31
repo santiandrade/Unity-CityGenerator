@@ -33,6 +33,8 @@ namespace CityGenerator.Editor
             settings.ground.sidewalkPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadSidewalk.prefab");
             settings.ground.roadLinePrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadDash.prefab");
             settings.ground.crosswalkLinePrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/RoadZebra.prefab");
+            // Same prefab the plaza lawn uses: an unbuilt gap of a Custom Grid reads as a green field.
+            settings.ground.emptyBlockPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/Lawn.prefab");
 
             settings.plaza.centerpiecePrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Fountain.prefab");
             settings.plaza.lawnPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Floors/Lawn.prefab");

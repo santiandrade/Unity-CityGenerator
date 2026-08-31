@@ -11,8 +11,6 @@ namespace CityGenerator.Editor
 {
     internal class CityGeneratorWindow : EditorWindow
     {
-        private const int MinGridSize = 1;
-        private const int MaxGridSize = 10;
         private const string UiFolder = "Packages/com.santiandrade.citygenerator/Editor/UI/";
         private const string UxmlPath = UiFolder + "CityGeneratorWindow.uxml";
         private const string UssPath = UiFolder + "CityGeneratorWindow.uss";
@@ -72,6 +70,15 @@ namespace CityGenerator.Editor
         private HelpBox referenceSpeedMismatchWarning;
         private CityGeneratorGridPreview gridPreview;
         private Label gridPreviewCaption;
+        private Label gridPreviewHint;
+        private Button customizeButton;
+        private VisualElement customSubmodeSelector;
+        private Button defineAreaButton;
+        private Button definePlazasButton;
+        private VisualElement gridSizeSliders;
+        // Local UI-only state (not persisted in GeneralSettings): which Customize submode is
+        // active. Always reset to "Define City Area" on (re)entering Customize.
+        private bool customAreaSubmode = true;
         private Label summaryLine;
         private HelpBox vehicleDensityWarning;
         private HelpBox pedestrianDensityWarning;
@@ -256,18 +263,41 @@ namespace CityGenerator.Editor
             generalCard = AddCard(parent, "general", "General Options", "d_SceneAsset Icon", defaultExpanded: true, TabCity);
             VisualElement content = generalCard.ContentContainer;
 
+            var gridHeaderRow = new VisualElement();
+            gridHeaderRow.AddToClassList("cg-grid-header-row");
+            content.Add(gridHeaderRow);
+
+            customSubmodeSelector = new VisualElement();
+            customSubmodeSelector.AddToClassList("cg-grid-submode-selector");
+            defineAreaButton = new Button(() => SetCustomAreaSubmode(true)) { text = "Define City Area" };
+            definePlazasButton = new Button(() => SetCustomAreaSubmode(false)) { text = "Define Plazas" };
+            customSubmodeSelector.Add(defineAreaButton);
+            customSubmodeSelector.Add(definePlazasButton);
+            gridHeaderRow.Add(customSubmodeSelector);
+
+            var headerSpacer = new VisualElement();
+            headerSpacer.AddToClassList("cg-grid-header-row__spacer");
+            gridHeaderRow.Add(headerSpacer);
+
+            customizeButton = new Button(ToggleCustomizeMode) { text = "Customize" };
+            customizeButton.tooltip = "Replace the rectangular grid with a hand-edited, arbitrarily shaped city footprint.";
+            gridHeaderRow.Add(customizeButton);
+
             gridPreview = new CityGeneratorGridPreview();
+            gridPreview.AddToClassList("cg-grid-preview--main");
             gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
             content.Add(gridPreview);
             gridPreviewCaption = new Label();
             gridPreviewCaption.AddToClassList("cg-grid-preview__caption");
             content.Add(gridPreviewCaption);
-            var gridPreviewHint = new Label("Click a block above to toggle it as a plaza.");
+            gridPreviewHint = new Label("Click a block above to toggle it as a plaza.");
             gridPreviewHint.AddToClassList("cg-grid-preview__caption");
             content.Add(gridPreviewHint);
 
-            content.Add(CreateIntSlider(FindProperty("general.gridWidth"), "Grid Width", MinGridSize, MaxGridSize));
-            content.Add(CreateIntSlider(FindProperty("general.gridHeight"), "Grid Height", MinGridSize, MaxGridSize));
+            gridSizeSliders = new VisualElement();
+            gridSizeSliders.Add(CreateIntSlider(FindProperty("general.gridWidth"), "Grid Width", CityGeneratorConstants.MinGridSize, CityGeneratorConstants.MaxGridSize));
+            gridSizeSliders.Add(CreateIntSlider(FindProperty("general.gridHeight"), "Grid Height", CityGeneratorConstants.MinGridSize, CityGeneratorConstants.MaxGridSize));
+            content.Add(gridSizeSliders);
             content.Add(CreateIntSlider(FindProperty("general.buildingsPerBlock"), "Buildings Per Block", 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock));
 
             content.Add(CreateField("general.useCustomSeed", "Custom Seed"));
@@ -278,6 +308,45 @@ namespace CityGenerator.Editor
             this.seedField = seedField;
         }
 
+        /// <summary>
+        /// "Customize"/"Exit Customize": the single deliberate blocking dialog in the tool, since
+        /// entering Customize mode is destructive (resets customBlockCells/plazaCells).
+        /// </summary>
+        private void ToggleCustomizeMode()
+        {
+            SerializedProperty useCustomGridProperty = FindProperty("general.useCustomGrid");
+            useCustomGridProperty.serializedObject.Update();
+
+            if (!useCustomGridProperty.boolValue)
+            {
+                if (!EditorUtility.DisplayDialog("Enter Customize mode?", "This resets the current grid", "Continue", "Cancel"))
+                    return;
+
+                SerializedProperty customBlockCellsProperty = FindProperty("general.customBlockCells");
+                SerializedProperty plazaCellsProperty = FindProperty("general.plazaCells");
+                customBlockCellsProperty.ClearArray();
+                int centre = CityGeneratorConstants.MaxGridSize / 2;
+                customBlockCellsProperty.InsertArrayElementAtIndex(0);
+                customBlockCellsProperty.GetArrayElementAtIndex(0).vector2IntValue = new Vector2Int(centre, centre);
+                plazaCellsProperty.ClearArray();
+                useCustomGridProperty.boolValue = true;
+                customAreaSubmode = true;
+            }
+            else
+            {
+                useCustomGridProperty.boolValue = false;
+            }
+
+            useCustomGridProperty.serializedObject.ApplyModifiedProperties();
+            RefreshDynamicUi();
+        }
+
+        private void SetCustomAreaSubmode(bool defineArea)
+        {
+            customAreaSubmode = defineArea;
+            RefreshDynamicUi();
+        }
+
         private void BuildGroundCard(VisualElement parent)
         {
             CityGeneratorCard card = AddCard(parent, "ground", "Ground", "d_Terrain Icon", defaultExpanded: false, TabCity);
@@ -285,6 +354,8 @@ namespace CityGenerator.Editor
             AddRequiredField(card.ContentContainer, "ground.sidewalkPrefab", "Sidewalk Prefab", () => true);
             AddRequiredField(card.ContentContainer, "ground.roadLinePrefab", "Road Line Prefab", () => true);
             AddRequiredField(card.ContentContainer, "ground.crosswalkLinePrefab", "Crosswalk Line Prefab", () => true);
+            AddRequiredField(card.ContentContainer, "ground.emptyBlockPrefab", "Empty Block Prefab (custom grids only)",
+                () => FindProperty("general.useCustomGrid").boolValue);
         }
 
         private void BuildPlazaCard(VisualElement parent)
@@ -631,15 +702,17 @@ namespace CityGenerator.Editor
             if (serializedWindow == null)
                 return;
 
+            bool useCustomGrid = FindProperty("general.useCustomGrid").boolValue;
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
             int plazaCount = FindProperty("general.plazaCells").arraySize;
-            int blockCount = gridWidth * gridHeight;
+            int customBlockCount = FindProperty("general.customBlockCells").arraySize;
+            int blockCount = useCustomGrid ? customBlockCount : gridWidth * gridHeight;
             int buildingsPerBlock = FindProperty("general.buildingsPerBlock").intValue;
             int vehicleCount = FindProperty("general.vehicleCount").intValue;
             int pedestrianCount = FindProperty("general.pedestrianCount").intValue;
 
-            generalCard.SetBadge($"{gridWidth} x {gridHeight}");
+            generalCard.SetBadge(useCustomGrid ? $"{customBlockCount} blocks (custom)" : $"{gridWidth} x {gridHeight}");
             buildingsCard.SetBadge($"{FindProperty("buildingPrefabs").arraySize} prefabs");
             vegetationCard.SetBadge($"{FindProperty("vegetation.prefabs").arraySize} prefabs");
             trafficCard.SetBadge(FindProperty("general.includeTraffic").boolValue ? $"{vehicleCount} vehicles" : "Disabled");
@@ -657,8 +730,28 @@ namespace CityGenerator.Editor
             pedestrianBehaviourCard.SetBadge($"{paceFraction:P0} pace");
             crowdCard.SetBadge($"{FindProperty("crowd.staggerMinAgentCount").intValue}+ staggered");
 
+            customizeButton.text = useCustomGrid ? "Exit Customize" : "Customize";
+            customSubmodeSelector.style.display = useCustomGrid ? DisplayStyle.Flex : DisplayStyle.None;
+            gridSizeSliders.style.display = useCustomGrid ? DisplayStyle.None : DisplayStyle.Flex;
+            defineAreaButton.SetEnabled(!customAreaSubmode);
+            definePlazasButton.SetEnabled(customAreaSubmode);
+
+            if (useCustomGrid && customAreaSubmode)
+            {
+                gridPreview.BindCustomArea(FindProperty("general.customBlockCells"), RefreshDynamicUi);
+                gridPreviewHint.text = "Click a \"+\" to add a block adjacent to the shape, or a \"-\" to remove a block without splitting it or emptying the shape.";
+            }
+            else
+            {
+                gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
+                gridPreview.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
+                gridPreviewHint.text = "Click a block above to toggle it as a plaza.";
+            }
+
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
+            customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
+            customPlaceList.SetPlazaMask(FindProperty("general.plazaCells"));
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
             ambienceCard.SetBadge(FindProperty("audio.ambience.enabled").boolValue
@@ -672,8 +765,28 @@ namespace CityGenerator.Editor
                 : "Off");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
             int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
-            float totalSize = gridWidth * CityGeneratorConstants.CellPitch;
-            float totalSizeZ = gridHeight * CityGeneratorConstants.CellPitch;
+            float totalSize;
+            float totalSizeZ;
+            if (useCustomGrid)
+            {
+                SerializedProperty customCellsProperty = FindProperty("general.customBlockCells");
+                int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+                for (int i = 0; i < customCellsProperty.arraySize; i++)
+                {
+                    Vector2Int cell = customCellsProperty.GetArrayElementAtIndex(i).vector2IntValue;
+                    minX = Mathf.Min(minX, cell.x); maxX = Mathf.Max(maxX, cell.x);
+                    minY = Mathf.Min(minY, cell.y); maxY = Mathf.Max(maxY, cell.y);
+                }
+                int spanX = customCellsProperty.arraySize > 0 ? maxX - minX + 1 : 0;
+                int spanY = customCellsProperty.arraySize > 0 ? maxY - minY + 1 : 0;
+                totalSize = spanX * CityGeneratorConstants.CellPitch;
+                totalSizeZ = spanY * CityGeneratorConstants.CellPitch;
+            }
+            else
+            {
+                totalSize = gridWidth * CityGeneratorConstants.CellPitch;
+                totalSizeZ = gridHeight * CityGeneratorConstants.CellPitch;
+            }
             gridPreviewCaption.text = $"{blockCount} blocks ({plazaCount} plaza) · {totalSize:0}m x {totalSizeZ:0}m";
             int customPlaceCount = FindProperty("customPlaces").arraySize;
             summaryLine.text = $"~{estimatedBuildings} buildings · {vehicleCount} vehicles · {pedestrianCount} pedestrians · {customPlaceCount} custom places";
@@ -779,21 +892,55 @@ namespace CityGenerator.Editor
         /// </summary>
         private string GetVehicleDensityWarning()
         {
+            bool useCustomGrid = FindProperty("general.useCustomGrid").boolValue;
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
             int vehicleCount = FindProperty("general.vehicleCount").intValue;
             if (vehicleCount <= 0)
                 return null;
 
-            int validNodes = TrafficNetwork.EstimateValidSpawnNodeCount(gridWidth + 1, gridHeight + 1);
+            int validNodes = useCustomGrid
+                ? TrafficNetwork.EstimateValidSpawnNodeCountCustom(ReadCustomBlockCells())
+                : TrafficNetwork.EstimateValidSpawnNodeCount(gridWidth + 1, gridHeight + 1);
+            if (validNodes <= 0)
+                return null;
+
             float occupancy = (float)vehicleCount / validNodes;
             if (occupancy <= CityGeneratorConstants.VehicleDensityWarningThreshold)
                 return null;
 
             int recommendedMax = Mathf.FloorToInt(validNodes * CityGeneratorConstants.VehicleDensityWarningThreshold);
+            string gridDescription = useCustomGrid ? "this custom shape" : $"this {gridWidth}x{gridHeight} grid";
             return $"{vehicleCount} vehicles is {occupancy:P0} of this grid's {validNodes} spawn points. " +
                    $"Traffic has no route planning, so it tends to gridlock above ~{CityGeneratorConstants.VehicleDensityWarningThreshold:P0} " +
-                   $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
+                   $"(recommended max ~{recommendedMax} for {gridDescription}).";
+        }
+
+        /// <summary>How many block edges of <paramref name="cells"/> face out of the shape: the
+        /// length of its contour, in block edges, which is what the perimeter walkway follows.</summary>
+        private static int CountContourEdges(List<Vector2Int> cells)
+        {
+            var cellSet = new HashSet<Vector2Int>(cells);
+            int count = 0;
+            foreach (Vector2Int cell in cellSet)
+            {
+                if (!cellSet.Contains(cell + new Vector2Int(1, 0))) count++;
+                if (!cellSet.Contains(cell + new Vector2Int(-1, 0))) count++;
+                if (!cellSet.Contains(cell + new Vector2Int(0, 1))) count++;
+                if (!cellSet.Contains(cell + new Vector2Int(0, -1))) count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>Reads <c>general.customBlockCells</c> into a plain list, for the Custom Grid density estimators.</summary>
+        private List<Vector2Int> ReadCustomBlockCells()
+        {
+            SerializedProperty property = FindProperty("general.customBlockCells");
+            var cells = new List<Vector2Int>(property.arraySize);
+            for (int i = 0; i < property.arraySize; i++)
+                cells.Add(property.GetArrayElementAtIndex(i).vector2IntValue);
+            return cells;
         }
 
         /// <summary>
@@ -807,28 +954,41 @@ namespace CityGenerator.Editor
         /// </summary>
         private string GetPedestrianDensityWarning()
         {
+            bool useCustomGrid = FindProperty("general.useCustomGrid").boolValue;
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
             int pedestrianCount = FindProperty("general.pedestrianCount").intValue;
             if (pedestrianCount <= 0)
                 return null;
 
-            int totalBlocks = gridWidth * gridHeight;
+            int totalBlocks = useCustomGrid ? FindProperty("general.customBlockCells").arraySize : gridWidth * gridHeight;
             int plazaBlockCount = FindProperty("general.plazaCells").arraySize;
             int normalBlockCount = totalBlocks - plazaBlockCount;
 
             int ringNodeCount = 8 * totalBlocks;
             int interiorNodeCount = 5 * normalBlockCount;
 
-            int totalNodeCount = ringNodeCount + interiorNodeCount;
+            // The perimeter walkway adds 3 Ring nodes per block-length of contour, plus a node at
+            // each corner the contour turns; the corners are left out here, same tolerance for
+            // approximation as the rest of this estimate.
+            int contourEdgeCount = useCustomGrid
+                ? CountContourEdges(ReadCustomBlockCells())
+                : 2 * (gridWidth + gridHeight);
+            int perimeterNodeCount = 3 * contourEdgeCount;
+
+            int totalNodeCount = ringNodeCount + interiorNodeCount + perimeterNodeCount;
+            if (totalNodeCount <= 0)
+                return null;
+
             float occupancy = (float)pedestrianCount / totalNodeCount;
             if (occupancy <= CityGeneratorConstants.PedestrianCountWarningThreshold)
                 return null;
 
             int recommendedMax = Mathf.FloorToInt(totalNodeCount * CityGeneratorConstants.PedestrianCountWarningThreshold);
+            string gridDescription = useCustomGrid ? "this custom shape" : $"this {gridWidth}x{gridHeight} grid";
             return $"{pedestrianCount} pedestrians is {occupancy:P0} of this grid's ~{totalNodeCount} walkable spawn/route points. " +
                    $"Above ~{CityGeneratorConstants.PedestrianCountWarningThreshold:P0} the crowd starts reading as overcrowded " +
-                   $"(recommended max ~{recommendedMax} for a {gridWidth}x{gridHeight} grid).";
+                   $"(recommended max ~{recommendedMax} for {gridDescription}).";
         }
 
         /// <summary>

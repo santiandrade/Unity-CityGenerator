@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 
+- Custom Grid: every gap of a custom shape is now filled with a new "Empty Block Prefab (custom
+  grids only)" ground slab (Ground card, defaulting to the same lawn prefab the plazas use and
+  placed at the same height), so a custom city comes out as the plain rectangle of its own
+  bounding box instead of ending in holes of empty space — a shape spanning 6 x 8 blocks generates
+  a 6 x 8 city. The fill stops exactly at the outer edge of the perimeter sidewalk instead of
+  covering it, and is a blocking validation error to leave unassigned while Customize mode is on.
+
+- A generated city now always ends in sidewalk instead of in bare asphalt, on both the
+  rectangular and the Custom Grid footprint: a 6 m sidewalk band is laid on the far side of every
+  perimeter street, following the shape's own contour (the inner contour of a Custom Grid hole
+  included), so that street has a walkable far side exactly like an interior one. The ground
+  reaches 11 m past the outermost street axis instead of 6 m to carry it, which the road base, the
+  minimap snapshot footprint and the window's size preview all follow automatically.
+- The pedestrian network gained a walkway along that perimeter sidewalk, reached from the blocks
+  through the crosswalk already painted at every border T-intersection -- which until now led
+  nowhere, since a crosswalk arm with no block behind it was skipped. Its nodes are ordinary
+  walkable `Ring` nodes, so pedestrians spawn on and walk to the perimeter like any other
+  sidewalk, and the Pedestrians tab's density estimate accounts for them.
+- Custom Grid: a "Customize" button on the General Options card's grid preview replaces the
+  rectangular `Grid Width` x `Grid Height` footprint with an arbitrarily shaped, hand-edited
+  poliomino (no islands) on a fixed 10x10 canvas. A "Define City Area" / "Define Plazas" selector
+  switches the preview between adding/removing blocks (with live "+"/"-" affordances gated by
+  contiguity) and toggling plazas on the real blocks only. Streets, sidewalks, road markings,
+  traffic lights/network and the pedestrian network are all generated to match the shape's
+  contour instead of a full rectangle; the minimap frames the shape's own bounding box. A Custom
+  Place whose block is removed under it is flagged as a blocking validation error, same as an
+  out-of-range block on a grid resize. Traffic lights and pedestrian crossings are placed at every
+  intersection with at least 3 real street arms (a full 4-way or a T-intersection, including one
+  on the shape's own border) — a plain 2-arm perimeter corner never gets one, since a car arriving
+  there has only one possible way through. The vehicle/pedestrian density `HelpBox`es on the
+  Traffic/Pedestrians tabs are shape-aware in Custom Grid mode instead of staying pinned to the
+  grid's old `Grid Width`/`Grid Height` values.
+- Custom Place entry pickers (City tab) overlay the General Options grid's configured plazas in
+  green, as a visual reference for where plazas already sit while placing a Custom Place.
 - Player > Player card gained an "Enabled" toggle (`general.playerEnabled`). Player Prefab and
   Input Actions are now only required when it's on, and no player is spawned when it's off, even
   if a Player Prefab is still assigned.
@@ -22,9 +56,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   card / vehicles card.
 - New "Pedestrian Settings" card on the Pedestrians tab ("Enabled", "Pedestrian Count", plus the
   pedestrian-density and isolated-blocks `HelpBox`es), moved out of the City tab's General card.
+- Traffic lights and pedestrian crossings are now also placed at a classic (non-Custom Grid)
+  city's own border T-intersections, not just at strictly-interior 4-way crossings — previously
+  every side of a rectangular grid had none at all.
 - The "~N buildings · N vehicles · N pedestrians" summary line moved out of the City tab's General
   card and into the footer, above the build/rebuild/reset buttons, so it stays visible on every tab;
   it now also reports the custom place count.
+
+### Fixed
+
+- The minimap no longer smears its border pixels across the HUD when the player gets close to a
+  city edge. `MinimapHUD` keeps the player exactly centred, so its `uvRect` window necessarily
+  reaches past the snapshot within View Radius of an edge, and the snapshot's `Clamp` wrap mode
+  then repeated its outermost row/column outwards -- stretching whatever sat on that border (an
+  empty block's grass, a strip of sidewalk) over the rest of the map. The map image now uses a new
+  `MinimapWindow` material whose shader paints anything outside the snapshot with the capture
+  camera's own background colour instead.
+
+- Vehicles no longer strand themselves at the city's outer edge. A vehicle's *initial* target
+  comes from a blind spatial search (`TrafficNetwork.FindNodeAhead`), not from the graph, so one
+  spawned on a perimeter entry facing out of the city locked onto the outward-facing exit node
+  past the intersection -- a dead end -- drove to it and disabled itself on arrival, parked there
+  for the rest of the session (5 of 80 cars on a 5x5 grid). That search now never returns a node
+  with no exits of its own, and a vehicle standing exactly on a node targets that node rather than
+  the next one along, so it arrives immediately and gets routed properly, turns included.
+- Custom Grid: a `RoadBaseMargin`-square gap was left uncovered at every outward-facing corner of
+  the shape (the edge margin strips only covered the shape's straight sides, never its corners).
+  Both contour bands are now tiled as an exact dilation difference, which also removes the
+  z-fighting overlap the old per-block strips left at every concave corner.
+- Custom Grid: `TrafficNetwork`/`PedestrianNetwork`'s custom-shape state (`useCustomShape` and the
+  real block/plaza/reserved cell sets) was held in plain, unserialized fields. It survived only
+  until the next domain reload or scene reload, at which point `Awake()` silently rebuilt the
+  graph as an unrestricted full rectangle over the whole 10x10 canvas — the built geometry stayed
+  correctly shaped (it's static), but vehicles routed and drove across the entire canvas,
+  including holes with nothing built there. Now `[SerializeField]`.
+- Custom Grid: a vehicle reaching a genuine dead end (a street legitimately ending at the shape's
+  own boundary) used to fall back to a "nearest node ahead" search across the *entire* network
+  instead of stopping, occasionally latching onto an unrelated, disconnected node far outside the
+  built shape and driving off-road to reach it. The vehicle now simply stops, same as when no
+  network node can be found ahead of it at spawn time.
 
 ## [2.6.0] - 2026-08-30
 ### Added

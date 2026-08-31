@@ -42,6 +42,9 @@ namespace CityGenerator.Editor
             if (settings.ground.crosswalkLinePrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("ground.crosswalkLinePrefab", "Ground: Crosswalk Line prefab is required."));
 
+            if (settings.general.useCustomGrid && settings.ground.emptyBlockPrefab == null)
+                issues.Add(new CityGeneratorValidationIssue("ground.emptyBlockPrefab", "Ground: Empty Block prefab is required while Customize mode is on (it fills the gaps of the custom shape)."));
+
             if (settings.general.plazaCells.Count > 0 && settings.plaza.lawnPrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("plaza.lawnPrefab", "Plaza: Lawn prefab is required when at least one plaza cell is selected."));
 
@@ -75,7 +78,10 @@ namespace CityGenerator.Editor
             if (settings.general.inputActions != null)
                 ValidateInputActions(settings, issues);
 
-            if (settings.general.gridWidth > 1 && settings.general.gridHeight > 1)
+            bool hasInteriorIntersection = settings.general.useCustomGrid
+                ? HasFourWayIntersection(settings.general.customBlockCells)
+                : settings.general.gridWidth > 1 && settings.general.gridHeight > 1;
+            if (hasInteriorIntersection)
             {
                 if (settings.props.trafficLightPrefab == null)
                 {
@@ -194,6 +200,17 @@ namespace CityGenerator.Editor
             return !issues.Exists(issue => !issue.isWarning);
         }
 
+        private static bool HasFourWayIntersection(List<Vector2Int> customBlockCells)
+        {
+            var cellSet = new HashSet<Vector2Int>(customBlockCells);
+            foreach (Vector2Int cell in cellSet)
+            {
+                if (cellSet.Contains(cell + new Vector2Int(1, 0)) && cellSet.Contains(cell + new Vector2Int(0, 1)) && cellSet.Contains(cell + new Vector2Int(1, 1)))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>Blocking: an enabled Ambience/Plazas card with no entries, or an entry missing its clip, would silently play nothing — same "required field" treatment as every other prefab list in the tool.</summary>
         private static void ValidateAudio(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
         {
@@ -235,12 +252,28 @@ namespace CityGenerator.Editor
                     $"Minimap: Texture Resolution {settings.minimap.textureResolution}px is above {MinimapTextureResolutionWarningThreshold}px — a large snapshot costs noticeable texture memory and disk space for the generated PNG asset.",
                     isWarning: true));
 
-            float width = settings.general.gridWidth * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
-            float depth = settings.general.gridHeight * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            float width;
+            float depth;
+            if (settings.general.useCustomGrid && settings.general.customBlockCells.Count > 0)
+            {
+                int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+                foreach (Vector2Int cell in settings.general.customBlockCells)
+                {
+                    minX = Mathf.Min(minX, cell.x); maxX = Mathf.Max(maxX, cell.x);
+                    minY = Mathf.Min(minY, cell.y); maxY = Mathf.Max(maxY, cell.y);
+                }
+                width = (maxX - minX + 1) * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+                depth = (maxY - minY + 1) * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            }
+            else
+            {
+                width = settings.general.gridWidth * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+                depth = settings.general.gridHeight * CityGeneratorConstants.CellPitch + 2f * CityGeneratorConstants.RoadBaseMargin;
+            }
             float coveredHalfExtent = Mathf.Min(width, depth) / 2f;
             if (settings.minimap.viewRadiusMeters > coveredHalfExtent)
                 issues.Add(new CityGeneratorValidationIssue("minimap.viewRadiusMeters",
-                    $"Minimap: View Radius ({settings.minimap.viewRadiusMeters:0.#}m) is larger than the snapshot's covered world size (~{coveredHalfExtent:0.#}m half-extent for this {settings.general.gridWidth}x{settings.general.gridHeight} grid) — the HUD could never zoom out far enough to show it.",
+                    $"Minimap: View Radius ({settings.minimap.viewRadiusMeters:0.#}m) is larger than the snapshot's covered world size (~{coveredHalfExtent:0.#}m half-extent) — the HUD could never zoom out far enough to show it.",
                     isWarning: true));
         }
 
@@ -255,6 +288,7 @@ namespace CityGenerator.Editor
         {
             List<CustomPlaceEntry> customPlaces = settings.customPlaces;
             var plazaLookup = new HashSet<Vector2Int>(settings.general.plazaCells);
+            var customBlockLookup = settings.general.useCustomGrid ? new HashSet<Vector2Int>(settings.general.customBlockCells) : null;
 
             for (int i = 0; i < customPlaces.Count; i++)
             {
@@ -273,12 +307,22 @@ namespace CityGenerator.Editor
                     continue;
                 }
 
-                bool inGrid = entry.blockCell.x >= 0 && entry.blockCell.x < settings.general.gridWidth
-                    && entry.blockCell.y >= 0 && entry.blockCell.y < settings.general.gridHeight;
-                if (!inGrid)
-                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), outside the {settings.general.gridWidth}x{settings.general.gridHeight} grid."));
-                else if (plazaLookup.Contains(entry.blockCell))
-                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which is a plaza block."));
+                if (settings.general.useCustomGrid)
+                {
+                    if (!customBlockLookup.Contains(entry.blockCell))
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which no longer exists in the custom grid shape."));
+                    else if (plazaLookup.Contains(entry.blockCell))
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which is a plaza block."));
+                }
+                else
+                {
+                    bool inGrid = entry.blockCell.x >= 0 && entry.blockCell.x < settings.general.gridWidth
+                        && entry.blockCell.y >= 0 && entry.blockCell.y < settings.general.gridHeight;
+                    if (!inGrid)
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), outside the {settings.general.gridWidth}x{settings.general.gridHeight} grid."));
+                    else if (plazaLookup.Contains(entry.blockCell))
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which is a plaza block."));
+                }
             }
 
             for (int i = 0; i < customPlaces.Count; i++)

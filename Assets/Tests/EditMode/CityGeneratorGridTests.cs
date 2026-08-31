@@ -71,5 +71,99 @@ namespace CityGenerator.Tests.EditMode
 
             Assert.AreEqual(-last, first, 0.0001f);
         }
+
+        [Test]
+        public void BuildBlocks_CustomShape_ReturnsOnlyListedCells()
+        {
+            var shape = new List<Vector2Int> { new(4, 4), new(5, 4), new(5, 5) };
+            List<BlockCell> cells = CityGeneratorGrid.BuildBlocks(shape, new List<Vector2Int> { new(5, 5) });
+
+            Assert.AreEqual(3, cells.Count);
+            foreach (var coord in shape)
+            {
+                BlockCell cell = cells.Find(c => c.gridX == coord.x && c.gridY == coord.y);
+                Assert.AreEqual(coord == new Vector2Int(5, 5), cell.isPlaza, $"Cell {coord}");
+            }
+        }
+
+        [Test]
+        public void BuildBlocks_CustomShape_PositionIndependentOfShapeExtent()
+        {
+            // A block's world position must not shift when the shape around it grows/shrinks:
+            // both use the fixed MaxGridSize canvas, not the shape's own bounding box.
+            var smallShape = new List<Vector2Int> { new(4, 4) };
+            var largeShape = new List<Vector2Int> { new(4, 4), new(5, 4), new(4, 5), new(3, 4) };
+
+            Vector3 posInSmallShape = CityGeneratorGrid.BuildBlocks(smallShape, new List<Vector2Int>())[0].center;
+            BlockCell sameCellInLargeShape = CityGeneratorGrid.BuildBlocks(largeShape, new List<Vector2Int>())
+                .Find(c => c.gridX == 4 && c.gridY == 4);
+
+            Assert.AreEqual(posInSmallShape, sameCellInLargeShape.center);
+        }
+
+        [Test]
+        public void IsValidAddition_SingleCell_OnlyOrthogonalNeighborsAreValid()
+        {
+            var existing = new List<Vector2Int> { new(5, 5) };
+
+            Assert.IsTrue(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(6, 5)));
+            Assert.IsTrue(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(4, 5)));
+            Assert.IsTrue(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(5, 6)));
+            Assert.IsTrue(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(5, 4)));
+        }
+
+        [Test]
+        public void IsValidAddition_DiagonalNeighborDoesNotCount()
+        {
+            var existing = new List<Vector2Int> { new(5, 5) };
+            Assert.IsFalse(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(6, 6)));
+        }
+
+        [Test]
+        public void IsValidAddition_AlreadyExistingCellIsInvalid()
+        {
+            var existing = new List<Vector2Int> { new(5, 5) };
+            Assert.IsFalse(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(5, 5)));
+        }
+
+        [Test]
+        public void IsValidAddition_OutsideCanvasIsInvalid()
+        {
+            var existing = new List<Vector2Int> { new(0, 0) };
+            Assert.IsFalse(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(-1, 0)));
+            Assert.IsFalse(CityGeneratorGrid.IsValidAddition(existing, new Vector2Int(0, CityGeneratorConstants.MaxGridSize)));
+        }
+
+        [Test]
+        public void CanRemoveWithoutSplitting_LShape_TipIsRemovable()
+        {
+            // L shape: (0,0)-(1,0)-(1,1). Removing either tip leaves a connected pair.
+            var lShape = new List<Vector2Int> { new(0, 0), new(1, 0), new(1, 1) };
+
+            Assert.IsTrue(CityGeneratorGrid.CanRemoveWithoutSplitting(lShape, new Vector2Int(0, 0)));
+            Assert.IsTrue(CityGeneratorGrid.CanRemoveWithoutSplitting(lShape, new Vector2Int(1, 1)));
+        }
+
+        [Test]
+        public void CanRemoveWithoutSplitting_RemovingJointWouldSplitShape()
+        {
+            // Straight line of 3: (0,0)-(1,0)-(2,0). Removing the middle cell splits it in two.
+            var line = new List<Vector2Int> { new(0, 0), new(1, 0), new(2, 0) };
+            Assert.IsFalse(CityGeneratorGrid.CanRemoveWithoutSplitting(line, new Vector2Int(1, 0)));
+        }
+
+        [Test]
+        public void CanRemoveWithoutSplitting_LastRemainingCellCannotBeRemoved()
+        {
+            var single = new List<Vector2Int> { new(5, 5) };
+            Assert.IsFalse(CityGeneratorGrid.CanRemoveWithoutSplitting(single, new Vector2Int(5, 5)));
+        }
+
+        [Test]
+        public void CanRemoveWithoutSplitting_CellNotInShapeReturnsFalse()
+        {
+            var shape = new List<Vector2Int> { new(0, 0), new(1, 0) };
+            Assert.IsFalse(CityGeneratorGrid.CanRemoveWithoutSplitting(shape, new Vector2Int(9, 9)));
+        }
     }
 }
