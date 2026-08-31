@@ -521,10 +521,26 @@ namespace CityGenerator.Runtime
                     continue;
                 }
 
+                // A node with no exit of its own is a dead end -- an exit node facing off the
+                // city at its own boundary. CarAgent has no route planning or reversing, so
+                // arriving at one strands the vehicle there for good (AdvanceToNextNode disables
+                // it). The graph itself never routes into one; only this search could.
+                if (nodes[i].Exits.Count == 0)
+                {
+                    continue;
+                }
+
                 Vector3 to = nodes[i].Position - position;
                 to.y = 0f;
                 float distance = to.magnitude;
-                if (distance < 0.01f || Vector3.Dot(to / distance, forward) < 0.5f)
+
+                // A vehicle standing exactly on a node targets that node itself -- it arrives on
+                // its first tick and PickNextNode routes it from there, turns included.
+                // CityGeneratorTrafficBuilder spawns every vehicle on a node position, and
+                // skipping the one under it used to send it straight past the intersection
+                // instead: fine mid-city, but at the boundary that is the dead end above, which
+                // is how a perimeter-facing entry stranded its vehicle the moment it arrived.
+                if (distance >= 0.01f && Vector3.Dot(to / distance, forward) < 0.5f)
                 {
                     continue;
                 }

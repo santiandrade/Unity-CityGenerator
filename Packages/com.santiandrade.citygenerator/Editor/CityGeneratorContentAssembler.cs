@@ -95,11 +95,13 @@ namespace CityGenerator.Editor
             {
                 CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, settings.general.customBlockCells);
                 CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, settings.general.customBlockCells);
+                CityGeneratorGroundBuilder.BuildPerimeterSidewalks(settings.ground.sidewalkPrefab, sidewalks, settings.general.customBlockCells);
             }
             else
             {
                 CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, gridWidth, gridHeight);
                 CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, gridWidth, gridHeight);
+                CityGeneratorGroundBuilder.BuildPerimeterSidewalks(settings.ground.sidewalkPrefab, sidewalks, gridWidth, gridHeight);
             }
             CityGeneratorGroundBuilder.BuildSidewalks(settings.ground.sidewalkPrefab, sidewalks, blocks);
 

@@ -70,7 +70,18 @@ namespace CityGenerator.Tests.EditMode.Generation
             Assert.Greater(trafficNetwork.NodeCount, 0);
 
             Transform sidewalks = root.Find("Sidewalks");
-            Assert.AreEqual(shape.Count, sidewalks.childCount, "Exactly one sidewalk per real block, none for holes.");
+            int blockSidewalks = 0;
+            int perimeterSidewalks = 0;
+            foreach (Transform sidewalk in sidewalks)
+            {
+                if (sidewalk.name.StartsWith("Sidewalk_Perimeter"))
+                    perimeterSidewalks++;
+                else
+                    blockSidewalks++;
+            }
+
+            Assert.AreEqual(shape.Count, blockSidewalks, "Exactly one sidewalk per real block, none for holes.");
+            Assert.Greater(perimeterSidewalks, 0, "The city's outer contour must end in sidewalk, not in bare asphalt.");
 
             var minimapData = root.GetComponent<MinimapData>();
             Assert.IsNotNull(minimapData, "Minimap is enabled by default and must still be built for a custom shape.");

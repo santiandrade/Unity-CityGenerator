@@ -21,11 +21,9 @@ namespace CityGenerator.Editor
             CityGeneratorBoundsUtility.ScaleToFootprint(instance, width, depth);
         }
 
-        private static readonly Vector2Int[] Neighbors4 = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
-
         /// <summary>
         /// Custom Grid overload (SPEC 11): one full-pitch road base tile per real block (so
-        /// adjacent tiles abut exactly, with no gap or double-cover), plus a margin strip beyond
+        /// adjacent tiles abut exactly, with no gap or double-cover), plus the outer band beyond
         /// any edge that has no neighboring block -- reproducing the rectangular path's outer
         /// RoadBaseMargin at the shape's own contour instead of a fixed rectangle.
         /// </summary>
@@ -43,47 +41,204 @@ namespace CityGenerator.Editor
                 instance.transform.localPosition = new Vector3(center.x, CityGeneratorConstants.RoadBaseY, center.z);
                 CityGeneratorBoundsUtility.ScaleToFootprint(instance, CityGeneratorConstants.CellPitch, CityGeneratorConstants.CellPitch);
                 index++;
+            }
 
-                bool northOpen = !cellSet.Contains(cell + new Vector2Int(0, 1));
-                bool southOpen = !cellSet.Contains(cell + new Vector2Int(0, -1));
-                bool eastOpen = !cellSet.Contains(cell + new Vector2Int(1, 0));
-                bool westOpen = !cellSet.Contains(cell + new Vector2Int(-1, 0));
+            float half = CityGeneratorConstants.CellPitch / 2f;
+            foreach (BandRect rect in EnumerateBand(cellSet, CanvasCentre, half, half + CityGeneratorConstants.RoadBaseMargin))
+            {
+                GameObject marginInstance = InstantiatePrefab(roadBasePrefab, roadsGroup, $"Road_Base_{index}_Margin");
+                marginInstance.transform.localPosition = new Vector3(rect.centerX, CityGeneratorConstants.RoadBaseY, rect.centerZ);
+                CityGeneratorBoundsUtility.ScaleToFootprint(marginInstance, rect.width, rect.depth);
+                index++;
+            }
+        }
 
-                foreach (Vector2Int dir in Neighbors4)
+        /// <summary>
+        /// The sidewalk band that closes the city at its outer contour, so a generated city always
+        /// ends in sidewalk rather than in bare asphalt: a PerimeterSidewalkWidth strip laid on the
+        /// far side of every perimeter street, following the shape's own contour (including the
+        /// inner contour of a Custom Grid hole).
+        /// </summary>
+        public static void BuildPerimeterSidewalks(GameObject sidewalkPrefab, Transform sidewalksGroup, int gridWidth, int gridHeight)
+        {
+            var cellSet = new HashSet<Vector2Int>();
+            for (int gx = 0; gx < gridWidth; gx++)
+            {
+                for (int gy = 0; gy < gridHeight; gy++)
                 {
-                    if (cellSet.Contains(cell + dir))
-                        continue;
-
-                    bool horizontal = dir.x != 0;
-                    Vector3 edgeOffset = new Vector3(dir.x, 0f, dir.y) * (CityGeneratorConstants.CellPitch / 2f + CityGeneratorConstants.RoadBaseMargin / 2f);
-                    Vector3 marginCenter = center + edgeOffset;
-
-                    GameObject marginInstance = InstantiatePrefab(roadBasePrefab, roadsGroup, $"Road_Base_{index}_Margin");
-                    marginInstance.transform.localPosition = new Vector3(marginCenter.x, CityGeneratorConstants.RoadBaseY, marginCenter.z);
-                    float w = horizontal ? CityGeneratorConstants.RoadBaseMargin : CityGeneratorConstants.CellPitch;
-                    float d = horizontal ? CityGeneratorConstants.CellPitch : CityGeneratorConstants.RoadBaseMargin;
-                    CityGeneratorBoundsUtility.ScaleToFootprint(marginInstance, w, d);
-                    index++;
-                }
-
-                // A convex corner (two perpendicular open edges) leaves a RoadBaseMargin-square
-                // gap diagonally beyond the cell that neither edge strip above covers.
-                foreach (Vector2Int corner in new[] { new Vector2Int(1, 1), new Vector2Int(1, -1), new Vector2Int(-1, 1), new Vector2Int(-1, -1) })
-                {
-                    bool xOpen = corner.x > 0 ? eastOpen : westOpen;
-                    bool zOpen = corner.y > 0 ? northOpen : southOpen;
-                    if (!xOpen || !zOpen)
-                        continue;
-
-                    Vector3 cornerOffset = new Vector3(corner.x, 0f, corner.y) * (CityGeneratorConstants.CellPitch / 2f + CityGeneratorConstants.RoadBaseMargin / 2f);
-                    Vector3 cornerCenter = center + cornerOffset;
-
-                    GameObject cornerInstance = InstantiatePrefab(roadBasePrefab, roadsGroup, $"Road_Base_{index}_Corner");
-                    cornerInstance.transform.localPosition = new Vector3(cornerCenter.x, CityGeneratorConstants.RoadBaseY, cornerCenter.z);
-                    CityGeneratorBoundsUtility.ScaleToFootprint(cornerInstance, CityGeneratorConstants.RoadBaseMargin, CityGeneratorConstants.RoadBaseMargin);
-                    index++;
+                    cellSet.Add(new Vector2Int(gx, gy));
                 }
             }
+
+            BuildPerimeterSidewalks(sidewalkPrefab, sidewalksGroup, cellSet,
+                cell => CityGeneratorGrid.GetBlockCenter(cell.x, cell.y, gridWidth, gridHeight));
+        }
+
+        /// <summary>Custom Grid overload of <see cref="BuildPerimeterSidewalks(GameObject, Transform, int, int)"/>.</summary>
+        public static void BuildPerimeterSidewalks(GameObject sidewalkPrefab, Transform sidewalksGroup, IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            BuildPerimeterSidewalks(sidewalkPrefab, sidewalksGroup, new HashSet<Vector2Int>(blockCells), CanvasCentre);
+        }
+
+        private static void BuildPerimeterSidewalks(GameObject sidewalkPrefab, Transform sidewalksGroup, HashSet<Vector2Int> cellSet, System.Func<Vector2Int, Vector3> centreOf)
+        {
+            float half = CityGeneratorConstants.CellPitch / 2f;
+            float inner = half + CityGeneratorConstants.StreetWidth / 2f;
+            float outer = half + CityGeneratorConstants.RoadBaseMargin;
+
+            int index = 0;
+            foreach (BandRect rect in EnumerateBand(cellSet, centreOf, inner, outer))
+            {
+                GameObject instance = InstantiatePrefab(sidewalkPrefab, sidewalksGroup, $"Sidewalk_Perimeter_{index}");
+                instance.transform.localPosition = new Vector3(rect.centerX, CityGeneratorConstants.SidewalkY, rect.centerZ);
+                CityGeneratorBoundsUtility.ScaleToFootprint(instance, rect.width, rect.depth);
+                index++;
+            }
+        }
+
+        private static Vector3 CanvasCentre(Vector2Int cell)
+        {
+            int canvas = CityGeneratorConstants.MaxGridSize;
+            return CityGeneratorGrid.GetBlockCenter(cell.x, cell.y, canvas, canvas);
+        }
+
+        /// <summary>One axis-aligned tile of the band that wraps the city's contour.</summary>
+        private readonly struct BandRect
+        {
+            public readonly float centerX;
+            public readonly float centerZ;
+            public readonly float width;
+            public readonly float depth;
+
+            public BandRect(float centerX, float centerZ, float width, float depth)
+            {
+                this.centerX = centerX;
+                this.centerZ = centerZ;
+                this.width = width;
+                this.depth = depth;
+            }
+        }
+
+        /// <summary>
+        /// Tiles the band around the contour of <paramref name="cells"/> that lies between
+        /// <paramref name="innerRadius"/> and <paramref name="outerRadius"/> of a real cell's
+        /// centre (Chebyshev distance, i.e. square rings): exactly the set difference between the
+        /// shape dilated by each radius, which is what makes the result gap-free *and*
+        /// overlap-free -- two tiles at the same Y that covered the same square would z-fight, and
+        /// a convex corner needs an L-shaped piece rather than the square a per-edge tiling gives.
+        ///
+        /// Worked per *missing* cell, whose own 56 m square is cut by the six coordinates where
+        /// either dilation's boundary can fall (+-CellPitch/2 and +-(CellPitch - radius) for each
+        /// radius) into at most 5x5 sub-rectangles, each wholly in or wholly out of the band.
+        /// Sub-rectangles are merged along X so a straight run of contour stays a single tile.
+        /// </summary>
+        private static IEnumerable<BandRect> EnumerateBand(HashSet<Vector2Int> cells, System.Func<Vector2Int, Vector3> centreOf, float innerRadius, float outerRadius)
+        {
+            const float half = CityGeneratorConstants.CellPitch / 2f;
+            const float epsilon = 0.001f;
+            float outerEdge = CityGeneratorConstants.CellPitch - outerRadius;
+            float innerEdge = CityGeneratorConstants.CellPitch - innerRadius;
+            float[] bounds = { -half, -innerEdge, -outerEdge, outerEdge, innerEdge, half };
+
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+            foreach (Vector2Int cell in cells)
+            {
+                minX = Mathf.Min(minX, cell.x);
+                minY = Mathf.Min(minY, cell.y);
+                maxX = Mathf.Max(maxX, cell.x);
+                maxY = Mathf.Max(maxY, cell.y);
+            }
+
+            var neighbours = new List<Vector2Int>(8);
+
+            for (int mx = minX - 1; mx <= maxX + 1; mx++)
+            {
+                for (int my = minY - 1; my <= maxY + 1; my++)
+                {
+                    var m = new Vector2Int(mx, my);
+                    if (cells.Contains(m))
+                        continue;
+
+                    // Only a neighbour within one cell in each axis can reach into this cell's own
+                    // square with either dilation, and this cell itself is not part of the shape.
+                    neighbours.Clear();
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        for (int j = -1; j <= 1; j++)
+                        {
+                            if ((i != 0 || j != 0) && cells.Contains(m + new Vector2Int(i, j)))
+                                neighbours.Add(new Vector2Int(i, j));
+                        }
+                    }
+
+                    if (neighbours.Count == 0)
+                        continue;
+
+                    Vector3 c = centreOf(m);
+
+                    for (int q = 0; q < 5; q++)
+                    {
+                        float depth = bounds[q + 1] - bounds[q];
+                        if (depth <= epsilon)
+                            continue;
+
+                        float z = (bounds[q] + bounds[q + 1]) / 2f;
+                        int runStart = -1;
+
+                        for (int p = 0; p <= 5; p++)
+                        {
+                            bool inBand = p < 5
+                                && bounds[p + 1] - bounds[p] > epsilon
+                                && IsInBand(neighbours, (bounds[p] + bounds[p + 1]) / 2f, z, innerEdge, outerEdge);
+
+                            if (inBand)
+                            {
+                                if (runStart < 0)
+                                    runStart = p;
+                                continue;
+                            }
+
+                            if (runStart < 0)
+                                continue;
+
+                            float from = bounds[runStart];
+                            float to = bounds[p];
+                            yield return new BandRect(c.x + (from + to) / 2f, c.z + z, to - from, depth);
+                            runStart = -1;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether the point at (<paramref name="x"/>, <paramref name="z"/>) local to a missing
+        /// cell's centre is inside the outer dilation of <paramref name="neighbours"/> but outside
+        /// the inner one -- the band itself.
+        /// </summary>
+        private static bool IsInBand(List<Vector2Int> neighbours, float x, float z, float innerEdge, float outerEdge)
+        {
+            bool inOuter = false;
+
+            foreach (Vector2Int neighbour in neighbours)
+            {
+                if (Reaches(x, neighbour.x, innerEdge) && Reaches(z, neighbour.y, innerEdge))
+                    return false;
+
+                inOuter |= Reaches(x, neighbour.x, outerEdge) && Reaches(z, neighbour.y, outerEdge);
+            }
+
+            return inOuter;
+        }
+
+        // Whether a neighbour one cell away in direction `step` (0 = same row/column) covers this
+        // local coordinate, given the dilation reaches to `edge` from the missing cell's centre.
+        private static bool Reaches(float coordinate, int step, float edge)
+        {
+            if (step == 0)
+                return true;
+
+            return step > 0 ? coordinate >= edge : coordinate <= -edge;
         }
 
         public static void BuildSidewalks(GameObject sidewalkPrefab, Transform sidewalksGroup, IReadOnlyList<BlockCell> blocks)

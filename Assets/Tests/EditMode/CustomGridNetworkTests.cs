@@ -103,6 +103,37 @@ namespace CityGenerator.Tests.EditMode
             return count;
         }
 
+        // Centre of a Custom Grid cell on the fixed MaxGridSize (10) canvas, mirroring
+        // CityGeneratorGrid.GetBlockCenter (Editor-only, so not callable from here).
+        private static Vector3 CellCentre(Vector2Int cell)
+            => new((cell.x - 4.5f) * 56f, 0f, (cell.y - 4.5f) * 56f);
+
+        // Ring covers both a block's own 8-node ring and the walkway along the city's perimeter
+        // sidewalk, which sits a whole street away from any block centre. Only the former is
+        // counted here.
+        private int CountBlockRingNodes(IEnumerable<Vector2Int> shape)
+        {
+            int count = 0;
+            for (int i = 0; i < network.NodeCount; i++)
+            {
+                PedestrianNode node = network.GetNode(i);
+                if (node.Kind != PedestrianNodeKind.Ring)
+                    continue;
+
+                foreach (Vector2Int cell in shape)
+                {
+                    Vector3 centre = CellCentre(cell);
+                    if (Mathf.Abs(node.Position.x - centre.x) <= 19.6f && Mathf.Abs(node.Position.z - centre.z) <= 19.6f)
+                    {
+                        count++;
+                        break;
+                    }
+                }
+            }
+
+            return count;
+        }
+
         [Test]
         public void BuildFromBlockCells_LShape_EveryRealBlockGetsARingAndInteriorCross()
         {
@@ -113,7 +144,7 @@ namespace CityGenerator.Tests.EditMode
             network.BuildFromBlockCells(shape, new List<Vector2Int>(), new List<Vector2Int>());
 
             // 3 real blocks, none plaza/fully-reserved: 8-node ring + 5-node Interior cross each.
-            Assert.AreEqual(3 * 8, CountKind(PedestrianNodeKind.Ring));
+            Assert.AreEqual(3 * 8, CountBlockRingNodes(shape));
             Assert.AreEqual(3 * 5, CountKind(PedestrianNodeKind.Interior));
         }
 
@@ -127,7 +158,7 @@ namespace CityGenerator.Tests.EditMode
             var plazas = new List<Vector2Int> { new(6, 5) };
             network.BuildFromBlockCells(shape, plazas, new List<Vector2Int>());
 
-            Assert.AreEqual(2 * 8, CountKind(PedestrianNodeKind.Ring));
+            Assert.AreEqual(2 * 8, CountBlockRingNodes(shape));
             Assert.AreEqual(1 * 5, CountKind(PedestrianNodeKind.Interior));
         }
 
@@ -141,7 +172,7 @@ namespace CityGenerator.Tests.EditMode
             var fullyReserved = new List<Vector2Int> { new(5, 5) };
             network.BuildFromBlockCells(shape, new List<Vector2Int>(), fullyReserved);
 
-            Assert.AreEqual(2 * 8, CountKind(PedestrianNodeKind.Ring));
+            Assert.AreEqual(2 * 8, CountBlockRingNodes(shape));
             Assert.AreEqual(1 * 5, CountKind(PedestrianNodeKind.Interior));
         }
 
@@ -156,7 +187,19 @@ namespace CityGenerator.Tests.EditMode
 
             // Only the single real block's own ring + interior cross: 8 + 5 = 13 nodes, none of
             // them belonging to any other canvas cell.
-            Assert.AreEqual(13, network.NodeCount);
+            Assert.AreEqual(8, CountBlockRingNodes(shape));
+            Assert.AreEqual(5, CountKind(PedestrianNodeKind.Interior));
+
+            // Everything else is the perimeter walkway hugging this one block: 3 nodes per side
+            // plus a corner node at each of the 4 outer corners. Nothing reaches a further cell.
+            Assert.AreEqual(13 + 4 * 3 + 4, network.NodeCount);
+            Vector3 centre = CellCentre(shape[0]);
+            for (int i = 0; i < network.NodeCount; i++)
+            {
+                Vector3 position = network.GetNode(i).Position;
+                Assert.LessOrEqual(Mathf.Abs(position.x - centre.x), 36.1f);
+                Assert.LessOrEqual(Mathf.Abs(position.z - centre.z), 36.1f);
+            }
         }
     }
 }

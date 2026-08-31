@@ -11,7 +11,14 @@ namespace CityGenerator.Editor
         public const float CellPitch = 56f;
         public const float StreetWidth = CellPitch - BlockSize;
 
-        public const float RoadBaseMargin = 6f;
+        // Width of the sidewalk band that closes the city at its outer contour: the city always
+        // ends in sidewalk, never in bare asphalt, so the perimeter street has a walkable far
+        // side exactly like every interior one.
+        public const float PerimeterSidewalkWidth = 6f;
+
+        // Ground extent beyond the outermost street axis: the outer half of that street plus the
+        // perimeter sidewalk laid on top of it.
+        public const float RoadBaseMargin = StreetWidth / 2f + PerimeterSidewalkWidth;
         public const float RoadBaseY = -0.05f;
         public const float SidewalkY = 0.09f;
         public const float MarkingY = 0.012f;

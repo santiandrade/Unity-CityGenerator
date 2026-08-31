@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 
+- A generated city now always ends in sidewalk instead of in bare asphalt, on both the
+  rectangular and the Custom Grid footprint: a 6 m sidewalk band is laid on the far side of every
+  perimeter street, following the shape's own contour (the inner contour of a Custom Grid hole
+  included), so that street has a walkable far side exactly like an interior one. The ground
+  reaches 11 m past the outermost street axis instead of 6 m to carry it, which the road base, the
+  minimap snapshot footprint and the window's size preview all follow automatically.
+- The pedestrian network gained a walkway along that perimeter sidewalk, reached from the blocks
+  through the crosswalk already painted at every border T-intersection -- which until now led
+  nowhere, since a crosswalk arm with no block behind it was skipped. Its nodes are ordinary
+  walkable `Ring` nodes, so pedestrians spawn on and walk to the perimeter like any other
+  sidewalk, and the Pedestrians tab's density estimate accounts for them.
 - Custom Grid: a "Customize" button on the General Options card's grid preview replaces the
   rectangular `Grid Width` x `Grid Height` footprint with an arbitrarily shaped, hand-edited
   poliomino (no islands) on a fixed 10x10 canvas. A "Define City Area" / "Define Plazas" selector
@@ -47,8 +58,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Vehicles no longer strand themselves at the city's outer edge. A vehicle's *initial* target
+  comes from a blind spatial search (`TrafficNetwork.FindNodeAhead`), not from the graph, so one
+  spawned on a perimeter entry facing out of the city locked onto the outward-facing exit node
+  past the intersection -- a dead end -- drove to it and disabled itself on arrival, parked there
+  for the rest of the session (5 of 80 cars on a 5x5 grid). That search now never returns a node
+  with no exits of its own, and a vehicle standing exactly on a node targets that node rather than
+  the next one along, so it arrives immediately and gets routed properly, turns included.
 - Custom Grid: a `RoadBaseMargin`-square gap was left uncovered at every outward-facing corner of
   the shape (the edge margin strips only covered the shape's straight sides, never its corners).
+  Both contour bands are now tiled as an exact dilation difference, which also removes the
+  z-fighting overlap the old per-block strips left at every concave corner.
 - Custom Grid: `TrafficNetwork`/`PedestrianNetwork`'s custom-shape state (`useCustomShape` and the
   real block/plaza/reserved cell sets) was held in plain, unserialized fields. It survived only
   until the next domain reload or scene reload, at which point `Awake()` silently rebuilt the

@@ -218,7 +218,11 @@ namespace CityGenerator.Tests.EditMode
             // Block (2,0) starts at index 21 (13 + 8-node ring from block (1,0), the plaza block,
             // which itself got no Interior nodes) and is only its own 8-node ring.
             const int reservedBlockStart = 13 + 8;
-            Assert.AreEqual(29, network.NodeCount);
+
+            // The 3 blocks' own 29 nodes come first, then the 28-node walkway along the perimeter
+            // sidewalk that closes this 3x1 city (3 nodes per block-length of contour, plus a
+            // corner node at each of the 4 outer corners).
+            Assert.AreEqual(29 + 28, network.NodeCount);
             for (int i = reservedBlockStart; i < reservedBlockStart + 8; i++)
             {
                 Assert.AreEqual(PedestrianNodeKind.Ring, network.GetNode(i).Kind);

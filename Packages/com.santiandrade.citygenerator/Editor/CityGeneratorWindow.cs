@@ -914,6 +914,23 @@ namespace CityGenerator.Editor
                    $"(recommended max ~{recommendedMax} for {gridDescription}).";
         }
 
+        /// <summary>How many block edges of <paramref name="cells"/> face out of the shape: the
+        /// length of its contour, in block edges, which is what the perimeter walkway follows.</summary>
+        private static int CountContourEdges(List<Vector2Int> cells)
+        {
+            var cellSet = new HashSet<Vector2Int>(cells);
+            int count = 0;
+            foreach (Vector2Int cell in cellSet)
+            {
+                if (!cellSet.Contains(cell + new Vector2Int(1, 0))) count++;
+                if (!cellSet.Contains(cell + new Vector2Int(-1, 0))) count++;
+                if (!cellSet.Contains(cell + new Vector2Int(0, 1))) count++;
+                if (!cellSet.Contains(cell + new Vector2Int(0, -1))) count++;
+            }
+
+            return count;
+        }
+
         /// <summary>Reads <c>general.customBlockCells</c> into a plain list, for the Custom Grid density estimators.</summary>
         private List<Vector2Int> ReadCustomBlockCells()
         {
@@ -949,7 +966,15 @@ namespace CityGenerator.Editor
             int ringNodeCount = 8 * totalBlocks;
             int interiorNodeCount = 5 * normalBlockCount;
 
-            int totalNodeCount = ringNodeCount + interiorNodeCount;
+            // The perimeter walkway adds 3 Ring nodes per block-length of contour, plus a node at
+            // each corner the contour turns; the corners are left out here, same tolerance for
+            // approximation as the rest of this estimate.
+            int contourEdgeCount = useCustomGrid
+                ? CountContourEdges(ReadCustomBlockCells())
+                : 2 * (gridWidth + gridHeight);
+            int perimeterNodeCount = 3 * contourEdgeCount;
+
+            int totalNodeCount = ringNodeCount + interiorNodeCount + perimeterNodeCount;
             if (totalNodeCount <= 0)
                 return null;
 

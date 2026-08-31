@@ -37,6 +37,10 @@ namespace CityGenerator.Runtime
     /// (centre + 4 arms) linking that block's own 4 Ring midpoints -- see
     /// <see cref="BuildInteriorCross"/>. Plaza blocks and blocks with a full-block Custom Place get
     /// neither: pedestrians stay confined to the ring around them.
+    ///
+    /// The city's outer contour ends in sidewalk, not asphalt, so it gets a walkway of its own --
+    /// see <see cref="BuildBorderWalkway"/> -- reached from the blocks by the outward crosswalk at
+    /// every border T-intersection.
     /// </summary>
     public class PedestrianNetwork : MonoBehaviour
     {
@@ -60,6 +64,13 @@ namespace CityGenerator.Runtime
         // offset) exactly, so the crossing node's fixed lateral position lines up with the
         // already-painted zebra stripe instead of the ring corner's own diagonal offset.
         [SerializeField] private float crossingArmOffset = 7.6f;
+
+        [Header("Perimeter")]
+        [Tooltip("Distance from an out-of-city cell's centre to the centreline of the perimeter sidewalk walkway between it and its real neighbour: CityGeneratorConstants' CellPitch/2 - RoadBaseMargin + PerimeterSidewalkWidth/2.")]
+        [SerializeField] private float perimeterWalkOffset = 20f;
+
+        [Tooltip("How far from a crosswalk's outward curb a perimeter walkway node still counts as the sidewalk that crosswalk lands on. Only ever has to reach the PerimeterSidewalkWidth/2 step between the curb line and the walkway centreline.")]
+        [SerializeField] private float perimeterLinkRadius = 6f;
 
         [Header("Interior")]
         [Tooltip("Flattened [bi, bj] -> flag (index = bi * blocksZ + bj), set by CityGeneratorPedestrianBuilder.AddNetworkComponent from BlockCell.isPlaza. A plaza block gets no Interior cross, same as a full-block Custom Place -- Runtime-only bools: Build() must not know about BlockCell (an Editor-only type).")]
@@ -124,6 +135,11 @@ namespace CityGenerator.Runtime
         private static readonly Vector3[] Dirs = { Vector3.right, Vector3.left, Vector3.forward, Vector3.back };
 
         private readonly List<PedestrianNode> nodes = new();
+
+        // Ring nodes on the perimeter sidewalk band, rebuilt by BuildBorderWalkway on every
+        // Build(). Kept apart from `nodes` only so BuildCrossings can resolve the one a border
+        // crosswalk lands on without scanning the whole graph.
+        private readonly List<int> borderNodes = new();
 
         // BFS scratch buffers: sized to nodes.Count once per Build()/AddNode() batch, then reused
         // by every FindPath call without allocating — Unity's single-threaded main loop makes one
@@ -293,6 +309,10 @@ namespace CityGenerator.Runtime
                 }
             }
 
+            // Before the crossings pass: BuildCrossings resolves the far side of a border
+            // crosswalk against these nodes, so they have to exist by then.
+            BuildBorderWalkway(blocksX, blocksZ);
+
             // Every intersection is a candidate now, including the grid's own border (a
             // T-intersection there needs a crossing on its 3 real arms just like an interior
             // 4-way) -- BuildCrossings itself skips any arm whose block is out of range or a
@@ -364,6 +384,12 @@ namespace CityGenerator.Runtime
 
         private Vector3 BlockCentre(int bi, int bj)
             => new((axesX[bi] + axesX[bi + 1]) * 0.5f, sidewalkY, (axesZ[bj] + axesZ[bj + 1]) * 0.5f);
+
+        // Same as BlockCentre, but also valid for the ring of cells just outside the axes arrays:
+        // the perimeter walkway is tiled from the *missing* cells around the city, which for a
+        // rectangular grid sit at index -1 / blocksX, past either end of the arrays.
+        private Vector3 BlockCentreOutside(int bi, int bj)
+            => new(axesX[0] + (bi + 0.5f) * CellPitch, sidewalkY, axesZ[0] + (bj + 0.5f) * CellPitch);
 
         // Whether block (bi, bj) actually has a ring built for it: in range, and (for a Custom
         // Grid shape) a real cell rather than a hole cornerNode was never populated for.
@@ -455,6 +481,149 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
+        /// The walkway along the perimeter sidewalk band -- the strip
+        /// CityGeneratorGroundBuilder.BuildPerimeterSidewalks lays on the far side of every
+        /// perimeter street so the city always ends in sidewalk rather than asphalt. Without it a
+        /// pedestrian could only ever walk the blocks' own rings, and the outward crosswalk
+        /// already painted at every border T-intersection led nowhere.
+        ///
+        /// Tiled from the *missing* cells around the city (the same decomposition the ground band
+        /// uses): each one contributes a 3-node strip towards every real neighbour it has, and the
+        /// strips are stitched into a single contour by position -- an inner corner shares one
+        /// node between its two strips, an outer corner gets its own node joining the two strips
+        /// that pass it. Nodes are Ring, so pedestrians spawn on and walk to the perimeter like
+        /// any other sidewalk.
+        /// </summary>
+        private void BuildBorderWalkway(int blocksX, int blocksZ)
+        {
+            borderNodes.Clear();
+
+            // Keyed by position rounded to a decimetre: a node two strips share is created once,
+            // whichever of them reaches it first.
+            var byPosition = new Dictionary<(int, int), int>();
+
+            int GetOrAdd(Vector3 position)
+            {
+                var key = (Mathf.RoundToInt(position.x * 10f), Mathf.RoundToInt(position.z * 10f));
+                if (byPosition.TryGetValue(key, out int existing))
+                {
+                    return existing;
+                }
+
+                int added = AddNode(position, PedestrianNodeKind.Ring);
+                byPosition.Add(key, added);
+                borderNodes.Add(added);
+                return added;
+            }
+
+            // A strip ends level with the crosswalk that lands on it, so the link BuildCrossings
+            // makes from the outward curb is a single step across the sidewalk's own width.
+            float endOffset = CellPitch / 2f - crossingArmOffset;
+
+            for (int mi = -1; mi <= blocksX; mi++)
+            {
+                for (int mj = -1; mj <= blocksZ; mj++)
+                {
+                    if (BlockExists(mi, mj, blocksX, blocksZ))
+                    {
+                        continue;
+                    }
+
+                    Vector3 centre = BlockCentreOutside(mi, mj);
+
+                    for (int k = 0; k < 4; k++)
+                    {
+                        Vector3 u = Dirs[k];
+                        int ui = Mathf.RoundToInt(u.x);
+                        int uj = Mathf.RoundToInt(u.z);
+                        if (!BlockExists(mi + ui, mj + uj, blocksX, blocksZ))
+                        {
+                            continue;
+                        }
+
+                        int ti = -uj;
+                        int tj = ui;
+                        Vector3 t = new(ti, 0f, tj);
+
+                        Vector3 line = centre + u * perimeterWalkOffset;
+                        int mid = GetOrAdd(line);
+
+                        for (int sign = -1; sign <= 1; sign += 2)
+                        {
+                            int ni = mi + ti * sign;
+                            int nj = mj + tj * sign;
+
+                            // An inner corner: the walkway turns here, and this strip's end node is
+                            // the same node the perpendicular strip ends on.
+                            bool turnsHere = BlockExists(ni, nj, blocksX, blocksZ);
+                            float tangential = turnsHere ? perimeterWalkOffset : endOffset;
+                            int end = GetOrAdd(line + t * (sign * tangential));
+                            Connect(mid, end);
+
+                            // Otherwise the same contour edge simply carries on into the next
+                            // missing cell, whose strip starts a cell pitch further along.
+                            if (turnsHere || !BlockExists(ni + ui, nj + uj, blocksX, blocksZ))
+                            {
+                                continue;
+                            }
+
+                            Vector3 nextLine = BlockCentreOutside(ni, nj) + u * perimeterWalkOffset;
+                            Connect(end, GetOrAdd(nextLine - t * (sign * endOffset)));
+                        }
+                    }
+
+                    // An outer corner of the city: this missing cell touches it only diagonally,
+                    // so it owns no strip of its own -- just the corner node joining the two
+                    // strips that come round it.
+                    for (int dx = -1; dx <= 1; dx += 2)
+                    {
+                        for (int dz = -1; dz <= 1; dz += 2)
+                        {
+                            if (!BlockExists(mi + dx, mj + dz, blocksX, blocksZ))
+                            {
+                                continue;
+                            }
+
+                            if (BlockExists(mi + dx, mj, blocksX, blocksZ) || BlockExists(mi, mj + dz, blocksX, blocksZ))
+                            {
+                                continue;
+                            }
+
+                            int corner = GetOrAdd(centre + new Vector3(dx * perimeterWalkOffset, 0f, dz * perimeterWalkOffset));
+
+                            Vector3 alongX = BlockCentreOutside(mi, mj + dz) + new Vector3(dx * perimeterWalkOffset, 0f, -dz * endOffset);
+                            Vector3 alongZ = BlockCentreOutside(mi + dx, mj) + new Vector3(-dx * endOffset, 0f, dz * perimeterWalkOffset);
+                            Connect(corner, GetOrAdd(alongX));
+                            Connect(corner, GetOrAdd(alongZ));
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The perimeter walkway node a crosswalk facing out of the city lands on, or -1 if there
+        /// is none within <see cref="perimeterLinkRadius"/> of <paramref name="position"/>.
+        /// </summary>
+        private int FindBorderNodeNear(Vector3 position)
+        {
+            int best = -1;
+            float bestDistance = perimeterLinkRadius * perimeterLinkRadius;
+
+            for (int i = 0; i < borderNodes.Count; i++)
+            {
+                float distance = (nodes[borderNodes[i]].Position - position).sqrMagnitude;
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = borderNodes[i];
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
         /// Builds the 4 crosswalk arms of the interior intersection at axis indices (i, j): for
         /// each arm direction, a curb -> crossing -> curb chain linking the two ring corners it
         /// faces, with the crossing node's Intersection/CrossingAxisIsX set for CanCross.
@@ -479,16 +648,14 @@ namespace CityGenerator.Runtime
                 int blockBI = axisIsX ? blockAI : i - 1;
                 int blockBJ = axisIsX ? j - 1 : blockAJ;
 
-                // This arm faces off the grid entirely (a border/T-intersection's outward side)
-                // or into a Custom Grid shape hole: there's no block ring corner to connect to,
-                // so no crosswalk arm can exist that way.
-                if (!BlockExists(blockAI, blockAJ, blocksX, blocksZ) || !BlockExists(blockBI, blockBJ, blocksX, blocksZ))
+                bool blockAExists = BlockExists(blockAI, blockAJ, blocksX, blocksZ);
+                bool blockBExists = BlockExists(blockBI, blockBJ, blocksX, blocksZ);
+
+                // Both sides off the city (a hole's own far corner): nothing to link either way.
+                if (!blockAExists && !blockBExists)
                 {
                     continue;
                 }
-
-                int cornerA = cornerNode[blockAI, blockAJ, NearestCornerCode(blockAI, blockAJ, i, j)];
-                int cornerB = cornerNode[blockBI, blockBJ, NearestCornerCode(blockBI, blockBJ, i, j)];
 
                 Vector3 lateral = dir * crossingArmOffset;
                 Vector3 curbNearPos = centre + lateral + travel * streetHalfWidth;
@@ -498,16 +665,31 @@ namespace CityGenerator.Runtime
                 curbFarPos.y = sidewalkY;
                 crossingPos.y = roadY;
 
+                // A side with no block behind it is the city's own contour: the crosswalk lands
+                // on the perimeter walkway instead of on a block's ring corner. That is exactly
+                // where the zebra stripes at a border T-intersection were already painted.
+                int sideA = blockAExists
+                    ? cornerNode[blockAI, blockAJ, NearestCornerCode(blockAI, blockAJ, i, j)]
+                    : FindBorderNodeNear(curbNearPos);
+                int sideB = blockBExists
+                    ? cornerNode[blockBI, blockBJ, NearestCornerCode(blockBI, blockBJ, i, j)]
+                    : FindBorderNodeNear(curbFarPos);
+
+                if (sideA < 0 || sideB < 0)
+                {
+                    continue;
+                }
+
                 int curbNear = AddNode(curbNearPos, PedestrianNodeKind.Curb);
                 int crossing = AddNode(crossingPos, PedestrianNodeKind.Crossing);
                 int curbFar = AddNode(curbFarPos, PedestrianNodeKind.Curb);
 
                 SetCrossingInfo(crossing, matched, axisIsX);
 
-                Connect(cornerA, curbNear);
+                Connect(sideA, curbNear);
                 Connect(curbNear, crossing);
                 Connect(crossing, curbFar);
-                Connect(curbFar, cornerB);
+                Connect(curbFar, sideB);
             }
         }
 
