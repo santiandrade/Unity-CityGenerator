@@ -96,6 +96,157 @@ namespace CityGenerator.Editor
             }
         }
 
+        /// <summary>
+        /// Custom Grid overload (SPEC 11): fills every gap of the shape with the "empty block"
+        /// ground prefab, so a custom city still reads as the plain rectangle its own bounding box
+        /// describes instead of ending in holes of empty space.
+        ///
+        /// The filled region is that bounding rectangle grown by <see cref="CityGeneratorConstants.RoadBaseMargin"/>
+        /// -- exactly the outer footprint a rectangular grid of the same block count would have,
+        /// and the same rectangle the minimap snapshot and the validator's View Radius check
+        /// already assume -- minus everything the road base and the perimeter sidewalk already
+        /// cover, i.e. the shape dilated by CellPitch/2 + RoadBaseMargin. The fill therefore butts
+        /// exactly against the outer edge of the perimeter sidewalk rather than hiding it, keeping
+        /// "a generated city always ends in sidewalk" true.
+        /// </summary>
+        public static void BuildEmptyBlocks(GameObject emptyBlockPrefab, Transform emptyBlocksGroup, IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            if (emptyBlockPrefab == null)
+                return;
+
+            var cellSet = new HashSet<Vector2Int>(blockCells);
+            int index = 0;
+            foreach (BandRect rect in EnumerateEmptyFill(cellSet, CanvasCentre))
+            {
+                GameObject instance = InstantiatePrefab(emptyBlockPrefab, emptyBlocksGroup, $"Empty_Block_{index}");
+                // Same Y datum as a plaza lawn: the empty fill is ground cover, sitting flush with
+                // the sidewalk surface it abuts.
+                instance.transform.localPosition = new Vector3(rect.centerX, CityGeneratorConstants.GroundDatumY, rect.centerZ);
+                CityGeneratorBoundsUtility.ScaleToFootprint(instance, rect.width, rect.depth);
+                index++;
+            }
+        }
+
+        /// <summary>
+        /// Tiles the part of the shape's bounding rectangle (grown by RoadBaseMargin) that no road
+        /// base or perimeter sidewalk covers. Same per-*missing*-cell approach as
+        /// <see cref="EnumerateBand"/>, and for the same reason -- a per-real-cell tiling overlaps
+        /// at concave corners and leaves an unpaved notch at convex ones.
+        ///
+        /// A missing cell's own 56 m square is cut by the two coordinates where the covered
+        /// dilation's boundary can fall (+-(CellPitch - (CellPitch/2 + RoadBaseMargin))) into at
+        /// most 3x3 sub-rectangles, each wholly covered or wholly uncovered, then clipped to the
+        /// bounding rectangle and merged along X. The clip edge of the surrounding ring of cells
+        /// falls on that same coordinate, so it needs no extra cut of its own.
+        /// </summary>
+        private static IEnumerable<BandRect> EnumerateEmptyFill(HashSet<Vector2Int> cells, System.Func<Vector2Int, Vector3> centreOf)
+        {
+            const float half = CityGeneratorConstants.CellPitch / 2f;
+            const float epsilon = 0.001f;
+            float coveredEdge = CityGeneratorConstants.CellPitch - (half + CityGeneratorConstants.RoadBaseMargin);
+            float[] bounds = { -half, -coveredEdge, coveredEdge, half };
+
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+            foreach (Vector2Int cell in cells)
+            {
+                minX = Mathf.Min(minX, cell.x);
+                minY = Mathf.Min(minY, cell.y);
+                maxX = Mathf.Max(maxX, cell.x);
+                maxY = Mathf.Max(maxY, cell.y);
+            }
+
+            if (minX > maxX)
+                yield break;
+
+            Vector3 minCentre = centreOf(new Vector2Int(minX, minY));
+            Vector3 maxCentre = centreOf(new Vector2Int(maxX, maxY));
+            float rectMinX = minCentre.x - half - CityGeneratorConstants.RoadBaseMargin;
+            float rectMaxX = maxCentre.x + half + CityGeneratorConstants.RoadBaseMargin;
+            float rectMinZ = minCentre.z - half - CityGeneratorConstants.RoadBaseMargin;
+            float rectMaxZ = maxCentre.z + half + CityGeneratorConstants.RoadBaseMargin;
+
+            for (int mx = minX - 1; mx <= maxX + 1; mx++)
+            {
+                for (int my = minY - 1; my <= maxY + 1; my++)
+                {
+                    var m = new Vector2Int(mx, my);
+                    if (cells.Contains(m))
+                        continue;
+
+                    Vector3 c = centreOf(m);
+                    float clipMinX = rectMinX - c.x;
+                    float clipMaxX = rectMaxX - c.x;
+                    float clipMinZ = rectMinZ - c.z;
+                    float clipMaxZ = rectMaxZ - c.z;
+
+                    for (int q = 0; q < 3; q++)
+                    {
+                        float z0 = Mathf.Max(bounds[q], clipMinZ);
+                        float z1 = Mathf.Min(bounds[q + 1], clipMaxZ);
+                        if (z1 - z0 <= epsilon)
+                            continue;
+
+                        float z = (z0 + z1) / 2f;
+                        float runFrom = 0f;
+                        float runTo = 0f;
+                        bool inRun = false;
+
+                        for (int p = 0; p < 3; p++)
+                        {
+                            float x0 = Mathf.Max(bounds[p], clipMinX);
+                            float x1 = Mathf.Min(bounds[p + 1], clipMaxX);
+                            bool fill = x1 - x0 > epsilon && !IsCovered(cells, m, (x0 + x1) / 2f, z, coveredEdge);
+
+                            if (fill)
+                            {
+                                if (!inRun)
+                                {
+                                    runFrom = x0;
+                                    inRun = true;
+                                }
+
+                                runTo = x1;
+                                continue;
+                            }
+
+                            if (!inRun)
+                                continue;
+
+                            yield return new BandRect(c.x + (runFrom + runTo) / 2f, c.z + z, runTo - runFrom, z1 - z0);
+                            inRun = false;
+                        }
+
+                        if (inRun)
+                            yield return new BandRect(c.x + (runFrom + runTo) / 2f, c.z + z, runTo - runFrom, z1 - z0);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether the point at (<paramref name="x"/>, <paramref name="z"/>) local to
+        /// <paramref name="missing"/>'s centre already lies under the road base or perimeter
+        /// sidewalk of a neighbouring real cell. Only a neighbour within one cell in each axis can
+        /// reach in: two cells away is 112 m, well past the 39 m the dilation extends.
+        /// </summary>
+        private static bool IsCovered(HashSet<Vector2Int> cells, Vector2Int missing, float x, float z, float coveredEdge)
+        {
+            for (int i = -1; i <= 1; i++)
+            {
+                for (int j = -1; j <= 1; j++)
+                {
+                    if (i == 0 && j == 0)
+                        continue;
+                    if (!cells.Contains(missing + new Vector2Int(i, j)))
+                        continue;
+                    if (Reaches(x, i, coveredEdge) && Reaches(z, j, coveredEdge))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         private static Vector3 CanvasCentre(Vector2Int cell)
         {
             int canvas = CityGeneratorConstants.MaxGridSize;

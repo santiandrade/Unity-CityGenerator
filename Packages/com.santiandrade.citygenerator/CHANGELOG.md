@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 
+- Custom Grid: every gap of a custom shape is now filled with a new "Empty Block Prefab (custom
+  grids only)" ground slab (Ground card, defaulting to the same lawn prefab the plazas use and
+  placed at the same height), so a custom city comes out as the plain rectangle of its own
+  bounding box instead of ending in holes of empty space — a shape spanning 6 x 8 blocks generates
+  a 6 x 8 city. The fill stops exactly at the outer edge of the perimeter sidewalk instead of
+  covering it, and is a blocking validation error to leave unassigned while Customize mode is on.
+
 - A generated city now always ends in sidewalk instead of in bare asphalt, on both the
   rectangular and the Custom Grid footprint: a 6 m sidewalk band is laid on the far side of every
   perimeter street, following the shape's own contour (the inner contour of a Custom Grid hole

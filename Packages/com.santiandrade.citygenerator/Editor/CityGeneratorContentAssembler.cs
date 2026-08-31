@@ -71,6 +71,7 @@ namespace CityGenerator.Editor
             int gridHeight = settings.general.gridHeight;
 
             Transform roads = GetOrCreateGroup(cityRoot, "Roads");
+            Transform emptyBlocks = GetOrCreateGroup(cityRoot, "EmptyBlocks");
             Transform sidewalks = GetOrCreateGroup(cityRoot, "Sidewalks");
             Transform roadMarkings = GetOrCreateGroup(cityRoot, "RoadMarkings");
             Transform customPlaces = GetOrCreateGroup(cityRoot, "CustomPlaces");
@@ -96,6 +97,7 @@ namespace CityGenerator.Editor
                 CityGeneratorGroundBuilder.BuildRoadBase(settings.ground.roadBasePrefab, roads, settings.general.customBlockCells);
                 CityGeneratorGroundBuilder.BuildRoadMarkings(settings.ground.roadLinePrefab, settings.ground.crosswalkLinePrefab, roadMarkings, settings.general.customBlockCells);
                 CityGeneratorGroundBuilder.BuildPerimeterSidewalks(settings.ground.sidewalkPrefab, sidewalks, settings.general.customBlockCells);
+                CityGeneratorGroundBuilder.BuildEmptyBlocks(settings.ground.emptyBlockPrefab, emptyBlocks, settings.general.customBlockCells);
             }
             else
             {
@@ -224,6 +226,7 @@ namespace CityGenerator.Editor
             // groups move by transform every frame instead.
             Report("Static flags", 0.95f);
             MarkStatic(roads);
+            MarkStatic(emptyBlocks);
             MarkStatic(sidewalks);
             MarkStatic(roadMarkings);
             MarkStatic(customPlaces);

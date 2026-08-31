@@ -86,6 +86,7 @@ namespace CityGenerator.Editor
             AppendAssignment(sb, "settings.ground.sidewalkPrefab", BuildGameObjectExpr(settings.ground.sidewalkPrefab, warnings, "Ground > Sidewalk Prefab"));
             AppendAssignment(sb, "settings.ground.roadLinePrefab", BuildGameObjectExpr(settings.ground.roadLinePrefab, warnings, "Ground > Road Line Prefab"));
             AppendAssignment(sb, "settings.ground.crosswalkLinePrefab", BuildGameObjectExpr(settings.ground.crosswalkLinePrefab, warnings, "Ground > Crosswalk Line Prefab"));
+            AppendAssignment(sb, "settings.ground.emptyBlockPrefab", BuildGameObjectExpr(settings.ground.emptyBlockPrefab, warnings, "Ground > Empty Block Prefab"));
             sb.AppendLine();
 
             AppendAssignment(sb, "settings.plaza.centerpiecePrefab", BuildGameObjectExpr(settings.plaza.centerpiecePrefab, warnings, "Plaza > Centerpiece Prefab"));

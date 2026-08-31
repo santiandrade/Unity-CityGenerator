@@ -2,8 +2,8 @@
 
 > **Estado:** Implemented
 > **Depende de:** SPEC 01 (City Generator Tool), SPEC 04 (Correcciones críticas y arquitectónicas), SPEC 06 (Custom Places)
-> **Fecha:** 2026-08-30 (ampliada el 2026-09-01: el contorno exterior termina en acera)
-> **Objetivo:** Sustituir, de forma opcional, el rectángulo `Grid Width × Grid Height` por una forma de manzanas arbitraria (poliominó ortogonalmente contiguo, sin islas) editable a mano en un nuevo modo "Customize" de la card "General Options", de modo que calles, aceras, tráfico y red peatonal se generen solo donde realmente hay manzanas. **Ampliada tras QA manual** (ver "Ampliación — el contorno exterior termina en acera"): el contorno exterior de la ciudad generada termina siempre en acera transitable, nunca en asfalto pelado, en los dos modos de rejilla.
+> **Fecha:** 2026-08-30 (ampliada el 2026-09-01: el contorno exterior termina en acera; y los huecos de la forma se rellenan con suelo)
+> **Objetivo:** Sustituir, de forma opcional, el rectángulo `Grid Width × Grid Height` por una forma de manzanas arbitraria (poliominó ortogonalmente contiguo, sin islas) editable a mano en un nuevo modo "Customize" de la card "General Options", de modo que calles, aceras, tráfico y red peatonal se generen solo donde realmente hay manzanas. **Ampliada tras QA manual** (ver "Ampliación — el contorno exterior termina en acera"): el contorno exterior de la ciudad generada termina siempre en acera transitable, nunca en asfalto pelado, en los dos modos de rejilla. **Ampliada de nuevo** (ver "Ampliación — los huecos de la forma se rellenan con suelo"): los huecos que la forma deja dentro de su propio bounding box se rellenan con un suelo por defecto, de modo que una ciudad custom acaba siendo el rectángulo simple de ese bounding box.
 
 ## Scope
 
@@ -34,6 +34,16 @@
 - **`Runtime/PedestrianNetwork.BuildCrossings`**: deja de descartar un brazo de paso de cebra por no haber manzana al otro lado; solo descarta el que no tiene manzana en **ninguno** de los dos lados. Un lado sin manzana se resuelve contra el nodo del paseo perimetral más cercano (`FindBorderNodeNear`). Es exactamente donde las rayas ya estaban pintadas en cada T del contorno desde la implementación original de esta spec — hasta ahora ese paso de cebra no llevaba a ninguna parte.
 - **`CityGeneratorWindow.GetPedestrianDensityWarning`**: el denominador del aviso de densidad cuenta también los nodos del paseo perimetral (3 por lado de contorno; las esquinas se omiten, misma tolerancia de aproximación que el resto de esa estimación).
 
+**Ampliación — los huecos de la forma se rellenan con suelo** (añadida a petición explícita del usuario: *"los huecos del grid donde no creamos ningún bloque aparecen en la escena vacíos [...] necesito que todos esos huecos se rellenen con un suelo por defecto"*). Aplica **solo** al modo custom: una rejilla rectangular no tiene huecos que rellenar.
+
+- **`GroundSettings` (`Editor/CityGeneratorSettings.cs`)** gana `GameObject emptyBlockPrefab`, expuesto en la card City > Ground como **"Empty Block Prefab (custom grids only)"** — el paréntesis forma parte de la etiqueta, para que se vea desde la propia ventana que el campo no hace nada en modo rectangular. Su valor por defecto (`CityGeneratorDefaultAssets.ApplyTo`) es el mismo `Lawn.prefab` que usa `plaza.lawnPrefab`, y se posiciona en Y con la misma lógica que las losas de césped de una plaza (`CityGeneratorConstants.GroundDatumY`, es decir, cobertura de suelo a ras de la acera contra la que topa).
+- **`CityGeneratorGroundBuilder.BuildEmptyBlocks`**: nueva vía, llamada desde `CityGeneratorContentAssembler` solo en la rama `useCustomGrid`, que instancia ese prefab en un grupo propio `EmptyBlocks` bajo el city root (marcado estático como el resto de geometría generada).
+- **Resultado visual: el rectángulo del bounding box de las celdas reales**, no el lienzo 10×10. Una forma cuyas celdas ocupan 6 bloques de ancho y 8 de alto genera una ciudad de 6×8. La región que se rellena es exactamente ese bounding box **crecido en `RoadBaseMargin`** —el mismo rectángulo exterior que produciría una rejilla rectangular del mismo número de bloques, y el mismo que ya encuadran `CityGeneratorMinimapBuilder` y el check de View Radius del validator— **menos la forma dilatada `CellPitch/2 + RoadBaseMargin`**, o sea, todo lo que ya cubren la losa de asfalto y la acera perimetral.
+- **`CityGeneratorGroundBuilder.EnumerateEmptyFill`**: el teselado de esa diferencia, por celda **ausente**, por la misma razón que `EnumerateBand` (ver "Decisiones tomadas y descartadas").
+- **`CityGeneratorValidator`**: nuevo check bloqueante — `ground.emptyBlockPrefab` sin asignar mientras `useCustomGrid` es `true`.
+- Documentación: `docs/architecture/editor-tool.md`, `CHANGELOG.md` y el índice de invariantes de `CLAUDE.md`.
+
+
 **Fuera de alcance:**
 
 - Cambios en `CityGeneratorBuildingBuilder`/`CityGeneratorPlazaBuilder`/`CityGeneratorStreetPropsBuilder`: ya iteran `IReadOnlyList<BlockCell> blocks` en vez de bucles `gridWidth × gridHeight`, así que reciben la lista de manzanas reales sin necesitar lógica nueva propia — se confirma explícitamente durante `/spec-impl`, no se asume sin verificar.
@@ -41,6 +51,8 @@
 - Cualquier integración con el sistema de Undo de Unity más allá de la que ya tiene (o no tiene) `CityGeneratorGridPreview` hoy para el toggle de plazas.
 - Un tercer submodo o herramienta de "rellenar/vaciar todo" en Customize — solo +/- celda a celda y el selector Área/Plazas descritos arriba.
 - Cualquier **nuevo tipo** de nodo peatonal: el grafo sigue teniendo exactamente cuatro (`Ring`, `Curb`, `Crossing`, `Interior`), y el paseo perimetral de la ampliación reutiliza `Ring` en vez de inventar un quinto. Sí entran, en cambio, los dos cambios de comportamiento de tráfico que la QA destapó (punto muerto real y objetivo inicial de `FindNodeAhead`), recogidos como correcciones en "Decisiones tomadas y descartadas".
+- Rellenar huecos en el modo rectangular: no los tiene. `BuildEmptyBlocks` no se llama en esa rama.
+- Que el suelo de relleno sea transitable por peatones o navegable por coches, o que reciba props/vegetación: es decoración de fondo, no ciudad. Fuera de la forma no hay ni nodos ni manzanas, y eso no cambia.
 - Formas con más de una isla (huecos internos permitidos — un "donut" de manzanas alrededor de un hueco no conectado a nada es válido en cuanto a contigüidad de manzanas reales entre sí; lo único prohibido son dos grupos de manzanas reales sin conexión entre ellos).
 
 ## Data model
@@ -112,6 +124,24 @@ private static IEnumerable<BandRect> EnumerateBand(HashSet<Vector2Int> cells, Fu
 ```
 
 ```csharp
+// Editor/CityGeneratorSettings.cs — ampliación "los huecos se rellenan con suelo":
+
+// GroundSettings gana, junto a los cuatro prefabs de suelo existentes:
+[Tooltip("Ground slab filling every gap of a Custom Grid shape, so the generated city still ends up as the plain rectangle of its bounding box. Ignored unless Customize mode is on. Required while it is.")]
+public GameObject emptyBlockPrefab; // required if useCustomGrid
+```
+
+```csharp
+// Editor/CityGeneratorGroundBuilder.cs — ampliación "los huecos se rellenan con suelo":
+
+public static void BuildEmptyBlocks(GameObject emptyBlockPrefab, Transform emptyBlocksGroup, IReadOnlyCollection<Vector2Int> blockCells);
+
+// Bounding box de las celdas reales crecido en RoadBaseMargin, menos la forma dilatada
+// CellPitch/2 + RoadBaseMargin. Teselado por celda AUSENTE, como EnumerateBand.
+private static IEnumerable<BandRect> EnumerateEmptyFill(HashSet<Vector2Int> cells, Func<Vector2Int, Vector3> centreOf);
+```
+
+```csharp
 // Runtime/PedestrianNetwork.cs — ampliación "el contorno termina en acera":
 
 // Llamado desde Build() ANTES de la pasada de crossings: BuildCrossings resuelve contra estos nodos.
@@ -168,6 +198,10 @@ Pasos añadidos con la ampliación "el contorno exterior termina en acera" (post
 
 16. Corrección de `TrafficNetwork.FindNodeAhead` destapada por la QA de esta ampliación (coches aparcados contra la acera nueva) — ver la decisión correspondiente. Test: `Assets/Tests/EditMode/TrafficNetworkFindNodeAheadTests.cs`.
 
+Paso añadido con la ampliación "los huecos de la forma se rellenan con suelo":
+
+17. `GroundSettings.emptyBlockPrefab` + su fila en la card Ground + su default (`CityGeneratorDefaultAssets`/`CityGeneratorDefaultAssetsWriter`) + el check del validator; `CityGeneratorGroundBuilder.BuildEmptyBlocks`/`EnumerateEmptyFill` cableados desde `CityGeneratorContentAssembler` (grupo `EmptyBlocks`, marcado estático). Test: `Assets/Tests/EditMode/Generation/EmptyBlockFillTests.cs` reconstruye el relleno por fuerza bruta (forma en L, donut y rectángulo completo) y comprueba que no hay huecos ni solapes, que nunca tapa suelo pavimentado y que nunca sale del bounding box.
+
 ## Acceptance criteria
 
 - [x] `GeneralSettings` compila con `useCustomGrid: bool` y `customBlockCells: List<Vector2Int>`; `useCustomGrid == false` reproduce exactamente el comportamiento de generación anterior a esta spec (sin regresión en ningún test EditMode/PlayMode/Performance existente).
@@ -188,6 +222,14 @@ Criterios de la ampliación "el contorno exterior termina en acera":
 - [x] Los peatones aparecen y caminan por esa acera perimetral, y pueden llegar a ella desde el anillo de una manzana cruzando por el paso de cebra que ya estaba pintado en cada T del contorno (misma componente conexa del grafo).
 - [x] Ningún coche queda varado apuntando fuera de la ciudad: `FindNodeAhead` no devuelve nunca un nodo sin salidas propias.
 - [x] La suite EditMode no tiene ninguna regresión respecto al estado previo a la ampliación (los únicos fallos que quedan son los 9 preexistentes: 8 de `CityGeneratorValidatorTests` por settings mínimos sin Player Prefab/Input Actions y 1 de `CityGeneratorAudioBuilderTests`).
+
+Criterios de la ampliación "los huecos de la forma se rellenan con suelo":
+
+- [x] La card City > Ground muestra un campo nuevo etiquetado literalmente **"Empty Block Prefab (custom grids only)"**, con `Lawn.prefab` (el mismo del césped de las plazas) asignado por defecto, y bloquea ambos botones de Build si se deja vacío mientras Customize está activo.
+- [x] Generar una ciudad con `useCustomGrid == true` y una forma no rectangular deja el resultado visual como un rectángulo completo: cada hueco de la forma —incluido el hueco interior de un donut— queda cubierto por el suelo "empty", posicionado en Y a la misma altura que el césped de una plaza.
+- [x] El tamaño de ese rectángulo es el del bounding box de las celdas reales, no el del lienzo 10×10: una forma de 6 bloques de ancho por 8 de alto produce una ciudad de 6×8.
+- [x] El relleno no tapa nada pavimentado: termina exactamente en el borde exterior de la acera perimetral, así que la ciudad sigue terminando en acera. Verificado de forma exacta (no a ojo) reconstruyendo el relleno por fuerza bruta sobre una forma en L, un donut y un rectángulo completo: sin huecos, sin losas solapadas, sin invadir el suelo pavimentado y sin salirse del bounding box. Una forma custom que ya es un rectángulo completo genera **cero** losas de relleno.
+- [x] Ninguna regresión en la suite EditMode respecto al estado previo (siguen fallando los 9 preexistentes, y solo esos).
 
 ## Decisiones tomadas y descartadas
 
@@ -218,4 +260,10 @@ Criterios de la ampliación "el contorno exterior termina en acera":
 - **El paseo peatonal perimetral reutiliza el tipo de nodo `Ring`, no uno nuevo.** Mantiene el invariante de los cuatro tipos de nodo (`Ring`, `Curb`, `Crossing`, `Interior`) y hace que los peatones aparezcan y elijan destino en el perímetro exactamente igual que en cualquier otra acera, sin lógica de spawn/destino propia. Se teselan también desde las celdas ausentes, cosiendo las tiras en un contorno único **por posición** (diccionario redondeado al decímetro), de modo que una esquina interior comparte un nodo entre sus dos tiras y una exterior recibe el suyo propio.
 - **El paseo perimetral se conecta a la ciudad por los pasos de cebra que ya existían, sin inventar cruces nuevos a mitad de manzana.** `BuildCrossings` solo exigía manzana a ambos lados; ahora exige manzana en al menos uno, y el lado del contorno aterriza en el nodo del paseo más cercano. Como un brazo sigue necesitando un `TrafficLightIntersection` emparejado, esto solo añade cruces en las T reales de 3 brazos del borde — justo donde esta misma spec ya pintaba las rayas. Descartado un cruce no semaforizado en el centro de cada lado de manzana: habría metido peatones cruzando donde no hay paso de cebra pintado.
 - **Una ciudad sin ninguna intersección semaforizada deja el paseo perimetral como componente conexa aparte.** Ocurre solo en el caso mínimo (rejilla 1×1, o forma custom de una sola celda), donde no hay ninguna intersección de 3 brazos. Se acepta: degrada exactamente igual que el caso ya existente de anillos de manzana aislados en una rejilla 1×N, y `PickRandomDestination(requiredComponent)` impide que un peatón elija un destino inalcanzable. Descartado forzar un cruce sin semáforo solo para ese caso.
+- **El rectángulo que se rellena es el bounding box de las celdas reales crecido en `RoadBaseMargin`, no el bounding box "pelado".** Con el bounding box pelado, la ciudad no sería un rectángulo: allí donde una manzana real toca el borde del bounding box, su banda de margen de 11 m sobresaldría del relleno, dejando salientes irregulares en el contorno. Crecerlo en `RoadBaseMargin` da exactamente el mismo rectángulo exterior que produciría una rejilla rectangular del mismo número de bloques (`gridWidth * CellPitch + 2 * RoadBaseMargin`), que es además el que ya encuadran el snapshot del minimapa y el check de View Radius del validator — o sea, el relleno no introduce una tercera definición de "tamaño de la ciudad", reutiliza la que ya existía.
+- **El relleno se resta de lo ya pavimentado en vez de taparlo.** Una losa de 56 m por celda ausente habría sido trivial de escribir, pero se comería la banda de asfalto y la acera perimetral que asoman dentro de esa celda (el relleno va a `GroundDatumY`, 0.18, por encima de la acera a 0.09), rompiendo el invariante "la ciudad siempre termina en acera" justo donde más se nota. Por eso `EnumerateEmptyFill` calcula la diferencia exacta contra la dilatación `CellPitch/2 + RoadBaseMargin`.
+- **`EnumerateEmptyFill` tesela por celda AUSENTE, igual que `EnumerateBand`, y por los mismos dos motivos.** Un teselado por manzana real hacia fuera solapa en las esquinas cóncavas (z-fighting entre losas coplanares) y deja una muesca sin pavimentar en las convexas. Se reutiliza el mismo `BandRect`/`Reaches` y la misma idea de cortar el cuadrado de 56 m de la celda ausente por las coordenadas donde puede caer el borde de la dilatación (aquí solo dos, ±17, que dan como mucho 3×3 subrectángulos) y fusionar en X. El recorte contra el bounding box cae exactamente sobre esa misma coordenada ±17, así que no hace falta un corte extra para el anillo de celdas que rodea al bounding box. Cubierto por `EmptyBlockFillTests`.
+- **El prefab por defecto es el mismo `Lawn.prefab` de las plazas, no un asset nuevo.** Confirmado explícitamente por el usuario, y coherente con la regla de portabilidad: no se añade contenido nuevo al paquete para algo que ya tiene una pieza equivalente.
+- **El campo es obligatorio (error bloqueante) mientras Customize está activo**, en vez de opcional con relleno omitido si está vacío. Es lo que hace que el resultado prometido —"cualquier custom grid acaba siendo un rectángulo"— sea una garantía y no un "si lo rellenas". Mismo mecanismo que el resto de prefabs condicionalmente obligatorios de la tool (p. ej. `plaza.lawnPrefab` cuando hay plazas).
+- **El suelo de relleno es decoración, no ciudad**: no lleva nodos peatonales, ni red de tráfico, ni props, ni entra en `obstacles`. Fuera de la forma no hay manzanas, y esta ampliación no cambia dónde puede haber contenido — solo qué se ve en el hueco.
 - **Un hueco interior no conectado a nada (rodeado de manzanas reales, tipo "donut") es válido** — la única prohibición es que las manzanas reales entre sí formen un único componente conexo, no que no existan huecos. No se pidió lo contrario, y prohibirlo añadiría una comprobación extra sin ningún beneficio declarado.

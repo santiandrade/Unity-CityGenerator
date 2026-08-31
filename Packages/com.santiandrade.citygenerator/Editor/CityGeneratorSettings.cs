@@ -72,6 +72,8 @@ namespace CityGenerator.Editor
         public GameObject roadLinePrefab; // required
         [Tooltip("Zebra crossing stripe placed at signalled intersections. Required.")]
         public GameObject crosswalkLinePrefab; // required
+        [Tooltip("Ground slab filling every gap of a Custom Grid shape, so the generated city still ends up as the plain rectangle of its bounding box. Ignored unless Customize mode is on. Required while it is.")]
+        public GameObject emptyBlockPrefab; // required if useCustomGrid
     }
 
     [Serializable]

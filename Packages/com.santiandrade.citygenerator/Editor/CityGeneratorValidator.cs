@@ -42,6 +42,9 @@ namespace CityGenerator.Editor
             if (settings.ground.crosswalkLinePrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("ground.crosswalkLinePrefab", "Ground: Crosswalk Line prefab is required."));
 
+            if (settings.general.useCustomGrid && settings.ground.emptyBlockPrefab == null)
+                issues.Add(new CityGeneratorValidationIssue("ground.emptyBlockPrefab", "Ground: Empty Block prefab is required while Customize mode is on (it fills the gaps of the custom shape)."));
+
             if (settings.general.plazaCells.Count > 0 && settings.plaza.lawnPrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("plaza.lawnPrefab", "Plaza: Lawn prefab is required when at least one plaza cell is selected."));
 

@@ -354,6 +354,8 @@ namespace CityGenerator.Editor
             AddRequiredField(card.ContentContainer, "ground.sidewalkPrefab", "Sidewalk Prefab", () => true);
             AddRequiredField(card.ContentContainer, "ground.roadLinePrefab", "Road Line Prefab", () => true);
             AddRequiredField(card.ContentContainer, "ground.crosswalkLinePrefab", "Crosswalk Line Prefab", () => true);
+            AddRequiredField(card.ContentContainer, "ground.emptyBlockPrefab", "Empty Block Prefab (custom grids only)",
+                () => FindProperty("general.useCustomGrid").boolValue);
         }
 
         private void BuildPlazaCard(VisualElement parent)
