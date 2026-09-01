@@ -72,6 +72,36 @@ namespace CityGenerator.Editor
             return (placed, reservedSlots, pointsOfInterest);
         }
 
+        /// <summary>
+        /// Same resolution <see cref="BuildCustomPlaces"/> uses to decide which slots are
+        /// reserved, without instantiating anything -- used by
+        /// <see cref="CityGeneratorPedestrianPreview"/> (SPEC 12) to compute the same
+        /// blockIsFullyReserved data the real pipeline feeds PedestrianNetwork, without spawning
+        /// real Custom Place prefabs into the disposable preview.
+        /// </summary>
+        public static HashSet<(int gridX, int gridY, int slot)> ResolveReservedSlots(List<CustomPlaceEntry> customPlaces, IReadOnlyList<BlockCell> blocks)
+        {
+            var reservedSlots = new HashSet<(int gridX, int gridY, int slot)>();
+            if (customPlaces == null || customPlaces.Count == 0)
+                return reservedSlots;
+
+            var blockLookup = new Dictionary<(int gridX, int gridY), BlockCell>();
+            foreach (BlockCell block in blocks)
+                blockLookup[(block.gridX, block.gridY)] = block;
+
+            foreach (CustomPlaceEntry entry in customPlaces)
+            {
+                if (!TryResolveEntry(entry, blockLookup, out BlockCell block))
+                    continue;
+
+                reservedSlots.Add(entry.occupiesFullBlock
+                    ? (block.gridX, block.gridY, -1)
+                    : (block.gridX, block.gridY, entry.cornerSlot));
+            }
+
+            return reservedSlots;
+        }
+
         private static bool TryResolveEntry(CustomPlaceEntry entry, Dictionary<(int gridX, int gridY), BlockCell> blockLookup, out BlockCell block)
         {
             block = default;

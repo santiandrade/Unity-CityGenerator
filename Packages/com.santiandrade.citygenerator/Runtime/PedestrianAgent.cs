@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
@@ -17,6 +18,17 @@ namespace CityGenerator.Runtime
     {
         [Header("Network")]
         [SerializeField] private PedestrianNetwork network;
+
+        // Null for a normal pedestrian (unrestricted, exactly the pre-SPEC-12 behaviour). Set by
+        // CityGeneratorCustomPedestrianBuilder for a Custom Pedestrian: PlanNewDestination then
+        // never plans or walks outside this subset. Must be [SerializeField] -- a plain private
+        // field is wiped back to null by the domain reload that (by default) precedes entering
+        // Play mode, silently turning every Custom Pedestrian back into an unrestricted one; same
+        // reasoning as PedestrianNetwork.useCustomShape.
+        [SerializeField] private List<int> allowedNodes;
+
+        /// <summary>Confines this agent to <paramref name="nodes"/> (SPEC 12: Custom Pedestrians). Pass null to remove the restriction.</summary>
+        public void SetAllowedNodes(List<int> nodes) => allowedNodes = nodes;
 
         [Header("Movement")]
         [Tooltip("Speed at which CharacterAnimator.controller's Locomotion blend tree reaches Speed = 0.5 (matches PlayerWalkSpeed exactly) — a calibration anchor, not this pedestrian's own pace.")]
@@ -300,11 +312,15 @@ namespace CityGenerator.Runtime
         {
             Vector3 fromPosition = network.GetNode(currentNode).Position;
             int candidateCount = 0;
-            int requiredComponent = network.ComponentOf(currentNode);
+            // A Custom Pedestrian's allowedNodes is validated (SPEC 12) to be a single connected
+            // component already, so the component filter below is redundant for it -- and would be
+            // wrong to apply anyway, since ComponentOf reflects the *whole* graph's topology, not
+            // the restricted subset's.
+            int requiredComponent = allowedNodes == null ? network.ComponentOf(currentNode) : -1;
 
             for (int attempt = 0; attempt < DestinationCandidateAttempts; attempt++)
             {
-                int candidate = network.PickRandomDestination(requiredComponent);
+                int candidate = network.PickRandomDestination(requiredComponent, allowedNodes);
                 if (candidate < 0 || candidate == currentNode)
                 {
                     continue;
@@ -351,7 +367,7 @@ namespace CityGenerator.Runtime
             for (int i = 0; i < candidateCount; i++)
             {
                 int[] scratch = manager.PathBufferPool.Rent();
-                int length = network.FindPath(currentNode, candidateNodes[i], scratch);
+                int length = network.FindPath(currentNode, candidateNodes[i], scratch, allowedNodes);
                 if (length > 1)
                 {
                     EnsurePathCapacity(length);

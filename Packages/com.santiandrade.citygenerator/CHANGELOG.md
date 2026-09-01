@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New "Custom Pedestrians" card (Pedestrians tab): per entry (prefab + count), trace a network of
+  pedestrian nodes by hand on a new node-graph picker (Ring/Curb/Crossing/Interior, coloured by
+  kind, real graph edges between selected nodes drawn in yellow) and the generated agents of that
+  entry are confined to walking only within that network instead of the whole city. The picker
+  shows the real pedestrian graph before the city is ever generated, via a disposable preview that
+  reuses the same generation code the real pipeline uses. `count` is a budget independent of the
+  general Pedestrian Count, and changing the grid/Custom Grid/plazas/Custom Places after tracing a
+  route invalidates and clears it instead of silently generating over the wrong nodes.
 
 ## [2.7.0] - 2026-09-01
 ### Added

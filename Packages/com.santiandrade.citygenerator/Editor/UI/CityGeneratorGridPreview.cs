@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CityGenerator.Runtime;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -17,6 +18,8 @@ namespace CityGenerator.Editor.UI
         SingleSelectQuadrant,
         /// <summary>Custom Grid's "Define City Area" submode (SPEC 11): the fixed MaxGridSize canvas is painted as real blocks/holes; clicking a valid "+" hole or "-" removable block edits general.customBlockCells directly.</summary>
         CustomAreaEdit,
+        /// <summary>A Custom Pedestrian entry's own picker (SPEC 12): draws the real pedestrian node graph (Ring/Curb/Crossing/Interior) instead of blocks; clicking a node adds/removes it from the entry's selectedNodeIndices subgraph.</summary>
+        NodeGraphPicker,
     }
 
     /// <summary>
@@ -48,6 +51,11 @@ namespace CityGenerator.Editor.UI
         // CustomAreaEdit mode (data source), and shared as the shape-mask overlay applied on top
         // of PlazaMultiToggle/SingleSelectQuadrant by SetShapeMask.
         private SerializedProperty shapeCellsProperty;
+
+        // NodeGraphPicker mode.
+        private CityGeneratorPedestrianPreview pedestrianPreview;
+        private SerializedProperty selectedNodeIndicesProperty;
+        private SerializedProperty graphFingerprintProperty;
 
         public CityGeneratorGridPreview()
         {
@@ -95,6 +103,42 @@ namespace CityGenerator.Editor.UI
             shapeCellsProperty = customBlockCellsProperty;
             this.onChanged = onChanged;
             tooltip = "Click a \"+\" to add a block, or a \"-\" to remove one.";
+        }
+
+        /// <summary>
+        /// Binds this preview as a Custom Pedestrian entry's node-graph picker (SPEC 12):
+        /// <paramref name="preview"/> supplies the real node positions/adjacency to draw and hit-test
+        /// against; clicking a node adds/removes it in <paramref name="selectedNodeIndicesProperty"/>
+        /// (only a node directly connected to the current selection can be added, except the first),
+        /// and every edit updates <paramref name="graphFingerprintProperty"/> to
+        /// <paramref name="preview"/>'s current fingerprint. If the entry already holds a selection
+        /// whose stored fingerprint no longer matches <paramref name="preview"/>'s (the grid/plaza/
+        /// Custom Places settings changed since it was traced), the stale selection is cleared right
+        /// away instead of silently pointing at the wrong nodes.
+        /// </summary>
+        public void BindNodeGraph(CityGeneratorPedestrianPreview preview, SerializedProperty selectedNodeIndicesProperty, SerializedProperty graphFingerprintProperty, Action onChanged)
+        {
+            mode = CityGeneratorGridPreviewMode.NodeGraphPicker;
+            pedestrianPreview = preview;
+            this.selectedNodeIndicesProperty = selectedNodeIndicesProperty;
+            this.graphFingerprintProperty = graphFingerprintProperty;
+            this.onChanged = onChanged;
+            tooltip = "Click a node to add/remove it from this entry's route. Only a node directly connected to the current selection can be added, except the first.";
+
+            if (preview != null && selectedNodeIndicesProperty != null && graphFingerprintProperty != null)
+            {
+                selectedNodeIndicesProperty.serializedObject.Update();
+                int currentFingerprint = preview.Fingerprint();
+                if (selectedNodeIndicesProperty.arraySize > 0 && graphFingerprintProperty.intValue != currentFingerprint)
+                {
+                    selectedNodeIndicesProperty.ClearArray();
+                    graphFingerprintProperty.intValue = currentFingerprint;
+                    selectedNodeIndicesProperty.serializedObject.ApplyModifiedProperties();
+                    onChanged?.Invoke();
+                }
+            }
+
+            MarkDirtyRepaint();
         }
 
         /// <summary>
@@ -177,6 +221,13 @@ namespace CityGenerator.Editor.UI
             Rect area = contentRect;
             if (area.width <= 0f || area.height <= 0f)
                 return;
+
+            if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
+            {
+                OnNodeGraphPointerDown(evt, area);
+                evt.StopPropagation();
+                return;
+            }
 
             float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
             float totalWidth = cellSize * gridWidth;
@@ -324,8 +375,267 @@ namespace CityGenerator.Editor.UI
                 DrawCustomAreaEdit(context);
             else if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
                 DrawPlazaMultiToggle(context);
+            else if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
+                DrawNodeGraph(context);
             else
                 DrawSingleSelection(context);
+        }
+
+        // NodeGraphPicker geometry: world XZ -> screen mapping shared by drawing and hit-testing,
+        // fit to the node bounds (there is no fixed block grid to size against in this mode).
+        private readonly struct NodeGraphLayout
+        {
+            public readonly float minX;
+            public readonly float maxZ;
+            public readonly float scale;
+            public readonly float originX;
+            public readonly float originY;
+
+            public NodeGraphLayout(float minX, float maxZ, float scale, float originX, float originY)
+            {
+                this.minX = minX;
+                this.maxZ = maxZ;
+                this.scale = scale;
+                this.originX = originX;
+                this.originY = originY;
+            }
+        }
+
+        private bool TryComputeNodeGraphLayout(Rect area, out NodeGraphLayout layout)
+        {
+            layout = default;
+            if (pedestrianPreview == null)
+                return false;
+
+            int count = pedestrianPreview.NodeCount;
+            if (count == 0)
+                return false;
+
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 p = pedestrianPreview.GetNode(i).Position;
+                minX = Mathf.Min(minX, p.x);
+                maxX = Mathf.Max(maxX, p.x);
+                minZ = Mathf.Min(minZ, p.z);
+                maxZ = Mathf.Max(maxZ, p.z);
+            }
+
+            float spanX = Mathf.Max(0.01f, maxX - minX);
+            float spanZ = Mathf.Max(0.01f, maxZ - minZ);
+            const float padding = 0.92f;
+            float scale = Mathf.Min(area.width / spanX, area.height / spanZ) * padding;
+            float originX = (area.width - spanX * scale) * 0.5f;
+            float originY = (area.height - spanZ * scale) * 0.5f;
+
+            layout = new NodeGraphLayout(minX, maxZ, scale, originX, originY);
+            return true;
+        }
+
+        // Same +Z-is-up flip every other mode's row math applies.
+        private static Vector2 NodeGraphScreenPoint(NodeGraphLayout layout, Vector3 position)
+        {
+            float x = layout.originX + (position.x - layout.minX) * layout.scale;
+            float y = layout.originY + (layout.maxZ - position.z) * layout.scale;
+            return new Vector2(x, y);
+        }
+
+        private const float NodeHitRadius = 10f;
+
+        private void OnNodeGraphPointerDown(PointerDownEvent evt, Rect area)
+        {
+            if (pedestrianPreview == null || !TryComputeNodeGraphLayout(area, out NodeGraphLayout layout))
+                return;
+
+            Vector2 local = evt.localPosition;
+            int hitNode = -1;
+            float bestDistanceSqr = NodeHitRadius * NodeHitRadius;
+            int count = pedestrianPreview.NodeCount;
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 screen = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(i).Position);
+                float distanceSqr = (screen - local).sqrMagnitude;
+                if (distanceSqr < bestDistanceSqr)
+                {
+                    bestDistanceSqr = distanceSqr;
+                    hitNode = i;
+                }
+            }
+
+            if (hitNode >= 0)
+                ToggleGraphNode(hitNode);
+        }
+
+        private void ToggleGraphNode(int nodeIndex)
+        {
+            if (selectedNodeIndicesProperty == null)
+                return;
+
+            selectedNodeIndicesProperty.serializedObject.Update();
+            List<int> selected = ReadSelectedNodeIndices();
+
+            if (selected.Contains(nodeIndex))
+            {
+                selected.Remove(nodeIndex);
+                selected = KeepLargestConnectedComponent(selected);
+            }
+            else
+            {
+                bool canAdd = selected.Count == 0 || IsDirectlyConnectedToAny(nodeIndex, selected);
+                if (!canAdd)
+                    return;
+
+                selected.Add(nodeIndex);
+            }
+
+            WriteSelectedNodeIndices(selected);
+            if (graphFingerprintProperty != null && pedestrianPreview != null)
+                graphFingerprintProperty.intValue = pedestrianPreview.Fingerprint();
+
+            selectedNodeIndicesProperty.serializedObject.ApplyModifiedProperties();
+            MarkDirtyRepaint();
+            onChanged?.Invoke();
+        }
+
+        private List<int> ReadSelectedNodeIndices()
+        {
+            var result = new List<int>(selectedNodeIndicesProperty.arraySize);
+            for (int i = 0; i < selectedNodeIndicesProperty.arraySize; i++)
+                result.Add(selectedNodeIndicesProperty.GetArrayElementAtIndex(i).intValue);
+            return result;
+        }
+
+        private void WriteSelectedNodeIndices(List<int> values)
+        {
+            selectedNodeIndicesProperty.arraySize = values.Count;
+            for (int i = 0; i < values.Count; i++)
+                selectedNodeIndicesProperty.GetArrayElementAtIndex(i).intValue = values[i];
+        }
+
+        private bool IsDirectlyConnectedToAny(int nodeIndex, List<int> selected)
+        {
+            List<int> neighbours = pedestrianPreview.GetNode(nodeIndex).Neighbours;
+            for (int i = 0; i < neighbours.Count; i++)
+            {
+                if (selected.Contains(neighbours[i]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Flood fill restricted to <paramref name="candidateNodes"/> (following the real graph's
+        /// edges), keeping only the largest resulting component -- SPEC 12: removing a bridge node
+        /// from the selection must never leave it split across several disconnected pieces.
+        /// </summary>
+        private List<int> KeepLargestConnectedComponent(List<int> candidateNodes)
+        {
+            if (candidateNodes.Count <= 1)
+                return candidateNodes;
+
+            var candidateSet = new HashSet<int>(candidateNodes);
+            var visited = new HashSet<int>();
+            List<int> best = new();
+
+            foreach (int start in candidateNodes)
+            {
+                if (visited.Contains(start))
+                    continue;
+
+                var component = new List<int>();
+                var stack = new Stack<int>();
+                stack.Push(start);
+                visited.Add(start);
+
+                while (stack.Count > 0)
+                {
+                    int current = stack.Pop();
+                    component.Add(current);
+                    List<int> neighbours = pedestrianPreview.GetNode(current).Neighbours;
+                    for (int i = 0; i < neighbours.Count; i++)
+                    {
+                        int next = neighbours[i];
+                        if (candidateSet.Contains(next) && !visited.Contains(next))
+                        {
+                            visited.Add(next);
+                            stack.Push(next);
+                        }
+                    }
+                }
+
+                if (component.Count > best.Count)
+                    best = component;
+            }
+
+            return best;
+        }
+
+        private void DrawNodeGraph(MeshGenerationContext context)
+        {
+            Rect area = contentRect;
+            if (area.width <= 0f || area.height <= 0f || pedestrianPreview == null || !TryComputeNodeGraphLayout(area, out NodeGraphLayout layout))
+                return;
+
+            Painter2D painter = context.painter2D;
+            List<int> selected = selectedNodeIndicesProperty != null ? ReadSelectedNodeIndices() : new List<int>();
+            var selectedSet = new HashSet<int>(selected);
+            int count = pedestrianPreview.NodeCount;
+
+            // Every real edge between two selected nodes, drawn first so the node points sit on top.
+            Color edgeColor = new(1f, 0.9f, 0.1f, 0.9f);
+            painter.strokeColor = edgeColor;
+            painter.lineWidth = 2.5f;
+            for (int i = 0; i < count; i++)
+            {
+                if (!selectedSet.Contains(i))
+                    continue;
+
+                PedestrianNode node = pedestrianPreview.GetNode(i);
+                Vector2 from = NodeGraphScreenPoint(layout, node.Position);
+                for (int n = 0; n < node.Neighbours.Count; n++)
+                {
+                    int neighbour = node.Neighbours[n];
+                    if (neighbour <= i || !selectedSet.Contains(neighbour))
+                        continue;
+
+                    Vector2 to = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(neighbour).Position);
+                    painter.BeginPath();
+                    painter.MoveTo(from);
+                    painter.LineTo(to);
+                    painter.Stroke();
+                }
+            }
+
+            const float nodeRadius = 4f;
+            const float selectedRadius = 5.5f;
+            Color selectedColor = new(1f, 0.95f, 0.4f);
+
+            for (int i = 0; i < count; i++)
+            {
+                PedestrianNode node = pedestrianPreview.GetNode(i);
+                Vector2 screen = NodeGraphScreenPoint(layout, node.Position);
+                bool isSelected = selectedSet.Contains(i);
+                DrawCircle(painter, isSelected ? selectedColor : NodeKindColor(node.Kind), screen, isSelected ? selectedRadius : nodeRadius);
+            }
+        }
+
+        private static Color NodeKindColor(PedestrianNodeKind kind) => kind switch
+        {
+            PedestrianNodeKind.Ring => new Color(0.2f, 0.9f, 0.3f),
+            PedestrianNodeKind.Curb => new Color(0.9f, 0.8f, 0.1f),
+            PedestrianNodeKind.Crossing => new Color(1f, 0.4f, 0.1f),
+            PedestrianNodeKind.Interior => new Color(0.3f, 0.6f, 1f),
+            _ => Color.white
+        };
+
+        private static void DrawCircle(Painter2D painter, Color color, Vector2 center, float radius)
+        {
+            painter.fillColor = color;
+            painter.BeginPath();
+            painter.Arc(center, radius, Angle.Degrees(0f), Angle.Degrees(360f));
+            painter.ClosePath();
+            painter.Fill();
         }
 
         private void DrawCustomAreaEdit(MeshGenerationContext context)
