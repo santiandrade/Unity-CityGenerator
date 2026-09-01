@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reuses the same generation code the real pipeline uses. `count` is a budget independent of the
   general Pedestrian Count, and changing the grid/Custom Grid/plazas/Custom Places after tracing a
   route invalidates and clears it instead of silently generating over the wrong nodes.
+- New `Pets/` demo prefabs (`Animal-Cat`, `Animal-Dog`) usable as Custom Pedestrian entries.
+
+### Fixed
+
+- A pedestrian prefab whose model has no `SkinnedMeshRenderer` (e.g. `Pets/`'s rigid per-limb
+  `MeshRenderer`s) no longer freezes its Animator permanently: `Animator.cullingMode` is now chosen
+  per generated instance (`Cull Completely` only when a `SkinnedMeshRenderer` is present, `Always
+  Animate` otherwise) instead of always forcing `Cull Completely`, which never resolves visibility
+  for that rig shape. Also enabled `Loop Time`/`Loop Pose` on `animal-cat.fbx`/`animal-dog.fbx`'s
+  locomotion clips, which defaulted to off and froze the walk cycle on its last frame after under a
+  second.
 
 ## [2.7.0] - 2026-09-01
 ### Added

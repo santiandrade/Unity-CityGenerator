@@ -197,9 +197,7 @@ namespace CityGenerator.Editor
                     serializedAgent.FindProperty("idleStopDurationMax").floatValue = behaviour.idleStopDurationMax;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
-                    Animator animator = instance.GetComponent<Animator>();
-                    if (animator != null)
-                        animator.cullingMode = AnimatorCullingMode.CullCompletely;
+                    ApplyAnimatorCullingMode(instance);
 
                     // The Pedestrian layer is assigned only to the sensor proxy collider's own
                     // GameObject (the instance root, never the user prefab's own colliders,
@@ -213,6 +211,25 @@ namespace CityGenerator.Editor
             }
 
             return placed;
+        }
+
+        /// <summary>
+        /// Sets an animated pedestrian instance's Animator to Cull Completely when it has a
+        /// SkinnedMeshRenderer, and to Always Animate otherwise. Cull Completely relies on Unity
+        /// resolving visibility from a SkinnedMeshRenderer to decide whether to keep simulating the
+        /// state machine; a rig built from plain per-part MeshRenderers instead (e.g. the Pets,
+        /// each limb its own rigid mesh) never gets flagged visible under that mode, so its Animator
+        /// permanently freezes at whatever pose it had when spawned — SetFloat/SetBool keep updating
+        /// every frame with no console warning, but the state time itself never advances.
+        /// </summary>
+        public static void ApplyAnimatorCullingMode(GameObject instance)
+        {
+            Animator animator = instance.GetComponent<Animator>();
+            if (animator == null)
+                return;
+
+            bool hasSkinnedMesh = instance.GetComponentInChildren<SkinnedMeshRenderer>(true) != null;
+            animator.cullingMode = hasSkinnedMesh ? AnimatorCullingMode.CullCompletely : AnimatorCullingMode.AlwaysAnimate;
         }
 
         /// <summary>

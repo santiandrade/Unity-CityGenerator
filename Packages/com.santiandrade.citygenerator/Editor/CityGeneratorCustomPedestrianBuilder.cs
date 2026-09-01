@@ -77,9 +77,7 @@ namespace CityGenerator.Editor
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
                     agent.SetAllowedNodes(allowedNodes);
 
-                    Animator animator = instance.GetComponent<Animator>();
-                    if (animator != null)
-                        animator.cullingMode = AnimatorCullingMode.CullCompletely;
+                    CityGeneratorPedestrianBuilder.ApplyAnimatorCullingMode(instance);
 
                     // The Pedestrian layer is assigned only to the sensor proxy collider's own
                     // GameObject, same convention as BuildPedestrians/BuildVehicles.
