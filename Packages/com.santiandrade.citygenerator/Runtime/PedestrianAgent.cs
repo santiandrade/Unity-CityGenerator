@@ -310,17 +310,24 @@ namespace CityGenerator.Runtime
         /// </summary>
         private void PlanNewDestination()
         {
+            // Unity always constructs a [SerializeField] List<int> as an empty list rather than
+            // leaving it null (confirmed via get_serialized_fields on a normal, never-restricted
+            // pedestrian: allowedNodes came back as an empty array, not a null reference) -- so an
+            // unrestricted agent's allowedNodes is empty, not null, and the restriction checks
+            // below must treat both the same way instead of only null.
+            List<int> restriction = allowedNodes != null && allowedNodes.Count > 0 ? allowedNodes : null;
+
             Vector3 fromPosition = network.GetNode(currentNode).Position;
             int candidateCount = 0;
             // A Custom Pedestrian's allowedNodes is validated (SPEC 12) to be a single connected
             // component already, so the component filter below is redundant for it -- and would be
             // wrong to apply anyway, since ComponentOf reflects the *whole* graph's topology, not
             // the restricted subset's.
-            int requiredComponent = allowedNodes == null ? network.ComponentOf(currentNode) : -1;
+            int requiredComponent = restriction == null ? network.ComponentOf(currentNode) : -1;
 
             for (int attempt = 0; attempt < DestinationCandidateAttempts; attempt++)
             {
-                int candidate = network.PickRandomDestination(requiredComponent, allowedNodes);
+                int candidate = network.PickRandomDestination(requiredComponent, restriction);
                 if (candidate < 0 || candidate == currentNode)
                 {
                     continue;
@@ -367,7 +374,7 @@ namespace CityGenerator.Runtime
             for (int i = 0; i < candidateCount; i++)
             {
                 int[] scratch = manager.PathBufferPool.Rent();
-                int length = network.FindPath(currentNode, candidateNodes[i], scratch, allowedNodes);
+                int length = network.FindPath(currentNode, candidateNodes[i], scratch, restriction);
                 if (length > 1)
                 {
                     EnsurePathCapacity(length);
