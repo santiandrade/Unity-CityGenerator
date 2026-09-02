@@ -59,6 +59,7 @@ Specs are in `specs/` (Spanish, driven by a `/spec-*` workflow configured by `sp
 | [`12-custom-pedestrians.md`](specs/12-custom-pedestrians.md) | Custom Pedestrians: a separate budget of pedestrians confined to a hand-traced subgraph, its node-graph picker, and the `Pets/` demo prefabs (rigid-rig Animator culling). |
 | [`13-free-camera.md`](specs/13-free-camera.md) | Free Camera: `FreeCameraController` alongside `ThirdPersonCamera` on the Main Camera, and the `Free View` action map. |
 
+- [`docs/user-manual.md`](docs/user-manual.md) / [`docs/user-manual.es.md`](docs/user-manual.es.md) — end-user manual for the window (every tab, card and parameter), linked from the READMEs. Screenshots live in `docs/images/manual/`; keep both language versions in sync when the UI changes.
 - [`docs/technical-review.md`](docs/technical-review.md) — standing technical review (performance, code quality, ECS analysis) with the pending findings.
 - [`docs/technical-review-2026-08-25.md`](docs/technical-review-2026-08-25.md) — external review; its critical/architectural findings were addressed by SPEC 04 and its performance findings (items 6-9) by SPEC 05. Remaining medium/low-priority items (demo content, docs, `CityGeneratorWindow` splitting) stay open.
 - [`docs/pedestrian-network-plan.md`](docs/pedestrian-network-plan.md) — superseded planning document, kept for history; `specs/03` is the authority.
