@@ -27,6 +27,13 @@ namespace CityGenerator.Runtime
         [Tooltip("Radius, in meters, of the world area visible around the player. Written by CityGeneratorSceneBuilder from MinimapSettings.viewRadiusMeters.")]
         [SerializeField] private float viewRadiusMeters = 60f;
 
+        /// <summary>Radius, in meters, of the world area visible around the player. Settable at runtime by CityGeneratorAPI.Minimap.SetViewRadiusMeters.</summary>
+        public float ViewRadiusMeters
+        {
+            get => viewRadiusMeters;
+            set => viewRadiusMeters = value;
+        }
+
         [Tooltip("Displays MinimapData.snapshot, windowed via uvRect to the area within View Radius Meters around the player.")]
         [SerializeField] private RawImage mapImage;
         [Tooltip("Fixed at the HUD's centre; rotates to reflect the player's current yaw. The map itself never rotates.")]

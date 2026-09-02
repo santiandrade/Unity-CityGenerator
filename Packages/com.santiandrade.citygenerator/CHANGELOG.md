@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New Runtime API (`CityGeneratorAPI`, `Packages/.../Runtime/API/`): a static, module-per-tab
+  (`City`, `Player`, `Traffic`, `Pedestrians`, `Minimap`, `Audio`) read entry point for a generated
+  city's data, working the same in Editor Play Mode and in a player build. `IsCityAvailable` and
+  every getter degrade to a safe default (0/false/`Vector2Int.zero`/`Vector3.zero`/null) instead of
+  throwing when no city is active. A small number of setters already safe at runtime are exposed:
+  `City.SetDayNightEnabled`/`SetHour`, `Minimap.SetVisible`/`SetViewRadiusMeters`. Backed by a new
+  `CityGeneratorInfo` runtime component that `CityGeneratorSceneBuilder`/`CityGeneratorContentAssembler`
+  populate on every Build/Re-Build. See `docs/api-reference.md`.
 
 ## [2.9.0] - 2026-09-02
 ### Added

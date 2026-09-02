@@ -94,6 +94,9 @@ namespace CityGenerator.Runtime
         // toggled without ever going through OnDisable in between isn't possible, but a defensive
         // guard here costs nothing and keeps the same idempotence guarantee TrafficManager's
         // HashSet gives CarAgent) must not end up ticked twice in the same frame.
+        /// <summary>Live count of currently registered agents.</summary>
+        public int AgentCount => agents.Count;
+
         public void Register(PedestrianAgent agent)
         {
             if (!agents.Contains(agent))

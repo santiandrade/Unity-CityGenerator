@@ -60,6 +60,9 @@ namespace CityGenerator.Runtime
 
         private bool active;
 
+        /// <summary>Whether Free View is currently active (read-only; toggled only by the Toggle input action).</summary>
+        public bool IsActive => active;
+
         private float targetYaw;
         private float targetPitch;
         private float currentYaw;

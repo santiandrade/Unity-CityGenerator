@@ -10,6 +10,9 @@ scene. Open it from **Tools > City Generator > Open**.
 📖 **[User Manual](docs/user-manual.md)** — every tab, card and parameter explained, with
 screenshots, plus the full process of generating a city.
 
+🧩 **[Runtime API Reference](docs/api-reference.md)** — query a generated city's data (and a
+handful of safe setters) from your own scripts, in Play Mode and in a build.
+
 - **Generate a complete city:** roads, sidewalks, road markings, buildings, plazas,
   street furniture, traffic lights, autonomous traffic, pedestrians, an optional
   day/night cycle, ambient audio, and a minimap HUD.
