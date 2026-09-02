@@ -18,7 +18,7 @@ namespace CityGenerator.Editor.UI
         SingleSelectQuadrant,
         /// <summary>Custom Grid's "Define City Area" submode (SPEC 11): the fixed MaxGridSize canvas is painted as real blocks/holes; clicking a valid "+" hole or "-" removable block edits general.customBlockCells directly.</summary>
         CustomAreaEdit,
-        /// <summary>A Custom Pedestrian entry's own picker (SPEC 12): draws the real pedestrian node graph (Ring/Curb/Crossing/Interior) instead of blocks; clicking a node adds/removes it from the entry's selectedNodeIndices subgraph.</summary>
+        /// <summary>A Custom Pedestrian entry's own picker (SPEC 12): draws the real pedestrian graph (Ring/Curb/Crossing/Interior) grouped into clickable line zones instead of blocks or raw nodes; clicking a zone adds/removes all of its underlying nodes from the entry's selectedNodeIndices subgraph.</summary>
         NodeGraphPicker,
     }
 
@@ -56,6 +56,8 @@ namespace CityGenerator.Editor.UI
         private CityGeneratorPedestrianPreview pedestrianPreview;
         private SerializedProperty selectedNodeIndicesProperty;
         private SerializedProperty graphFingerprintProperty;
+        private List<GraphZone> zoneCache;
+        private CityGeneratorPedestrianPreview zoneCacheSource;
 
         public CityGeneratorGridPreview()
         {
@@ -106,15 +108,19 @@ namespace CityGenerator.Editor.UI
         }
 
         /// <summary>
-        /// Binds this preview as a Custom Pedestrian entry's node-graph picker (SPEC 12):
-        /// <paramref name="preview"/> supplies the real node positions/adjacency to draw and hit-test
-        /// against; clicking a node adds/removes it in <paramref name="selectedNodeIndicesProperty"/>
-        /// (only a node directly connected to the current selection can be added, except the first),
-        /// and every edit updates <paramref name="graphFingerprintProperty"/> to
-        /// <paramref name="preview"/>'s current fingerprint. If the entry already holds a selection
-        /// whose stored fingerprint no longer matches <paramref name="preview"/>'s (the grid/plaza/
-        /// Custom Places settings changed since it was traced), the stale selection is cleared right
-        /// away instead of silently pointing at the wrong nodes.
+        /// Binds this preview as a Custom Pedestrian entry's node-graph picker (SPEC 12): draws the
+        /// real graph grouped into clickable line zones (a Ring edge, an Interior spoke, a crossing
+        /// -- see <see cref="BuildZones"/>) instead of one point per node, since a normal block's 13+
+        /// individual nodes were too small/dense to click reliably. <paramref name="preview"/>
+        /// supplies the real node positions/adjacency the zones are derived from and hit-test
+        /// against; clicking a zone adds/removes all of its underlying nodes in
+        /// <paramref name="selectedNodeIndicesProperty"/> (only a zone sharing a node with the
+        /// current selection can be added, except the first), and every edit updates
+        /// <paramref name="graphFingerprintProperty"/> to <paramref name="preview"/>'s current
+        /// fingerprint. If the entry already holds a selection whose stored fingerprint no longer
+        /// matches <paramref name="preview"/>'s (the grid/plaza/Custom Places settings changed since
+        /// it was traced), the stale selection is cleared right away instead of silently pointing at
+        /// the wrong nodes.
         /// </summary>
         public void BindNodeGraph(CityGeneratorPedestrianPreview preview, SerializedProperty selectedNodeIndicesProperty, SerializedProperty graphFingerprintProperty, Action onChanged)
         {
@@ -123,7 +129,7 @@ namespace CityGenerator.Editor.UI
             this.selectedNodeIndicesProperty = selectedNodeIndicesProperty;
             this.graphFingerprintProperty = graphFingerprintProperty;
             this.onChanged = onChanged;
-            tooltip = "Click a node to add/remove it from this entry's route. Only a node directly connected to the current selection can be added, except the first.";
+            tooltip = "Click a line to add/remove the zone it represents from this entry's route. Only a zone sharing a node with the current selection can be added, except the first.";
 
             if (preview != null && selectedNodeIndicesProperty != null && graphFingerprintProperty != null)
             {
@@ -224,7 +230,7 @@ namespace CityGenerator.Editor.UI
 
             if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
             {
-                OnNodeGraphPointerDown(evt, area);
+                OnZonePointerDown(evt, area);
                 evt.StopPropagation();
                 return;
             }
@@ -376,7 +382,7 @@ namespace CityGenerator.Editor.UI
             else if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
                 DrawPlazaMultiToggle(context);
             else if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
-                DrawNodeGraph(context);
+                DrawZoneGraph(context);
             else
                 DrawSingleSelection(context);
         }
@@ -440,52 +446,251 @@ namespace CityGenerator.Editor.UI
             return new Vector2(x, y);
         }
 
-        private const float NodeHitRadius = 10f;
+        /// <summary>
+        /// One clickable line in the NodeGraphPicker: an ordered chain of real node indices whose
+        /// endpoints are the only points where it can touch another zone (see <see cref="BuildZones"/>).
+        /// A zone counts as selected when every node in <see cref="NodeChain"/> is in the entry's
+        /// selectedNodeIndices.
+        /// </summary>
+        private readonly struct GraphZone
+        {
+            public readonly int[] NodeChain;
+            public readonly PedestrianNodeKind Kind;
 
-        private void OnNodeGraphPointerDown(PointerDownEvent evt, Rect area)
+            public GraphZone(int[] nodeChain, PedestrianNodeKind kind)
+            {
+                NodeChain = nodeChain;
+                Kind = kind;
+            }
+        }
+
+        /// <summary>
+        /// Groups the preview's real graph into clickable zones, purely from each node's
+        /// <see cref="PedestrianNodeKind"/> and degree (never from block bookkeeping, which this
+        /// picker has no access to) so the same logic covers both grid modes:
+        /// <list type="bullet">
+        /// <item>Ring edge: any single real edge between two Ring nodes (2 nodes).</item>
+        /// <item>Interior spoke: a spoke-centre node (Interior, 4 Interior neighbours) paired with
+        /// one arm and that arm's non-centre neighbour (3 nodes; 4 spokes per centre).</item>
+        /// <item>Crossing: a Crossing node (2 Curb neighbours) expanded one more hop each side to
+        /// the two Ring nodes it connects (5 nodes; one per signalled crossing arm).</item>
+        /// </list>
+        /// </summary>
+        private static List<GraphZone> BuildZones(CityGeneratorPedestrianPreview preview)
+        {
+            var zones = new List<GraphZone>();
+            int count = preview.NodeCount;
+            var visitedRingEdges = new HashSet<long>();
+
+            for (int i = 0; i < count; i++)
+            {
+                PedestrianNode node = preview.GetNode(i);
+
+                if (node.Kind == PedestrianNodeKind.Ring)
+                {
+                    for (int n = 0; n < node.Neighbours.Count; n++)
+                    {
+                        int neighbour = node.Neighbours[n];
+                        if (preview.GetNode(neighbour).Kind != PedestrianNodeKind.Ring)
+                            continue;
+
+                        long key = RingEdgeKey(i, neighbour);
+                        if (!visitedRingEdges.Add(key))
+                            continue;
+
+                        zones.Add(new GraphZone(new[] { i, neighbour }, PedestrianNodeKind.Ring));
+                    }
+                }
+                else if (node.Kind == PedestrianNodeKind.Interior && node.Neighbours.Count == 4 && AllNeighboursAreKind(preview, node, PedestrianNodeKind.Interior))
+                {
+                    for (int n = 0; n < node.Neighbours.Count; n++)
+                    {
+                        int arm = node.Neighbours[n];
+                        int far = OtherNeighbour(preview, arm, i);
+                        if (far < 0)
+                            continue;
+
+                        zones.Add(new GraphZone(new[] { i, arm, far }, PedestrianNodeKind.Interior));
+                    }
+                }
+                else if (node.Kind == PedestrianNodeKind.Crossing && node.Neighbours.Count == 2)
+                {
+                    int curbA = node.Neighbours[0];
+                    int curbB = node.Neighbours[1];
+                    int ringA = OtherNeighbour(preview, curbA, i);
+                    int ringB = OtherNeighbour(preview, curbB, i);
+                    if (ringA >= 0 && ringB >= 0)
+                        zones.Add(new GraphZone(new[] { ringA, curbA, i, curbB, ringB }, PedestrianNodeKind.Crossing));
+                }
+            }
+
+            return zones;
+        }
+
+        private static long RingEdgeKey(int a, int b)
+        {
+            int min = Mathf.Min(a, b);
+            int max = Mathf.Max(a, b);
+            return ((long)min << 32) | (uint)max;
+        }
+
+        private static bool AllNeighboursAreKind(CityGeneratorPedestrianPreview preview, PedestrianNode node, PedestrianNodeKind kind)
+        {
+            for (int i = 0; i < node.Neighbours.Count; i++)
+            {
+                if (preview.GetNode(node.Neighbours[i]).Kind != kind)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static int OtherNeighbour(CityGeneratorPedestrianPreview preview, int nodeIndex, int exclude)
+        {
+            List<int> neighbours = preview.GetNode(nodeIndex).Neighbours;
+            for (int i = 0; i < neighbours.Count; i++)
+            {
+                if (neighbours[i] != exclude)
+                    return neighbours[i];
+            }
+
+            return -1;
+        }
+
+        private List<GraphZone> GetZones()
+        {
+            if (pedestrianPreview == null)
+                return null;
+
+            if (zoneCache == null || !ReferenceEquals(zoneCacheSource, pedestrianPreview))
+            {
+                zoneCache = BuildZones(pedestrianPreview);
+                zoneCacheSource = pedestrianPreview;
+            }
+
+            return zoneCache;
+        }
+
+        private const float ZoneHitDistance = 9f;
+
+        private void OnZonePointerDown(PointerDownEvent evt, Rect area)
         {
             if (pedestrianPreview == null || !TryComputeNodeGraphLayout(area, out NodeGraphLayout layout))
                 return;
 
+            List<GraphZone> zones = GetZones();
+            if (zones == null)
+                return;
+
             Vector2 local = evt.localPosition;
-            int hitNode = -1;
-            float bestDistanceSqr = NodeHitRadius * NodeHitRadius;
-            int count = pedestrianPreview.NodeCount;
-            for (int i = 0; i < count; i++)
+            int hitZone = -1;
+            float bestDistance = ZoneHitDistance;
+            for (int z = 0; z < zones.Count; z++)
             {
-                Vector2 screen = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(i).Position);
-                float distanceSqr = (screen - local).sqrMagnitude;
-                if (distanceSqr < bestDistanceSqr)
+                int[] chain = zones[z].NodeChain;
+                for (int s = 0; s < chain.Length - 1; s++)
                 {
-                    bestDistanceSqr = distanceSqr;
-                    hitNode = i;
+                    Vector2 a = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(chain[s]).Position);
+                    Vector2 b = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(chain[s + 1]).Position);
+                    float distance = DistancePointToSegment(local, a, b);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        hitZone = z;
+                    }
                 }
             }
 
-            if (hitNode >= 0)
-                ToggleGraphNode(hitNode);
+            if (hitZone >= 0)
+                ToggleZone(hitZone);
         }
 
-        private void ToggleGraphNode(int nodeIndex)
+        private static float DistancePointToSegment(Vector2 point, Vector2 a, Vector2 b)
+        {
+            Vector2 ab = b - a;
+            float lengthSqr = ab.sqrMagnitude;
+            if (lengthSqr < 0.0001f)
+                return Vector2.Distance(point, a);
+
+            float t = Mathf.Clamp01(Vector2.Dot(point - a, ab) / lengthSqr);
+            Vector2 projection = a + ab * t;
+            return Vector2.Distance(point, projection);
+        }
+
+        private static bool IsZoneSelected(GraphZone zone, HashSet<int> selectedSet)
+        {
+            for (int i = 0; i < zone.NodeChain.Length; i++)
+            {
+                if (!selectedSet.Contains(zone.NodeChain[i]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool CanAddZone(GraphZone zone, HashSet<int> selectedSet)
+        {
+            if (selectedSet.Count == 0)
+                return true;
+
+            for (int i = 0; i < zone.NodeChain.Length; i++)
+            {
+                if (selectedSet.Contains(zone.NodeChain[i]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void ToggleZone(int zoneIndex)
         {
             if (selectedNodeIndicesProperty == null)
                 return;
 
+            List<GraphZone> zones = GetZones();
+            if (zones == null || zoneIndex < 0 || zoneIndex >= zones.Count)
+                return;
+
             selectedNodeIndicesProperty.serializedObject.Update();
             List<int> selected = ReadSelectedNodeIndices();
+            var selectedSet = new HashSet<int>(selected);
+            GraphZone zone = zones[zoneIndex];
 
-            if (selected.Contains(nodeIndex))
+            if (IsZoneSelected(zone, selectedSet))
             {
-                selected.Remove(nodeIndex);
+                // A node stays if some OTHER still-fully-selected zone also needs it, so removing
+                // this zone never visually breaks a neighbouring zone the user didn't touch.
+                var protectedNodes = new HashSet<int>();
+                for (int z = 0; z < zones.Count; z++)
+                {
+                    if (z == zoneIndex || !IsZoneSelected(zones[z], selectedSet))
+                        continue;
+
+                    int[] otherChain = zones[z].NodeChain;
+                    for (int i = 0; i < otherChain.Length; i++)
+                        protectedNodes.Add(otherChain[i]);
+                }
+
+                for (int i = 0; i < zone.NodeChain.Length; i++)
+                {
+                    int nodeIndex = zone.NodeChain[i];
+                    if (!protectedNodes.Contains(nodeIndex))
+                        selected.Remove(nodeIndex);
+                }
+
                 selected = KeepLargestConnectedComponent(selected);
             }
             else
             {
-                bool canAdd = selected.Count == 0 || IsDirectlyConnectedToAny(nodeIndex, selected);
-                if (!canAdd)
+                if (!CanAddZone(zone, selectedSet))
                     return;
 
-                selected.Add(nodeIndex);
+                for (int i = 0; i < zone.NodeChain.Length; i++)
+                {
+                    int nodeIndex = zone.NodeChain[i];
+                    if (!selected.Contains(nodeIndex))
+                        selected.Add(nodeIndex);
+                }
             }
 
             WriteSelectedNodeIndices(selected);
@@ -510,18 +715,6 @@ namespace CityGenerator.Editor.UI
             selectedNodeIndicesProperty.arraySize = values.Count;
             for (int i = 0; i < values.Count; i++)
                 selectedNodeIndicesProperty.GetArrayElementAtIndex(i).intValue = values[i];
-        }
-
-        private bool IsDirectlyConnectedToAny(int nodeIndex, List<int> selected)
-        {
-            List<int> neighbours = pedestrianPreview.GetNode(nodeIndex).Neighbours;
-            for (int i = 0; i < neighbours.Count; i++)
-            {
-                if (selected.Contains(neighbours[i]))
-                    return true;
-            }
-
-            return false;
         }
 
         /// <summary>
@@ -571,72 +764,58 @@ namespace CityGenerator.Editor.UI
             return best;
         }
 
-        private void DrawNodeGraph(MeshGenerationContext context)
+        private void DrawZoneGraph(MeshGenerationContext context)
         {
             Rect area = contentRect;
             if (area.width <= 0f || area.height <= 0f || pedestrianPreview == null || !TryComputeNodeGraphLayout(area, out NodeGraphLayout layout))
                 return;
 
+            List<GraphZone> zones = GetZones();
+            if (zones == null)
+                return;
+
             Painter2D painter = context.painter2D;
             List<int> selected = selectedNodeIndicesProperty != null ? ReadSelectedNodeIndices() : new List<int>();
             var selectedSet = new HashSet<int>(selected);
-            int count = pedestrianPreview.NodeCount;
 
-            // Every real edge between two selected nodes, drawn first so the node points sit on top.
-            Color edgeColor = new(1f, 0.9f, 0.1f, 0.9f);
-            painter.strokeColor = edgeColor;
-            painter.lineWidth = 2.5f;
-            for (int i = 0; i < count; i++)
+            // Unselected zones first so the highlighted ones draw on top.
+            for (int z = 0; z < zones.Count; z++)
             {
-                if (!selectedSet.Contains(i))
-                    continue;
-
-                PedestrianNode node = pedestrianPreview.GetNode(i);
-                Vector2 from = NodeGraphScreenPoint(layout, node.Position);
-                for (int n = 0; n < node.Neighbours.Count; n++)
-                {
-                    int neighbour = node.Neighbours[n];
-                    if (neighbour <= i || !selectedSet.Contains(neighbour))
-                        continue;
-
-                    Vector2 to = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(neighbour).Position);
-                    painter.BeginPath();
-                    painter.MoveTo(from);
-                    painter.LineTo(to);
-                    painter.Stroke();
-                }
+                if (!IsZoneSelected(zones[z], selectedSet))
+                    DrawZonePolyline(painter, layout, zones[z], ZoneKindColor(zones[z].Kind), 2f);
             }
 
-            const float nodeRadius = 4f;
-            const float selectedRadius = 5.5f;
-            Color selectedColor = new(1f, 0.95f, 0.4f);
-
-            for (int i = 0; i < count; i++)
+            Color selectedColor = new(1f, 0.9f, 0.15f, 0.95f);
+            for (int z = 0; z < zones.Count; z++)
             {
-                PedestrianNode node = pedestrianPreview.GetNode(i);
-                Vector2 screen = NodeGraphScreenPoint(layout, node.Position);
-                bool isSelected = selectedSet.Contains(i);
-                DrawCircle(painter, isSelected ? selectedColor : NodeKindColor(node.Kind), screen, isSelected ? selectedRadius : nodeRadius);
+                if (IsZoneSelected(zones[z], selectedSet))
+                    DrawZonePolyline(painter, layout, zones[z], selectedColor, 4f);
             }
         }
 
-        private static Color NodeKindColor(PedestrianNodeKind kind) => kind switch
+        private void DrawZonePolyline(Painter2D painter, NodeGraphLayout layout, GraphZone zone, Color color, float lineWidth)
         {
-            PedestrianNodeKind.Ring => new Color(0.2f, 0.9f, 0.3f),
-            PedestrianNodeKind.Curb => new Color(0.9f, 0.8f, 0.1f),
-            PedestrianNodeKind.Crossing => new Color(1f, 0.4f, 0.1f),
-            PedestrianNodeKind.Interior => new Color(0.3f, 0.6f, 1f),
-            _ => Color.white
-        };
-
-        private static void DrawCircle(Painter2D painter, Color color, Vector2 center, float radius)
-        {
-            painter.fillColor = color;
+            painter.strokeColor = color;
+            painter.lineWidth = lineWidth;
             painter.BeginPath();
-            painter.Arc(center, radius, Angle.Degrees(0f), Angle.Degrees(360f));
-            painter.ClosePath();
-            painter.Fill();
+            for (int i = 0; i < zone.NodeChain.Length; i++)
+            {
+                Vector2 screen = NodeGraphScreenPoint(layout, pedestrianPreview.GetNode(zone.NodeChain[i]).Position);
+                if (i == 0)
+                    painter.MoveTo(screen);
+                else
+                    painter.LineTo(screen);
+            }
+            painter.Stroke();
         }
+
+        private static Color ZoneKindColor(PedestrianNodeKind kind) => kind switch
+        {
+            PedestrianNodeKind.Ring => new Color(0.2f, 0.75f, 0.35f, 0.6f),
+            PedestrianNodeKind.Interior => new Color(0.3f, 0.55f, 0.9f, 0.6f),
+            PedestrianNodeKind.Crossing => new Color(0.95f, 0.5f, 0.15f, 0.6f),
+            _ => new Color(1f, 1f, 1f, 0.5f)
+        };
 
         private void DrawCustomAreaEdit(MeshGenerationContext context)
         {

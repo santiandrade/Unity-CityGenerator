@@ -149,7 +149,7 @@ namespace CityGenerator.Editor.UI
                 row.Add(preview);
                 gridPreviews.Add(preview);
 
-                var hint = new Label("Click a node above to add/remove it from this entry's route. Only a node directly connected to the current selection can be added, except the first. Ring = green, Curb = yellow, Crossing = orange, Interior = blue; selected nodes and their real edges are highlighted.");
+                var hint = new Label("Click a line above to add/remove that zone from this entry's route. Only a zone sharing a point with the current selection can be added, except the first. Ring edge = green, crossing = orange, interior spoke = blue; selected zones are highlighted in yellow.");
                 hint.AddToClassList("cg-grid-preview__caption");
                 row.Add(hint);
 

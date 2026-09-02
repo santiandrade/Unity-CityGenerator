@@ -17,6 +17,12 @@ namespace CityGenerator.Editor
         private const string MinimapHudPrefabPath = "Packages/com.santiandrade.citygenerator/DefaultAssets/Prefabs/MinimapHUD.prefab";
         private const string MinimapHudInstanceName = "Minimap HUD";
 
+        // Same isolate-by-moving-the-root pattern CityGeneratorMinimapBuilder's snapshot capture
+        // uses (a different offset so the two never coincide), applied here for the same reason:
+        // hiding/disabling an already-loaded GameObject isn't reliable against physics queries
+        // that already have it indexed, but moving it is.
+        private const float PreviousCityIsolationOffsetX = -50000f;
+
         public static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings)
         {
             return BuildAndSaveScene(settings, onProgress: null);
@@ -86,6 +92,28 @@ namespace CityGenerator.Editor
         {
             Scene scene = EditorSceneManager.GetActiveScene();
 
+            // Moved aside (never destroyed yet) *before* the new city is built: the previous city
+            // isn't destroyed until Assemble below succeeds (see the invariant this preserves,
+            // right below), so without this it sits in the exact same world-space footprint as the
+            // new one for the whole call -- two sets of static colliders stacked exactly on top of
+            // each other made PedestrianNetwork.PrunePlacedObstacles' downward Physics.Raycast
+            // ground check intermittently (roughly every other Rebuild) find no hit at all,
+            // wrongly marking most/all nodes Blocked -- confirmed directly against this exact
+            // scene. Moved back in the catch below so a failed rebuild still leaves the previous
+            // city exactly where it was.
+            GameObject previousCityRoot = null;
+            Vector3 previousCityRootPosition = default;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                if (root.GetComponent<CityGeneratorRoot>() != null)
+                {
+                    previousCityRoot = root;
+                    previousCityRootPosition = root.transform.position;
+                    root.transform.position = previousCityRootPosition + new Vector3(PreviousCityIsolationOffsetX, 0f, 0f);
+                    break;
+                }
+            }
+
             var cityRootGO = new GameObject("City (generating)");
             SceneManager.MoveGameObjectToScene(cityRootGO, scene);
 
@@ -98,6 +126,8 @@ namespace CityGenerator.Editor
             catch
             {
                 Object.DestroyImmediate(cityRootGO);
+                if (previousCityRoot != null)
+                    previousCityRoot.transform.position = previousCityRootPosition;
                 throw;
             }
 
@@ -108,16 +138,8 @@ namespace CityGenerator.Editor
             if (previousMinimapHud != null)
                 Undo.DestroyObjectImmediate(previousMinimapHud);
 
-            foreach (GameObject root in scene.GetRootGameObjects())
-            {
-                if (root == cityRootGO)
-                    continue;
-                if (root.GetComponent<CityGeneratorRoot>() != null)
-                {
-                    Undo.DestroyObjectImmediate(root);
-                    break;
-                }
-            }
+            if (previousCityRoot != null)
+                Undo.DestroyObjectImmediate(previousCityRoot);
 
             Undo.RegisterCreatedObjectUndo(cityRootGO, "Rebuild City");
             Undo.RecordObject(cityRootGO, "Rebuild City");

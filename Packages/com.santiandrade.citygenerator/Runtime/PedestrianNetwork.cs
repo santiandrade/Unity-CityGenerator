@@ -459,8 +459,8 @@ namespace CityGenerator.Runtime
 
             // Half the block's building-slot gap (CityGeneratorConstants.BuildingSlotPitch / 2):
             // derived directly from ringRadius rather than a new field, since exact placement
-            // doesn't matter -- PruneNodesAgainstObstacles/PrunePlacedObstacles block any node
-            // that ends up overlapping a building regardless of its precise offset.
+            // doesn't matter -- PrunePlacedObstacles blocks any node that ends up overlapping a
+            // building's collider regardless of its precise offset.
             float armOffset = ringRadius * 0.5f;
 
             int centre = AddNode(c, PedestrianNodeKind.Interior);
@@ -1083,6 +1083,16 @@ namespace CityGenerator.Runtime
         [ContextMenu("Prune Placed Obstacles")]
         public void PrunePlacedObstacles()
         {
+            // Generation creates every ground/building/prop collider in the same script execution
+            // that then immediately calls this (via Awake() -> Build()): without forcing a sync,
+            // Physics.Raycast/CheckSphere below can run before Unity's physics engine has indexed
+            // those brand-new colliders, so the ground raycast finds nothing under a huge fraction
+            // of nodes and !hasGround marks them all Blocked -- confirmed directly (one bad
+            // generation had 531/715 nodes Blocked; calling this alone, with no other change,
+            // dropped it to 0). Cheap relative to the CheckSphere/Raycast pass this method already
+            // does per node.
+            Physics.SyncTransforms();
+
             for (int i = 0; i < nodes.Count; i++)
             {
                 PedestrianNode node = nodes[i];

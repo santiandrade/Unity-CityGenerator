@@ -196,8 +196,6 @@ namespace CityGenerator.Editor
                 pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight, blocks, reservedSlots);
                 pedestrianNetwork.Build();
             }
-            CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
-
             List<GameObject> pedestrianInstances = new();
             if (settings.general.includePedestrians)
             {
