@@ -36,6 +36,10 @@ namespace CityGenerator.Runtime
         private CarAgent[] agentsSnapshot = System.Array.Empty<CarAgent>();
         private bool agentsSnapshotDirty;
 
+        /// <summary>Live count of currently registered agents — reflects a car that has since
+        /// self-disabled (e.g. a Custom Grid dead end), unlike a count frozen at generation time.</summary>
+        public int AgentCount => agents.Count;
+
         public void Register(CarAgent agent)
         {
             if (agents.Add(agent))

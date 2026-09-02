@@ -64,6 +64,14 @@ namespace CityGenerator.Editor
             if (cityRoot.GetComponent<CityGeneratorRoot>() == null)
                 cityRoot.gameObject.AddComponent<CityGeneratorRoot>();
 
+            // Added alongside CityGeneratorRoot for the same reason, and populated below once every
+            // count/reference this method computes is known — CityGeneratorSceneBuilder fills the
+            // remaining fields (player, freeCameraController, dayNightCycle, minimapHUD, minimapData)
+            // right after creating each of those, which live outside this method's scope.
+            CityGeneratorInfo info = cityRoot.GetComponent<CityGeneratorInfo>();
+            if (info == null)
+                info = cityRoot.gameObject.AddComponent<CityGeneratorInfo>();
+
             var random = settings.general.useCustomSeed
                 ? new System.Random(settings.general.seed)
                 : new System.Random();
@@ -233,6 +241,19 @@ namespace CityGenerator.Editor
             Report("Audio", 0.99f);
             CityGeneratorAudioBuilder.BuildAmbience(cityRoot, settings.audio.ambience);
 
+            // Counted post-hoc instead of re-deriving CityGeneratorAudioBuilder's own null-clip
+            // skip logic: 2D ambience sources land as spatialBlend 0, 3D plaza sources (nested
+            // under Plaza, one per non-null PlazaAudioClipEntry per plaza block) as spatialBlend 1.
+            int ambienceClipCount = 0;
+            int plazaAudioSourceCount = 0;
+            foreach (AudioSource source in cityRoot.GetComponentsInChildren<AudioSource>(true))
+            {
+                if (source.spatialBlend <= 0f)
+                    ambienceClipCount++;
+                else
+                    plazaAudioSourceCount++;
+            }
+
             // Every group except Vehicles/Pedestrians is 100% static geometry once generated:
             // marking it unlocks static batching and is a prerequisite for baking occlusion
             // culling / the GPU Resident Drawer (see the technical review, A.1/C.3). Both agent
@@ -250,6 +271,42 @@ namespace CityGenerator.Editor
             MarkStatic(props);
             MarkStatic(trafficLights);
 
+            info.useCustomGrid = settings.general.useCustomGrid;
+            info.gridSize = settings.general.useCustomGrid ? ComputeCustomGridBounds(blocks) : new Vector2Int(gridWidth, gridHeight);
+            info.blockCount = blocks.Count;
+
+            info.buildingCount = builtBuildings.Count;
+            info.plazaCount = 0;
+            foreach (BlockCell block in blocks)
+            {
+                if (block.isPlaza)
+                    info.plazaCount++;
+            }
+            info.customPlaceCount = builtCustomPlaces.Count;
+            info.lampCount = lamps.Count;
+            info.binCount = bins.Count;
+            info.streetTreeCount = streetTrees.Count;
+            info.trafficLightCount = trafficLightInstances.Count;
+            info.customPedestrianCount = settings.customPedestrians.Count;
+
+            info.useCustomSeed = settings.general.useCustomSeed;
+            info.seed = settings.general.useCustomSeed ? settings.general.seed : 0;
+
+            info.playerEnabled = settings.general.playerEnabled;
+            info.trafficEnabled = settings.general.includeTraffic;
+            info.pedestriansEnabled = settings.general.includePedestrians;
+
+            info.ambienceEnabled = settings.audio.ambience.enabled;
+            info.ambienceClipCount = ambienceClipCount;
+            info.plazaAudioEnabled = settings.audio.plazaAudio.enabled;
+            info.plazaAudioSourceCount = plazaAudioSourceCount;
+
+            info.trafficManager = network.Manager;
+            info.pedestrianManager = pedestrianNetwork.Manager;
+            // Left null when Minimap is disabled (CityGeneratorMinimapBuilder.Build is then a
+            // no-op) — CityGeneratorSceneBuilder fills minimapHUD separately, once it exists.
+            info.minimapData = cityRoot.GetComponent<MinimapData>();
+
             Report("Done", 1f);
             return new CityBuildSummary(
                 blocks.Count, builtBuildings.Count, plazaSolids.Count,
@@ -261,6 +318,26 @@ namespace CityGenerator.Editor
         public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
         {
             return Assemble(settings, cityRoot, onProgress: null);
+        }
+
+        // Custom Grid has no fixed gridWidth/gridHeight — CityGeneratorInfo.gridSize instead
+        // reports the bounding box of the real cells, matching CityGeneratorGroundBuilder's own
+        // "bounding rectangle grown by RoadBaseMargin" concept minus the margin itself.
+        private static Vector2Int ComputeCustomGridBounds(List<BlockCell> blocks)
+        {
+            if (blocks.Count == 0)
+                return Vector2Int.zero;
+
+            int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+            foreach (BlockCell block in blocks)
+            {
+                if (block.gridX < minX) minX = block.gridX;
+                if (block.gridX > maxX) maxX = block.gridX;
+                if (block.gridY < minY) minY = block.gridY;
+                if (block.gridY > maxY) maxY = block.gridY;
+            }
+
+            return new Vector2Int(maxX - minX + 1, maxY - minY + 1);
         }
 
         private static Transform GetOrCreateGroup(Transform parent, string name)

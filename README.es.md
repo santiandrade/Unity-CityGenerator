@@ -10,6 +10,9 @@ escena nueva o existente. Ábrela desde **Tools > City Generator > Open**.
 📖 **[Manual de usuario](docs/user-manual.es.md)** — cada pestaña, card y parámetro
 explicados, con capturas de pantalla, además del proceso completo de generar una ciudad.
 
+🧩 **[Referencia de la API Runtime](docs/api-reference.es.md)** — consulta los datos de una
+ciudad generada (y algunos setters seguros) desde tus propios scripts, en Play Mode y en build.
+
 - **Genera una ciudad completa:** carreteras, aceras, marcas viales, edificios, plazas,
   mobiliario urbano, semáforos, tráfico autónomo, peatones, un ciclo día/noche opcional,
   audio ambiente y un HUD de minimapa.

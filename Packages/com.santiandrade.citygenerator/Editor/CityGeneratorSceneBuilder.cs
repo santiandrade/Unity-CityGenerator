@@ -44,7 +44,8 @@ namespace CityGenerator.Editor
                 string scenePath = GetNextFreeScenePath();
                 CityGeneratorMinimapBuilder.SaveSnapshotAsset(cityRootGO.transform, scenePath);
 
-                CreateDirectionalLight(scene, settings.dayNight);
+                CityGeneratorInfo info = cityRootGO.GetComponent<CityGeneratorInfo>();
+                info.dayNightCycle = CreateDirectionalLight(scene, settings.dayNight);
 
                 GameObject player = null;
                 if (settings.general.playerEnabled && settings.general.playerPrefab != null)
@@ -54,10 +55,11 @@ namespace CityGenerator.Editor
                     player.transform.position = summary.playerSpawnPosition;
                     ConfigurePlayer(player, settings.general.inputActions, settings.player);
                     AssignPedestrianLayer(player);
+                    info.player = player.transform;
                 }
 
-                CreateMainCamera(scene, player, settings.general.inputActions, settings.player, settings.camera, settings.freeCamera);
-                CreateMinimapHud(scene, settings.minimap);
+                info.freeCameraController = CreateMainCamera(scene, player, settings.general.inputActions, settings.player, settings.camera, settings.freeCamera);
+                info.minimapHUD = CreateMinimapHud(scene, settings.minimap);
 
                 EditorSceneManager.SaveScene(scene, scenePath);
 
@@ -145,8 +147,16 @@ namespace CityGenerator.Editor
             Undo.RecordObject(cityRootGO, "Rebuild City");
             cityRootGO.name = "City";
 
-            CreateMinimapHud(scene, settings.minimap);
-            UpdateDirectionalLight(scene, settings.dayNight);
+            CityGeneratorInfo info = cityRootGO.GetComponent<CityGeneratorInfo>();
+            info.minimapHUD = CreateMinimapHud(scene, settings.minimap);
+            info.dayNightCycle = UpdateDirectionalLight(scene, settings.dayNight);
+
+            // Camera and player are left untouched by a Re-Build (see this method's remarks), so
+            // they're resolved from whatever the scene already has instead of being (re)created.
+            GameObject playerGO = GameObject.Find("Player");
+            info.player = playerGO != null ? playerGO.transform : null;
+            GameObject cameraGO = GameObject.Find("Main Camera");
+            info.freeCameraController = cameraGO != null ? cameraGO.GetComponent<FreeCameraController>() : null;
 
             Undo.CollapseUndoOperations(undoGroup);
 
@@ -170,19 +180,16 @@ namespace CityGenerator.Editor
         // current settings. Never moves the light or touches its shadows — but the yaw (see
         // DirectionalLightYaw) and the day/night cycle are always forced to the current settings,
         // even on a light that already existed with a different baked-in yaw.
-        private static void UpdateDirectionalLight(Scene scene, DayNightSettings dayNight)
+        private static DayNightCycle UpdateDirectionalLight(Scene scene, DayNightSettings dayNight)
         {
             GameObject lightGO = GameObject.Find("Directional Light");
             if (lightGO == null)
-            {
-                CreateDirectionalLight(scene, dayNight);
-                return;
-            }
+                return CreateDirectionalLight(scene, dayNight);
 
-            ConfigureDayNightCycle(lightGO, dayNight);
+            return ConfigureDayNightCycle(lightGO, dayNight);
         }
 
-        private static void CreateDirectionalLight(Scene scene, DayNightSettings dayNight)
+        private static DayNightCycle CreateDirectionalLight(Scene scene, DayNightSettings dayNight)
         {
             var lightGO = new GameObject("Directional Light");
             SceneManager.MoveGameObjectToScene(lightGO, scene);
@@ -191,7 +198,7 @@ namespace CityGenerator.Editor
             light.type = LightType.Directional;
             light.shadows = LightShadows.Soft;
 
-            ConfigureDayNightCycle(lightGO, dayNight);
+            return ConfigureDayNightCycle(lightGO, dayNight);
         }
 
         // Adds/updates DayNightCycle on an existing Directional Light GameObject and previews the
@@ -204,7 +211,7 @@ namespace CityGenerator.Editor
         // rotates around is forced to DirectionalLightYaw/0 via SetBaseRotation on every call,
         // bypassing DayNightCycle's own "captured once" base rotation so a light re-built with an
         // old yaw gets corrected too.
-        private static void ConfigureDayNightCycle(GameObject lightGO, DayNightSettings dayNight)
+        private static DayNightCycle ConfigureDayNightCycle(GameObject lightGO, DayNightSettings dayNight)
         {
             var cycle = lightGO.GetComponent<DayNightCycle>();
             if (cycle == null)
@@ -216,6 +223,7 @@ namespace CityGenerator.Editor
             cycle.lightColorOverTime = dayNight.lightColorOverTime;
             cycle.lightIntensityOverTime = dayNight.lightIntensityOverTime;
             cycle.ApplySun(dayNight.startHour);
+            return cycle;
         }
 
         // Lets any character model be assigned as Player Prefab, not just one already set up for
@@ -277,8 +285,9 @@ namespace CityGenerator.Editor
                 player.layer = pedestrianLayer;
         }
 
-        private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions, PlayerSettings playerSettings, CameraSettings settings, FreeCameraSettings freeCameraSettings)
+        private static FreeCameraController CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions, PlayerSettings playerSettings, CameraSettings settings, FreeCameraSettings freeCameraSettings)
         {
+            FreeCameraController freeCameraController = null;
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
             SceneManager.MoveGameObjectToScene(cameraGO, scene);
             cameraGO.transform.position = new Vector3(36f, 28f, -36f);
@@ -311,8 +320,8 @@ namespace CityGenerator.Editor
             // is disabled or absent — see FreeCameraSettings.enabled's remarks.
             if (player != null && freeCameraSettings.enabled)
             {
-                var freeCamera = cameraGO.AddComponent<FreeCameraController>();
-                var freeCameraSerialized = new SerializedObject(freeCamera);
+                freeCameraController = cameraGO.AddComponent<FreeCameraController>();
+                var freeCameraSerialized = new SerializedObject(freeCameraController);
                 freeCameraSerialized.FindProperty("inputActions").objectReferenceValue = inputActions;
                 freeCameraSerialized.FindProperty("playerActionMapName").stringValue = playerSettings.actionMapName;
                 freeCameraSerialized.FindProperty("playerToggleActionName").stringValue = playerSettings.toggleActionName;
@@ -331,15 +340,17 @@ namespace CityGenerator.Editor
             }
 
             if (player == null)
-                return;
+                return freeCameraController;
 
             var playerController = player.GetComponent<PlayerController>();
             if (playerController == null)
-                return;
+                return freeCameraController;
 
             var playerSerialized = new SerializedObject(playerController);
             playerSerialized.FindProperty("cameraTransform").objectReferenceValue = cameraGO.transform;
             playerSerialized.ApplyModifiedPropertiesWithoutUndo();
+
+            return freeCameraController;
         }
 
         // Loaded by a fixed package path (like ThumbnailPath in CityGeneratorWindow), not a
@@ -347,16 +358,16 @@ namespace CityGenerator.Editor
         // to swap out. Silently skipped (same fail-closed fallback as AssignPedestrianLayer) if
         // the package's DefaultAssets/ prefab is ever missing, so a broken/partial install still
         // produces a working city, just without the HUD.
-        private static void CreateMinimapHud(Scene scene, MinimapSettings settings)
+        private static MinimapHUD CreateMinimapHud(Scene scene, MinimapSettings settings)
         {
             if (!settings.enabled)
-                return;
+                return null;
 
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(MinimapHudPrefabPath);
             if (prefab == null)
             {
                 Debug.LogWarning("[City Generator] Minimap is enabled but the MinimapHUD prefab is missing from DefaultAssets/ — skipping the HUD.");
-                return;
+                return null;
             }
 
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
@@ -364,11 +375,12 @@ namespace CityGenerator.Editor
 
             var hud = instance.GetComponentInChildren<MinimapHUD>(true);
             if (hud == null)
-                return;
+                return null;
 
             var serialized = new SerializedObject(hud);
             serialized.FindProperty("viewRadiusMeters").floatValue = settings.viewRadiusMeters;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            return hud;
         }
 
         // AssetDatabase.GenerateUniqueAssetPath would suffix collisions as "City 1.unity" (with a
