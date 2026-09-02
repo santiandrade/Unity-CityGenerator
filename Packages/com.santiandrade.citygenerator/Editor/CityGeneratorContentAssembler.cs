@@ -196,14 +196,27 @@ namespace CityGenerator.Editor
                 pedestrianNetwork = CityGeneratorPedestrianBuilder.AddNetworkComponent(pedestrianNetworkGroup, gridWidth, gridHeight, blocks, reservedSlots);
                 pedestrianNetwork.Build();
             }
-            CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles(pedestrianNetwork, obstacles, cache);
-
             List<GameObject> pedestrianInstances = new();
             if (settings.general.includePedestrians)
             {
                 Report("Pedestrians", 0.88f);
                 CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup, pedestrianNetwork, settings.crowd);
                 pedestrianInstances = CityGeneratorPedestrianBuilder.BuildPedestrians(settings.pedestrians, settings.general.pedestrianCount, pedestrianNetwork, pedestrians, random, settings.pedestrianBehaviour);
+            }
+
+            // Custom Pedestrians (SPEC 12) are a budget independent of pedestrianCount/includePedestrians
+            // -- they run whenever entries exist, mirroring how Custom Places aren't gated by any
+            // general toggle. Needs its own PedestrianManager when includePedestrians was off above.
+            List<GameObject> customPedestrianInstances = new();
+            if (settings.customPedestrians.Count > 0)
+            {
+                Report("Custom pedestrians", 0.92f);
+                if (pedestrianNetwork.Manager == null)
+                {
+                    CityGeneratorPedestrianBuilder.AddManagerComponent(pedestrianNetworkGroup, pedestrianNetwork, settings.crowd);
+                }
+                customPedestrianInstances = CityGeneratorCustomPedestrianBuilder.BuildCustomPedestrians(settings.customPedestrians, pedestrianNetwork, pedestrians, random, settings.pedestrianBehaviour);
+                pedestrianInstances.AddRange(customPedestrianInstances);
             }
 
             // Runs last so the Vehicle/Pedestrian layers above already exist and can be excluded

@@ -59,8 +59,10 @@ namespace CityGenerator.Editor
         private CityGeneratorCard pedestrianBehaviourCard;
         private CityGeneratorCard crowdCard;
         private CityGeneratorCard customPlacesCard;
+        private CityGeneratorCard customPedestriansCard;
         private CityGeneratorCard dayNightCard;
         private CityGeneratorCustomPlaceList customPlaceList;
+        private CityGeneratorCustomPedestrianList customPedestrianList;
         private CityGeneratorCard minimapCard;
         private HelpBox minimapResolutionWarning;
         private HelpBox minimapViewRadiusWarning;
@@ -148,6 +150,14 @@ namespace CityGenerator.Editor
             defaultsInitialized = true;
         }
 
+        // Custom Pedestrians' node-graph pickers share one disposable preview GameObject
+        // (CityGeneratorPedestrianPreview) across every entry -- destroy it when the window closes
+        // instead of leaving a hidden HideAndDontSave object behind.
+        private void OnDisable()
+        {
+            customPedestrianList?.Dispose();
+        }
+
         private void CreateGUI()
         {
             BuildUi();
@@ -220,6 +230,7 @@ namespace CityGenerator.Editor
 
             BuildPedestrianSettingsCard(pedestriansContainer);
             BuildPedestriansCard(pedestriansContainer);
+            BuildCustomPedestriansCard(pedestriansContainer);
             BuildPedestrianBehaviourCard(pedestriansContainer);
             BuildCrowdCard(pedestriansContainer);
 
@@ -431,6 +442,14 @@ namespace CityGenerator.Editor
             var list = new CityGeneratorWeightedPrefabList(RefreshDynamicUi);
             list.Bind(FindProperty("pedestrians"));
             pedestriansCard.ContentContainer.Add(list);
+        }
+
+        private void BuildCustomPedestriansCard(VisualElement parent)
+        {
+            customPedestriansCard = AddCard(parent, "customPedestrians", "Custom Pedestrians", "d_Avatar Icon", defaultExpanded: false, TabPedestrians);
+            customPedestrianList = new CityGeneratorCustomPedestrianList(RefreshDynamicUi);
+            customPedestrianList.Bind(FindProperty("customPedestrians"));
+            customPedestriansCard.ContentContainer.Add(customPedestrianList);
         }
 
         private void BuildPropsCard(VisualElement parent)
@@ -753,6 +772,8 @@ namespace CityGenerator.Editor
             customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
             customPlaceList.SetPlazaMask(FindProperty("general.plazaCells"));
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
+            customPedestrianList.RefreshPreview(settings);
+            customPedestriansCard.SetBadge($"{FindProperty("customPedestrians").arraySize} entries");
             minimapCard.SetBadge(FindProperty("minimap.enabled").boolValue ? "Enabled" : "Disabled");
             ambienceCard.SetBadge(FindProperty("audio.ambience.enabled").boolValue
                 ? $"{FindProperty("audio.ambience.clips").arraySize} clips"
@@ -821,7 +842,7 @@ namespace CityGenerator.Editor
 
         private void RefreshValidation()
         {
-            CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+            CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues, customPedestrianList.CurrentPreview);
 
             foreach (CityGeneratorCard card in cardsBySettingsSegment.Values)
                 card.SetHasError(false);
@@ -1064,6 +1085,7 @@ namespace CityGenerator.Editor
 
         private void ResetToDefaults()
         {
+            customPedestrianList?.Dispose();
             settings = new CityGeneratorSettings();
             CityGeneratorDefaultAssets.ApplyTo(settings);
             BuildUi();

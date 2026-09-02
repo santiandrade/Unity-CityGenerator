@@ -21,6 +21,7 @@ namespace CityGenerator.Editor
         public PedestrianBehaviourSettings pedestrianBehaviour = new();
         public CrowdSettings crowd = new();
         public List<CustomPlaceEntry> customPlaces = new();
+        public List<CustomPedestrianEntry> customPedestrians = new();
         public MinimapSettings minimap = MinimapSettings.Default();
         public DayNightSettings dayNight = DayNightSettings.Default();
         public AudioSettings audio = AudioSettings.Default();
@@ -300,6 +301,34 @@ namespace CityGenerator.Editor
         // Internal bookkeeping: whether blockCell/cornerSlot were ever set via the grid preview
         // (distinguishes "not placed yet" from a legitimate (0,0) selection), read by the validator.
         public bool positionAssigned;
+    }
+
+    // selectedNodeIndices indexes the deterministic node ordering PedestrianNetwork.Build()/
+    // BuildFromBlockCells() produces for the current settings (grid or Custom Grid, plazas, Custom
+    // Places); chosen via this entry's grid preview (node-graph picker, CityGeneratorGridPreview).
+    // Consumed by CityGeneratorCustomPedestrianBuilder, which resolves the indices against the
+    // real PedestrianNetwork instance built by CityGeneratorPedestrianBuilder earlier in the
+    // pipeline (never the preview's throwaway instance).
+    [Serializable]
+    internal struct CustomPedestrianEntry
+    {
+        [Tooltip("Display name for this entry in the tool UI and in validation messages. Required.")]
+        public string title;
+        [Tooltip("Prefab instantiated at each spawn node. Required.")]
+        public GameObject prefab; // required
+        [Tooltip("Number of agents of this prefab spawned across this entry's node network. Must be >= 1.")]
+        public int count;
+        [Tooltip(
+            "Indices into the deterministic node ordering PedestrianNetwork.Build()/BuildFromBlockCells() " +
+            "produces for the current settings (grid or Custom Grid, plazas, Custom Places). Chosen via " +
+            "this entry's grid preview (node-graph picker). Must contain at least 2 indices forming a " +
+            "single connected component in the real pedestrian graph. Internal bookkeeping only -- never " +
+            "shown as raw numbers in the UI.")]
+        public List<int> selectedNodeIndices;
+        // Internal bookkeeping: fingerprint of the pedestrian graph (node count/positions) at the
+        // time selectedNodeIndices was last edited, used to detect that grid/plaza/Custom Place
+        // settings changed underneath the entry (see CityGeneratorPedestrianPreview.Fingerprint).
+        public int graphFingerprint;
     }
 
     // Consumed by CityGeneratorMinimapBuilder (snapshot capture) and CityGeneratorSceneBuilder

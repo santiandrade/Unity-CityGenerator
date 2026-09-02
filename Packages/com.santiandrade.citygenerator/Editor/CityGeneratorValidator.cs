@@ -28,8 +28,19 @@ namespace CityGenerator.Editor
     {
         private const float PercentageTolerance = 0.01f;
 
-        /// <summary>Same checks as <see cref="Validate"/>, but each issue carries the settings path that caused it, so a caller (the window) can highlight the offending field live instead of only showing text after Build is pressed.</summary>
-        public static bool ValidateDetailed(CityGeneratorSettings settings, out List<CityGeneratorValidationIssue> issues)
+        /// <summary>
+        /// Same checks as <see cref="Validate"/>, but each issue carries the settings path that
+        /// caused it, so a caller (the window) can highlight the offending field live instead of
+        /// only showing text after Build is pressed.
+        /// </summary>
+        /// <param name="pedestrianPreview">
+        /// SPEC 12: an already-built <see cref="CityGeneratorPedestrianPreview"/> for the current
+        /// settings, reused to resolve Custom Pedestrians' node connectivity instead of building a
+        /// second one -- pass the window's own cached preview (<c>CityGeneratorCustomPedestrianList.CurrentPreview</c>)
+        /// when available. If null and at least one Custom Pedestrian entry needs checking, a
+        /// throwaway preview is built and disposed here instead.
+        /// </param>
+        public static bool ValidateDetailed(CityGeneratorSettings settings, out List<CityGeneratorValidationIssue> issues, CityGeneratorPedestrianPreview pedestrianPreview = null)
         {
             issues = new List<CityGeneratorValidationIssue>();
 
@@ -194,6 +205,7 @@ namespace CityGenerator.Editor
                 issues.Add(new CityGeneratorValidationIssue("crowd.staggerDistance", "Crowd: Stagger Distance must not be negative."));
 
             ValidateCustomPlaces(settings, issues);
+            ValidateCustomPedestrians(settings, issues, pedestrianPreview);
             ValidateMinimap(settings, issues);
             ValidateAudio(settings, issues);
 
@@ -362,6 +374,98 @@ namespace CityGenerator.Editor
                     issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: entries {i + 1} and {j + 1} both use the title '{a.title}' — titles must be unique."));
                 }
             }
+        }
+
+        /// <summary>
+        /// Per-entry blocking checks for Custom Pedestrians (SPEC 12): title, prefab, count >= 1,
+        /// at least 2 selected nodes, and the selection forming a single connected component in the
+        /// real pedestrian graph -- defence in depth, since the node-graph picker already prevents
+        /// building a disconnected selection, but serialized data is validated the same way every
+        /// other card's is. Builds its own disposable preview only if the caller didn't already
+        /// have one current for these settings (see <see cref="ValidateDetailed"/>).
+        /// </summary>
+        private static void ValidateCustomPedestrians(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues, CityGeneratorPedestrianPreview pedestrianPreview)
+        {
+            List<CustomPedestrianEntry> customPedestrians = settings.customPedestrians;
+            if (customPedestrians.Count == 0)
+                return;
+
+            bool ownsPreview = false;
+            if (pedestrianPreview == null)
+            {
+                pedestrianPreview = CityGeneratorPedestrianPreview.Build(settings);
+                ownsPreview = true;
+            }
+
+            try
+            {
+                for (int i = 0; i < customPedestrians.Count; i++)
+                {
+                    CustomPedestrianEntry entry = customPedestrians[i];
+                    string label = string.IsNullOrEmpty(entry.title) ? $"entry {i + 1}" : $"'{entry.title}'";
+
+                    if (string.IsNullOrEmpty(entry.title))
+                        issues.Add(new CityGeneratorValidationIssue("customPedestrians", $"Custom Pedestrians: entry {i + 1} needs a title."));
+
+                    if (entry.prefab == null)
+                        issues.Add(new CityGeneratorValidationIssue("customPedestrians", $"Custom Pedestrians: {label} is missing its prefab."));
+
+                    if (entry.count < 1)
+                        issues.Add(new CityGeneratorValidationIssue("customPedestrians", $"Custom Pedestrians: {label} must spawn at least 1 agent (Count is {entry.count})."));
+
+                    List<int> selected = entry.selectedNodeIndices;
+                    if (selected == null || selected.Count < 2)
+                    {
+                        issues.Add(new CityGeneratorValidationIssue("customPedestrians", $"Custom Pedestrians: {label} needs at least 2 connected nodes selected in its grid preview."));
+                        continue;
+                    }
+
+                    if (!IsSingleConnectedComponent(pedestrianPreview, selected))
+                        issues.Add(new CityGeneratorValidationIssue("customPedestrians", $"Custom Pedestrians: {label}'s selected nodes don't form a single connected route — re-trace it in its grid preview."));
+                }
+            }
+            finally
+            {
+                if (ownsPreview)
+                    pedestrianPreview.Dispose();
+            }
+        }
+
+        // Flood fill from the first selected node, following only the real graph's edges, checking
+        // every other selected node is reached -- also treats an out-of-range index (a stale
+        // selection from before the graph changed) as disconnected rather than throwing.
+        private static bool IsSingleConnectedComponent(CityGeneratorPedestrianPreview preview, List<int> selected)
+        {
+            var selectedSet = new HashSet<int>(selected);
+            if (selectedSet.Count != selected.Count)
+                return false; // duplicate indices: not a meaningful route.
+
+            foreach (int index in selectedSet)
+            {
+                if (index < 0 || index >= preview.NodeCount)
+                    return false;
+            }
+
+            var visited = new HashSet<int>();
+            var stack = new Stack<int>();
+            int start = selected[0];
+            stack.Push(start);
+            visited.Add(start);
+
+            while (stack.Count > 0)
+            {
+                int current = stack.Pop();
+                foreach (int neighbour in preview.GetNode(current).Neighbours)
+                {
+                    if (selectedSet.Contains(neighbour) && !visited.Contains(neighbour))
+                    {
+                        visited.Add(neighbour);
+                        stack.Push(neighbour);
+                    }
+                }
+            }
+
+            return visited.Count == selectedSet.Count;
         }
 
         /// <summary>Item 10 gap 5: confirms the Move/Sprint/Jump/Look action names configured under Player > Input Actions actually exist in the assigned asset's action map, with the expected control type — a typo here otherwise fails silently at runtime (the action is just never found).</summary>

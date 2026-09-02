@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New "Custom Pedestrians" card (Pedestrians tab): per entry (prefab + count), trace a network of
+  pedestrian nodes by hand on a new picker and the generated agents of that entry are confined to
+  walking only within that network instead of the whole city. The picker groups the real pedestrian
+  graph into clickable line zones (a Ring edge, an Interior spoke, a crossing — coloured by kind,
+  selected zones highlighted) rather than one point per node, since a normal block's 13+ individual
+  nodes were too small/dense to click reliably. It shows the real pedestrian graph before the city
+  is ever generated, via a disposable preview that reuses the same generation code the real
+  pipeline uses. `count` is a budget independent of the general Pedestrian Count, and changing the
+  grid/Custom Grid/plazas/Custom Places after tracing a route invalidates and clears it instead of
+  silently generating over the wrong nodes.
+- New `Pets/` demo prefabs (`Animal-Cat`, `Animal-Dog`) usable as Custom Pedestrian entries.
+
+### Fixed
+
+- A pedestrian prefab whose model has no `SkinnedMeshRenderer` (e.g. `Pets/`'s rigid per-limb
+  `MeshRenderer`s) no longer freezes its Animator permanently: `Animator.cullingMode` is now chosen
+  per generated instance (`Cull Completely` only when a `SkinnedMeshRenderer` is present, `Always
+  Animate` otherwise) instead of always forcing `Cull Completely`, which never resolves visibility
+  for that rig shape. Also enabled `Loop Time`/`Loop Pose` on `animal-cat.fbx`/`animal-dog.fbx`'s
+  locomotion clips, which defaulted to off and froze the walk cycle on its last frame after under a
+  second.
+- Removed `CityGeneratorPedestrianBuilder.PruneNodesAgainstObstacles` ("level 1" pedestrian node
+  pruning): it blocked a node whenever it fell inside an obstacle's full renderer-bounds rect
+  (`ObstacleCache.GetRect`), which for anything with a visual element sticking out further than its
+  solid footprint (a balcony/canopy/sign arm, a `Collider`-less lawn/vegetation patch) is far wider
+  than what actually blocks a pedestrian — found via SPEC 12 QA: ~35% of a generated city's nodes
+  came back `Blocked` from this check alone, though a fresh `Physics`-based `PrunePlacedObstacles()`
+  pass against the same scene found zero real overlaps. A first fix narrowed the rect check to
+  `Collider`-less obstacles only, but this project's own demo vegetation is itself `Collider`-less
+  by design, so it kept over-blocking identically — pedestrian obstacle avoidance is now purely
+  physics-based (`PrunePlacedObstacles`'s `Physics.CheckSphere`, already running automatically at
+  the end of every graph build): an obstacle with no `Collider` anywhere in its hierarchy is no
+  longer treated as blocking pedestrians at all. If a `Collider`-less asset should block pedestrian
+  routes, give it a `Collider`.
+- Fixed the actual cause of a Custom Pedestrians entry intermittently spawning 0 instances on
+  "Re-Build City in Current Scene" (roughly every other rebuild, worst with a small hand-traced
+  route): the previous city stayed in the exact same world-space footprint as the one under
+  construction for the whole call (it's only destroyed after generation succeeds, so a failed
+  rebuild doesn't lose it), so two full sets of static colliders sat stacked exactly on top of each
+  other — confirmed to make `PrunePlacedObstacles`'s downward ground raycast intermittently find no
+  hit at all, wrongly marking most/all nodes `Blocked`. The previous city is now moved far aside
+  before the new one is built (mirroring the minimap snapshot's own isolate-by-moving-the-root
+  trick) and only destroyed after success, moved back on failure so the existing-city-survives
+  guarantee still holds.
 
 ## [2.7.0] - 2026-09-01
 ### Added

@@ -459,8 +459,8 @@ namespace CityGenerator.Runtime
 
             // Half the block's building-slot gap (CityGeneratorConstants.BuildingSlotPitch / 2):
             // derived directly from ringRadius rather than a new field, since exact placement
-            // doesn't matter -- PruneNodesAgainstObstacles/PrunePlacedObstacles block any node
-            // that ends up overlapping a building regardless of its precise offset.
+            // doesn't matter -- PrunePlacedObstacles blocks any node that ends up overlapping a
+            // building's collider regardless of its precise offset.
             float armOffset = ringRadius * 0.5f;
 
             int centre = AddNode(c, PedestrianNodeKind.Interior);
@@ -848,10 +848,39 @@ namespace CityGenerator.Runtime
         /// in that connected component: on a grid with isolated block rings (e.g. gridWidth == 1 or
         /// gridHeight == 1, see CLAUDE.md), this stops PlanNewDestination from repeatedly drawing
         /// candidates FindPath could never reach in the first place.
+        /// When <paramref name="allowedNodes"/> is non-null (SPEC 12: Custom Pedestrians), only
+        /// considers nodes in that subset -- used by a PedestrianAgent confined to a hand-traced
+        /// node network instead of the whole city. A normal pedestrian passes null and behaves
+        /// exactly as before.
         /// </summary>
-        public int PickRandomDestination(int requiredComponent = -1)
+        public int PickRandomDestination(int requiredComponent = -1, IReadOnlyList<int> allowedNodes = null)
         {
             EnsureBuilt();
+
+            if (allowedNodes != null)
+            {
+                if (allowedNodes.Count == 0)
+                    return -1;
+
+                int restrictedAttempts = allowedNodes.Count * 2;
+                for (int attempt = 0; attempt < restrictedAttempts; attempt++)
+                {
+                    int candidate = allowedNodes[Random.Range(0, allowedNodes.Count)];
+                    if (candidate < 0 || candidate >= nodes.Count)
+                        continue;
+
+                    PedestrianNode candidateNode = nodes[candidate];
+                    if (candidateNode.Blocked)
+                        continue;
+                    if (candidateNode.Kind == PedestrianNodeKind.Curb || candidateNode.Kind == PedestrianNodeKind.Crossing)
+                        continue;
+
+                    return candidate;
+                }
+
+                return -1;
+            }
+
             int attempts = nodes.Count * 2;
             for (int attempt = 0; attempt < attempts; attempt++)
             {
@@ -882,10 +911,20 @@ namespace CityGenerator.Runtime
         /// BFS instead of re-running it per destination. The BFS itself is still zero-allocation
         /// per call; only the first call for a given, not-yet-cached `from` allocates its tree.
         /// </summary>
-        public int FindPath(int from, int to, int[] outPath)
+        /// When <paramref name="allowedNodes"/> is non-null (SPEC 12: Custom Pedestrians), the
+        /// route is computed over that node subset only (both endpoints must be in it), bypassing
+        /// <see cref="cameFromCache"/> since the cache is keyed by origin alone and shared across
+        /// every agent -- a restricted route is never cached. A normal pedestrian passes null and
+        /// gets the exact cached/unrestricted behaviour as before.
+        public int FindPath(int from, int to, int[] outPath, IReadOnlyList<int> allowedNodes = null)
         {
             EnsureBuilt();
             if (from < 0 || to < 0 || from >= nodes.Count || to >= nodes.Count)
+            {
+                return 0;
+            }
+
+            if (allowedNodes != null && (!ContainsNode(allowedNodes, from) || !ContainsNode(allowedNodes, to)))
             {
                 return 0;
             }
@@ -896,7 +935,7 @@ namespace CityGenerator.Runtime
                 return 1;
             }
 
-            int[] cameFrom = GetOrComputeCameFrom(from);
+            int[] cameFrom = allowedNodes != null ? ComputeRestrictedCameFrom(from, allowedNodes) : GetOrComputeCameFrom(from);
 
             // -2 = never visited by this origin's BFS (unreachable); -1 is reserved for `from`
             // itself, which can't be `to` here (handled above).
@@ -981,6 +1020,59 @@ namespace CityGenerator.Runtime
             bfsVisited = new bool[nodes.Count];
         }
 
+        private static bool ContainsNode(IReadOnlyList<int> list, int value)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] == value)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Same BFS as <see cref="GetOrComputeCameFrom"/>, but neighbour expansion is filtered to
+        /// <paramref name="allowedNodes"/> -- never cached, since the subset differs per Custom
+        /// Pedestrian entry rather than being shared by every agent in the scene.
+        /// </summary>
+        private int[] ComputeRestrictedCameFrom(int from, IReadOnlyList<int> allowedNodes)
+        {
+            if (bfsQueue == null || bfsQueue.Length != nodes.Count)
+            {
+                RebuildBfsBuffers();
+            }
+
+            var cameFrom = new int[nodes.Count];
+            System.Array.Fill(cameFrom, -2);
+
+            System.Array.Clear(bfsVisited, 0, bfsVisited.Length);
+            int head = 0, tail = 0;
+            bfsQueue[tail++] = from;
+            bfsVisited[from] = true;
+            cameFrom[from] = -1;
+
+            while (head < tail)
+            {
+                int current = bfsQueue[head++];
+                List<int> neighbours = nodes[current].Neighbours;
+                for (int n = 0; n < neighbours.Count; n++)
+                {
+                    int next = neighbours[n];
+                    if (bfsVisited[next] || nodes[next].Blocked || !ContainsNode(allowedNodes, next))
+                    {
+                        continue;
+                    }
+
+                    bfsVisited[next] = true;
+                    cameFrom[next] = current;
+                    bfsQueue[tail++] = next;
+                }
+            }
+
+            return cameFrom;
+        }
+
         /// <summary>
         /// Auto-repairs the graph against the scene as it stands right now: a Physics.CheckSphere
         /// slightly above sidewalk height (so the ground itself never counts) marks any node
@@ -991,6 +1083,16 @@ namespace CityGenerator.Runtime
         [ContextMenu("Prune Placed Obstacles")]
         public void PrunePlacedObstacles()
         {
+            // Generation creates every ground/building/prop collider in the same script execution
+            // that then immediately calls this (via Awake() -> Build()): without forcing a sync,
+            // Physics.Raycast/CheckSphere below can run before Unity's physics engine has indexed
+            // those brand-new colliders, so the ground raycast finds nothing under a huge fraction
+            // of nodes and !hasGround marks them all Blocked -- confirmed directly (one bad
+            // generation had 531/715 nodes Blocked; calling this alone, with no other change,
+            // dropped it to 0). Cheap relative to the CheckSphere/Raycast pass this method already
+            // does per node.
+            Physics.SyncTransforms();
+
             for (int i = 0; i < nodes.Count; i++)
             {
                 PedestrianNode node = nodes[i];

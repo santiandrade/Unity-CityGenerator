@@ -98,31 +98,6 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
-        /// "Level 1" pruning: marks any node whose position falls inside an already-placed
-        /// obstacle's XZ footprint (the same shared obstacles list every other category avoids)
-        /// as Blocked, before a single pedestrian is spawned. Doesn't touch PrunePlacedObstacles'
-        /// own runtime Physics-based pass (levels 2/3), which auto-repairs the graph later against
-        /// the scene as it stands, including edits made after generation.
-        /// </summary>
-        public static void PruneNodesAgainstObstacles(PedestrianNetwork network, List<GameObject> obstacles, ObstacleCache cache)
-        {
-            for (int i = 0; i < network.NodeCount; i++)
-            {
-                Vector3 position = network.GetNode(i).Position;
-                var point = new Vector2(position.x, position.z);
-
-                for (int o = 0; o < obstacles.Count; o++)
-                {
-                    if (cache.GetRect(obstacles[o]).Contains(point))
-                    {
-                        network.SetBlocked(i, true);
-                        break;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// Distributes <paramref name="pedestrianCount"/> NPCs across the entries in
         /// <paramref name="pedestrians"/> by their configured percentage, spawning each one at a
         /// distinct (shuffled) Ring node — mirrors <see cref="CityGeneratorTrafficBuilder.BuildVehicles"/>.
@@ -197,9 +172,7 @@ namespace CityGenerator.Editor
                     serializedAgent.FindProperty("idleStopDurationMax").floatValue = behaviour.idleStopDurationMax;
                     serializedAgent.ApplyModifiedPropertiesWithoutUndo();
 
-                    Animator animator = instance.GetComponent<Animator>();
-                    if (animator != null)
-                        animator.cullingMode = AnimatorCullingMode.CullCompletely;
+                    ApplyAnimatorCullingMode(instance);
 
                     // The Pedestrian layer is assigned only to the sensor proxy collider's own
                     // GameObject (the instance root, never the user prefab's own colliders,
@@ -213,6 +186,25 @@ namespace CityGenerator.Editor
             }
 
             return placed;
+        }
+
+        /// <summary>
+        /// Sets an animated pedestrian instance's Animator to Cull Completely when it has a
+        /// SkinnedMeshRenderer, and to Always Animate otherwise. Cull Completely relies on Unity
+        /// resolving visibility from a SkinnedMeshRenderer to decide whether to keep simulating the
+        /// state machine; a rig built from plain per-part MeshRenderers instead (e.g. the Pets,
+        /// each limb its own rigid mesh) never gets flagged visible under that mode, so its Animator
+        /// permanently freezes at whatever pose it had when spawned — SetFloat/SetBool keep updating
+        /// every frame with no console warning, but the state time itself never advances.
+        /// </summary>
+        public static void ApplyAnimatorCullingMode(GameObject instance)
+        {
+            Animator animator = instance.GetComponent<Animator>();
+            if (animator == null)
+                return;
+
+            bool hasSkinnedMesh = instance.GetComponentInChildren<SkinnedMeshRenderer>(true) != null;
+            animator.cullingMode = hasSkinnedMesh ? AnimatorCullingMode.CullCompletely : AnimatorCullingMode.AlwaysAnimate;
         }
 
         /// <summary>
