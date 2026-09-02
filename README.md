@@ -7,6 +7,9 @@
 An Editor tool for Unity that procedurally generates a city in a new or existing
 scene. Open it from **Tools > City Generator > Open**.
 
+📖 **[User Manual](docs/user-manual.md)** — every tab, card and parameter explained, with
+screenshots, plus the full process of generating a city.
+
 - **Generate a complete city:** roads, sidewalks, road markings, buildings, plazas,
   street furniture, traffic lights, autonomous traffic, pedestrians, an optional
   day/night cycle, ambient audio, and a minimap HUD.
