@@ -8,22 +8,31 @@ Una herramienta de Editor para Unity que genera proceduralmente una ciudad en un
 escena nueva o existente. Ábrela desde **Tools > City Generator > Open**.
 
 - **Genera una ciudad completa:** carreteras, aceras, marcas viales, edificios, plazas,
-  mobiliario urbano, semáforos, tráfico autónomo, peatones, un ciclo día/noche opcional
-  y un HUD de minimapa.
-- **Configura todo desde la ventana:**
-  - **City:** cuadrícula, suelo, edificios, plazas, vehículos, mobiliario, un Day/Night
-    Cycle opcional para la luz direccional generada (hora de inicio, multiplicador de
-    velocidad y un gradiente de color/curva de intensidad a lo largo de las 24 h) y
-    Custom Places.
+  mobiliario urbano, semáforos, tráfico autónomo, peatones, un ciclo día/noche opcional,
+  audio ambiente y un HUD de minimapa.
+- **Configura todo desde las seis pestañas de la ventana:**
+  - **City:** cuadrícula, suelo, edificios, plazas, mobiliario, un Day/Night Cycle
+    opcional para la luz direccional generada (hora de inicio, multiplicador de velocidad
+    y un gradiente de color/curva de intensidad a lo largo de las 24 h) y Custom Places.
+  - **Custom Grid:** en lugar de un rectángulo ancho × alto, cambia el grid visual de la
+    pestaña City a **Customize** y dibuja el contorno de la ciudad manzana a manzana —
+    cualquier forma conexa. El resultado sigue saliendo como un rectángulo acabado: los
+    huecos se rellenan con suelo y la ciudad termina en acera transitable en ambos modos.
   - **Custom Places:** lugares colocados a mano con título, prefab, una
     manzana/esquina elegida en un grid visual, orientación fija y un flag opcional
     "Is Point Of Interest" que marca la entrada en el minimapa. Se instancian en lugar
     de un edificio aleatorio en esa posición.
-  - **Player:** Player Prefab, movimiento y ajuste del `CharacterController` y la cámara.
+  - **Player:** Player Prefab, movimiento, ajuste del `CharacterController` y de la cámara
+    en tercera persona, y una Free Camera opcional a la que puedes cambiar en tiempo de
+    ejecución para volar por la ciudad generada.
+  - **Traffic:** si se generan vehículos, cuántos, y la lista ponderada de prefabs.
   - **Pedestrians:** la lista de prefabs de peatones, su comportamiento al
-    caminar/esperar y el ajuste de la multitud.
-  - **Minimap:** activado por defecto, con controles para la resolución de textura y el
-    radio de visión del HUD de minimapa en el juego.
+    caminar/esperar, el ajuste de la multitud y **Custom Pedestrians** — peatones extra
+    confinados a una ruta que trazas a mano sobre una vista previa del grafo peatonal, en
+    vez de recorrer toda la ciudad.
+  - **Minimap:** resolución de textura y radio de visión del HUD de minimapa en el juego.
+  - **Audio:** ambiente 2D de ciudad en bucle, más fuentes 3D posicionales en cada plaza
+    generada.
 - **Instálala y genera de inmediato:** se distribuye como el package embebido
   `com.santiandrade.citygenerator`, instalable directamente desde una git URL, con un
   conjunto completo de prefabs de demostración incluido. No hace falta tocar el código
@@ -84,17 +93,16 @@ vuelve a instalarla desde la git URL usando el tag nuevo de la
   detectarlos. Mismo fallback fail-closed si no queda ningún slot libre — los vehículos
   simplemente no detectan peatones hasta que liberes uno.
 - Un prefab `TrafficLight` con un componente `CityGenerator.Runtime.TrafficLight`
-  siempre que la rejilla tenga al menos una intersección interior (ancho y alto de
-  rejilla ambos mayores que 1) — la herramienta lo valida y bloquea la generación si
-  falta, independientemente de si **Include Traffic** está activado: la red de tráfico
+  siempre que la ciudad tenga al menos una intersección que requiera semáforo — la
+  herramienta lo valida y bloquea la generación si falta, independientemente de si el tráfico está activado: la red de tráfico
   y sus semáforos siempre se generan para que los cruces queden conectados a un
   semáforo real, incluso sin ningún vehículo.
 
 ## Contenido de demostración
 
 El package incluye un conjunto completo de assets de demostración bajo su carpeta
-`DefaultAssets/` — edificios, vehículos, vegetación, mobiliario urbano, piezas de
-suelo, materiales, el prefab del jugador, y el prefab/sprites del HUD de minimapa—
+`DefaultAssets/` — edificios, vehículos, personajes, vegetación, mobiliario urbano,
+piezas de suelo, materiales, clips de audio y el prefab/sprites del HUD de minimapa —
 así que `Tools > City Generator > Open` se abre con todos los campos obligatorios ya
 rellenos y una ciudad está a un clic de distancia.
 
@@ -154,10 +162,9 @@ estos pasos sean un solo botón:
   herramienta no tiene opinión sobre LOD; solo coloca el prefab que le des.
 - **Ajustar la iluminación** — la escena generada trae una única luz direccional y
   ningún `Global Volume` (eliminado a propósito, para no depender de ningún pipeline
-  de render). Esa luz se crea siempre orientada aproximadamente este-oeste (yaw -110°,
-  para que el sol salga hacia la derecha del minimapa) y lleva el componente del ciclo
-  día/noche; con el
-  ciclo desactivado simplemente se queda fija en la Start Hour configurada.
+  de render). Esa luz se crea siempre orientada aproximadamente este-oeste, para que el
+  sol salga hacia la derecha del minimapa, y lleva el componente del ciclo día/noche; con
+  el ciclo desactivado simplemente se queda fija en la Start Hour configurada.
 
 ## Ajustes de proyecto recomendados
 
@@ -182,41 +189,44 @@ rate/VSync para tu proyecto; no hay ningún sustituto opt-in a nivel de package.
 
 ## Escalar el tráfico
 
-`CarAgent` no tiene planificación de rutas ni evitación de congestión: superado
-aproximadamente el 40% de los nodos de spawn de una rejilla ocupados, el tráfico
-tiende a colapsar en vez de fluir (la ventana muestra un aviso junto a **Vehicle
-Count** en cuanto lo superas, antes de generar).
-Si necesitas tráfico más denso, cada vez que **Include Traffic** está activado se
-genera automáticamente un `CityGenerator.Runtime.TrafficManager` — este actualiza cada
-`CarAgent` desde un único `Update` central y, a partir de unos ~60 coches registrados,
-escalona el sensor frontal de los coches lejos de la cámara. Eso da algo de margen,
-pero el techo real es la falta de planificación de rutas, no el coste de actualización
-por coche.
+`CarAgent` no tiene planificación de rutas ni evitación de congestión: superada cierta
+fracción de los nodos de spawn de una rejilla ocupados, el tráfico tiende a colapsar en
+vez de fluir. La ventana muestra un aviso junto a **Vehicle Count** en cuanto cruzas ese
+umbral, antes de generar. Si necesitas tráfico más denso, cada vez que el tráfico está
+activado se genera automáticamente un `CityGenerator.Runtime.TrafficManager` — este
+actualiza cada `CarAgent` desde un único `Update` central y, pasado un número de coches
+propio, escalona el sensor frontal de los coches lejos de la cámara. Eso da algo de
+margen, pero el techo real es la falta de planificación de rutas, no el coste de
+actualización por coche.
 
 ## Escalar los peatones
 
-Los peatones solo aparecen en los nodos del anillo de acera (8 por manzana), así que la
-herramienta avisa (sin bloquear) cuando **Pedestrian Count** supera ~el 70% de ese
-total — a partir de ahí la multitud se percibe como abarrotada, aunque `PedestrianAgent`
-no tiene ninguna mecánica de atasco propia (solo se separa de vecinos muy cercanos, nunca
-se queda bloqueado de forma permanente como puede pasarle a un coche).
+Los peatones solo aparecen en los nodos del anillo de acera alrededor de cada manzana, así
+que la herramienta avisa (sin bloquear) cuando **Pedestrian Count** se acerca a la
+capacidad transitable del grafo — a partir de ahí la multitud se percibe como abarrotada,
+aunque `PedestrianAgent` no tiene ninguna mecánica de atasco propia (solo se separa de
+vecinos muy cercanos, nunca se queda bloqueado de forma permanente como puede pasarle a un
+coche). Por ese motivo su umbral es una fracción bastante mayor que el de los vehículos.
 
-Una **rejilla 1×N o N×1** no tiene intersecciones interiores, así que tampoco tiene
-pasos de cebra ni semáforos — los peatones de cada manzana quedan confinados a su propio
-anillo de acera, sin poder cruzar a la manzana vecina. La herramienta también avisa de
-esto cuando **Include Pedestrians** está activado.
+Una **rejilla 1×N o N×1** no tiene intersecciones con semáforo, así que tampoco tiene
+pasos de cebra — los peatones de cada manzana quedan confinados a su propio anillo de
+acera, sin poder cruzar a la manzana vecina. La herramienta también avisa de esto cuando
+los peatones están activados.
 
 El grafo peatonal se auto-repara contra un obstáculo movido/añadido cada vez que entras
 en Play (y también mediante `Tools > City Generator > Rebuild Pedestrian Network` sin
-necesidad de entrar en Play), usando una pequeña sonda física por nodo de acera — pero
-un prefab de edificio o prop **sin ningún `Collider`** en su jerarquía no lo detecta esa
-comprobación. Aun así, sigue evitándose en el momento de la generación, a través de la
-misma lista de obstáculos compartida contra la que se comprueban el resto de categorías
-(farolas, papeleras, vegetación).
+necesidad de entrar en Play), usando una pequeña sonda física por nodo de acera.
+
+Esa sonda física es, por diseño, lo **único** que bloquea un nodo peatonal. Un objeto
+**sin ningún `Collider`** en su jerarquía nunca se trata como obstáculo peatonal: los
+peatones lo atravesarán. Si algo que colocas debe bloquearlos, dale un `Collider`. (La
+evitación de solapamientos *en el momento de la generación* es independiente y no depende
+de colliders: props, vegetación y Custom Places se siguen separando entre sí por los
+bounds de sus renderers.)
 
 ## Pipeline de render
 
-Los 14 materiales de demostración están creados como **URP/Lit** y se verán magenta
+Los materiales de demostración están creados como **URP/Lit** y se verán magenta
 bajo Built-in o HDRP. El código propio de la herramienta no tiene dependencia de
 pipeline de render — no requiere ni configura URP, y no se genera ningún
 `Global Volume`— así que funciona con cualquier pipeline siempre que le proporciones

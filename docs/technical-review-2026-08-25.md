@@ -1,5 +1,13 @@
 # Informe técnico priorizado — Unity City Generator
 
+> **Informe externo del 2026-08-25, conservado tal cual como registro.** Describe el estado
+> del código en esa fecha, no el actual: sus hallazgos críticos/arquitectónicos se
+> resolvieron en SPEC 04 y los de rendimiento (puntos 6-9) en SPEC 05, y algunos de los
+> ficheros que enlaza ya no existen (p. ej. `PerformanceBootstrap.cs`, eliminado en v2.0.0).
+> Lo que sigue abierto son sus puntos de prioridad media/baja (contenido de demo, docs,
+> partir `CityGeneratorWindow`). **No lo actualices**: para el estado vigente,
+> [`docs/technical-review.md`](technical-review.md) y `docs/architecture/`.
+
 ## Resumen ejecutivo
 
 El proyecto tiene una base sólida: package separado por ensamblados Editor/runtime, generación determinista, sensores `NonAlloc`, managers centralizados, caché de bounds, static batching y assets razonablemente contenidos. No recomiendo una migración a ECS/DOTS en el estado actual.

@@ -1,6 +1,15 @@
 # Red de peatones (NPCs) para City Generator
 
-Documento de planificación. No implementado todavía — describe la forma acordada de abordarlo, para usarse como referencia cuando se aborde la implementación.
+> **Documento superado, conservado solo como historia.** Se escribió *antes* de implementar
+> la red peatonal y describe el plan tal como se acordó entonces; el sistema real lleva
+> implementado desde SPEC 03 y ha cambiado en varios puntos respecto a lo que se planeó aquí
+> (entre otros: los POI peatonales se implementaron y luego se retiraron enteros en SPEC 06,
+> y con SPEC 11 sí existen cruces sin semáforo). **La autoridad es
+> [`specs/03-pedestrian-network.md`](../specs/03-pedestrian-network.md) y
+> [`docs/architecture/pedestrians.md`](architecture/pedestrians.md)** — no tomes nada de este
+> fichero como descripción del comportamiento actual.
+
+Documento de planificación original, tal como se escribió.
 
 ## Contexto
 

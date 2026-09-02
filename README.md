@@ -9,19 +9,29 @@ scene. Open it from **Tools > City Generator > Open**.
 
 - **Generate a complete city:** roads, sidewalks, road markings, buildings, plazas,
   street furniture, traffic lights, autonomous traffic, pedestrians, an optional
-  day/night cycle, and a minimap HUD.
-- **Configure everything from the window:**
-  - **City:** grid, ground, buildings, plazas, vehicles, props, an optional Day/Night
-    Cycle for the generated directional light (start hour, speed multiplier, and a
-    colour gradient/intensity curve over the 24 h), and Custom Places.
+  day/night cycle, ambient audio, and a minimap HUD.
+- **Configure everything from the window's six tabs:**
+  - **City:** grid, ground, buildings, plazas, props, an optional Day/Night Cycle for the
+    generated directional light (start hour, speed multiplier, and a colour
+    gradient/intensity curve over the 24 h), and Custom Places.
+  - **Custom Grid:** instead of a plain width × height rectangle, switch the City tab's
+    grid preview to **Customize** and paint the city's own outline block by block — any
+    connected shape. The result still comes out as a finished rectangle: the gaps get
+    filled with ground cover, and the city ends in walkable sidewalk either way.
   - **Custom Places:** manually placed entries with a title, prefab, block/corner picked
     from a grid preview, fixed orientation, and an optional "Is Point Of Interest" flag
     that surfaces the entry on the minimap. They are instantiated instead of a random
     building at that spot.
-  - **Player:** Player Prefab, movement, `CharacterController`, and camera tuning.
-  - **Pedestrians:** the pedestrian prefab list, walk/idle behaviour, and crowd tuning.
-  - **Minimap:** enabled by default, with texture resolution and view radius controls for
-    the in-game HUD.
+  - **Player:** Player Prefab, movement, `CharacterController`, third-person camera
+    tuning, and an optional Free Camera you can toggle into at runtime to fly around the
+    generated city.
+  - **Traffic:** whether to spawn vehicles, how many, and the weighted vehicle prefab list.
+  - **Pedestrians:** the pedestrian prefab list, walk/idle behaviour, crowd tuning, and
+    **Custom Pedestrians** — extra pedestrians confined to a route you trace by hand on a
+    preview of the pedestrian graph, instead of roaming the whole city.
+  - **Minimap:** texture resolution and view radius for the in-game HUD.
+  - **Audio:** looping 2D city ambience, plus positional 3D sources placed in each
+    generated plaza.
 - **Install and generate immediately:** it ships as the embedded package
   `com.santiandrade.citygenerator`, installable directly from a git URL, with a complete
   set of demo prefabs included. No package code needs to be touched.
@@ -77,17 +87,17 @@ git URL using the new tag from the [Releases page](https://github.com/santiandra
   fail-closed fallback if every slot is taken — vehicles just won't detect pedestrians
   until you free one up.
 - A `TrafficLight` prefab with a `CityGenerator.Runtime.TrafficLight` component
-  whenever the grid has at least one interior intersection (grid width and height
-  both greater than 1) — the tool validates this and blocks generation otherwise,
-  regardless of whether **Include Traffic** is on: the traffic network and its lights
+  whenever the city has at least one intersection that needs signalling — the tool
+  validates this and blocks generation otherwise,
+  regardless of whether traffic is enabled: the traffic network and its lights
   are always generated so crossings stay wired to a real light, even when no vehicles
   are spawned.
 
 ## Demo content
 
 The package includes a full set of demo assets under its `DefaultAssets/` folder —
-buildings, vehicles, vegetation, street furniture, floor pieces, materials, the
-player prefab, and the minimap HUD prefab/sprites — so `Tools > City Generator > Open`
+buildings, vehicles, characters, vegetation, street furniture, floor pieces, materials,
+audio clips, and the minimap HUD prefab/sprites — so `Tools > City Generator > Open`
 opens with every required field already filled in and a city is one click away.
 
 This demo content lives inside the package, which Unity treats as read-only in your
@@ -139,10 +149,9 @@ tool's job ends at leaving the geometry ready for these steps to be a single but
   has no opinion on LOD; it only places whatever prefab you gave it.
 - **Adjust lighting** — the generated scene ships with a single directional light and no
   `Global Volume` (removed on purpose, to stay render-pipeline-agnostic). That light is
-  always created facing roughly east-west (yaw -110°, so the sun rises towards the
-  minimap's right) and
-  carries the Day/Night Cycle component; with the cycle disabled it simply stays fixed at
-  the configured Start Hour.
+  always created facing roughly east-west, so the sun rises towards the minimap's right,
+  and carries the Day/Night Cycle component; with the cycle disabled it simply stays fixed
+  at the configured Start Hour.
 
 ## Recommended project settings
 
@@ -167,38 +176,43 @@ for your project; there's no package-level opt-in replacement.
 
 ## Scaling traffic
 
-`CarAgent` has no route planning or congestion avoidance: past roughly 40% of a grid's
-spawn nodes occupied, traffic tends to gridlock rather than flow (the window shows a
-warning next to **Vehicle Count** as soon as you exceed this, before you generate). If you need denser traffic than that, a
-`CityGenerator.Runtime.TrafficManager` is generated automatically whenever **Include
-Traffic** is enabled — it ticks every `CarAgent` from one central `Update` and, once
-more than ~60 cars are registered, staggers the forward sensor for cars far from the
-camera. That buys some headroom, but the real ceiling is the lack of route planning, not
-per-car update cost.
+`CarAgent` has no route planning or congestion avoidance: past a certain fraction of a
+grid's spawn nodes occupied, traffic tends to gridlock rather than flow. The window shows
+a warning next to **Vehicle Count** as soon as you cross that threshold, before you
+generate. If you need denser traffic than that, a `CityGenerator.Runtime.TrafficManager`
+is generated automatically whenever traffic is enabled — it ticks every `CarAgent` from
+one central `Update` and, past a car count of its own, staggers the forward sensor for
+cars far from the camera. That buys some headroom, but the real ceiling is the lack of
+route planning, not per-car update cost.
 
 ## Scaling pedestrians
 
-Pedestrians only spawn on the sidewalk ring nodes (8 per block), so the tool warns
-(non-blocking) once a **Pedestrian Count** exceeds ~70% of that total — past that point
-the crowd reads as overcrowded, even though `PedestrianAgent` has no gridlock mechanics
-of its own (it only pushes apart from very close neighbours, it never gets permanently
-stuck like a car can).
+Pedestrians only spawn on the sidewalk ring nodes around each block, so the tool warns
+(non-blocking) once **Pedestrian Count** gets close to the walkable capacity of the graph
+— past that point the crowd reads as overcrowded, even though `PedestrianAgent` has no
+gridlock mechanics of its own (it only pushes apart from very close neighbours, it never
+gets permanently stuck like a car can). The threshold is a much larger fraction than the
+vehicle one, for that reason.
 
-A **1×N or N×1 grid** has no interior intersections, so it has no zebra crossings or
+A **1×N or N×1 grid** has no signalled intersections, so it has no zebra crossings or
 traffic lights either — every block's pedestrians stay confined to their own sidewalk
 ring, unable to cross to a neighbouring block. The tool warns about this too when
-**Include Pedestrians** is on.
+pedestrians are enabled.
 
 The pedestrian graph auto-repairs itself against a moved/added obstacle every time you
 enter Play (and via `Tools > City Generator > Rebuild Pedestrian Network` without
-entering Play), using a small physics probe per sidewalk node — but a building or prop
-prefab with **no `Collider`** anywhere in its hierarchy isn't detected by that check.
-It's still avoided at generation time, via the same shared obstacle list every other
-category (lamps, bins, vegetation) is checked against.
+entering Play), using a small physics probe per sidewalk node.
+
+That physics probe is the **only** thing that blocks a pedestrian node, by design. An
+object with **no `Collider`** anywhere in its hierarchy is never treated as a pedestrian
+obstacle — pedestrians will walk straight through it. If something you place should block
+them, give it a `Collider`. (Overlap avoidance *at generation time* is separate and does
+not depend on colliders: props, vegetation and Custom Places are still spaced apart from
+each other by their renderer bounds.)
 
 ## Render pipeline
 
-The 14 demo materials are authored as **URP/Lit** and will render magenta under
+The demo materials are authored as **URP/Lit** and will render magenta under
 Built-in or HDRP. The tool's own code has no render-pipeline dependency — it doesn't
 require or configure URP, and no `Global Volume` is generated — so it works with any
 pipeline as long as you supply materials that pipeline understands. Only the bundled

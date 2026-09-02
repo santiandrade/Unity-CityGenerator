@@ -12,9 +12,8 @@ ese fin:
 
 - `Packages/com.santiandrade.citygenerator/DefaultAssets/` — **contenido de demo**, los
   prefabs de ejemplo con los que la tool funciona nada más abrirla
-  (`CityGeneratorDefaultAssets`). Desde SPEC 02 viaja **dentro** del package, salvo los
-  modelos huérfanos que se quedan en `Assets/Models/` de este repo (no referenciados por
-  ningún prefab de demo).
+  (`CityGeneratorDefaultAssets`). Desde SPEC 02 viaja **dentro** del package; los modelos
+  huérfanos (no referenciados por ningún prefab de demo) se acabaron borrando del repo.
 - `Assets/Scenes/City.unity` — **escena de prueba desechable**, generada por la tool y
   regenerada sin miramientos. No contiene trabajo manual que preservar.
 
@@ -29,9 +28,9 @@ notas correspondientes pertenecen ahora al README del paquete, no aquí.
 
 Revisado (alcance en el momento de la revisión, 2026-08-20): los 23 scripts de entonces de
 `Packages/com.santiandrade.citygenerator/`, `ProjectSettings/*`, `Assets/Settings/*` (URP),
-los 22 prefabs de demo, los 14 materiales, `City.unity` y `Packages/manifest.json`. El
-paquete ha crecido bastante desde entonces (SPEC 03-08); las filas de abajo se anotan cuando
-un cambio posterior las ha dejado desfasadas.
+los prefabs de demo, los materiales, `City.unity` y `Packages/manifest.json`. El paquete ha
+crecido mucho desde entonces (SPEC 03 en adelante); las filas de abajo se anotan cuando un
+cambio posterior las ha dejado desfasadas.
 
 **Conclusión de una línea**: todo lo detectado en la revisión inicial que merecía la pena ya
 está corregido en el código de la tool y en el contenido de demo (incluida la migración fuera
@@ -87,15 +86,15 @@ revisión futura y para dejar constancia de por qué cada uno se dio por cerrado
 | A.17 | `File.Exists` con ruta relativa | `GetNextFreeScenePath` usa `AssetDatabase`; se documenta por qué **no** se usa `GenerateUniqueAssetPath` (rompería el nombrado `City<N>` con un sufijo con espacio) |
 | A.19 | Paradas de autobús — bug encontrado y luego la categoría entera retirada (2026-08-20) | Primero se detectó y corrigió que nunca se colocaba ninguna: `CityGeneratorStreetCandidates.AddSide`, con `pointsPerSide == 1` (solo lo usaba `BuildBusStops`), ponía el candidato en `t=0`, la misma coordenada que el punto central de las 3 farolas por lado, siempre ocupado con `lampDensity=1`, así que el solape lo descartaba siempre en los 8 bloques no-plaza. Verificado en el Editor tras desplazarlo a `t=0.35`: 8 instancias, una por bloque. Poco después, **decisión del usuario** (sin más motivo dado): retirar la categoría entera en vez de mantenerla arreglada — `busStopPrefab`/`busStopDensity`, `BuildBusStops`, el prefab `Props/BusStop.prefab` y sus 4 mallas extraídas, todo fuera. Detalle en `specs/01-city-generator-tool.md` |
 | B.2 | Mallas ProBuilder embebidas en cada instancia (2026-08-20) | Resuelto para los 11 prefabs con `ProBuilderMesh`. La revisión inicial solo había listado `Floors/Lawn\|RoadBase\|RoadDash\|RoadSidewalk\|RoadZebra` y `Props/Bench\|Bin\|Lamp` — ya estaban resueltos de antes (mallas extraídas a `Assets/Meshes/`, sin `ProBuilderMesh`, `m_IsReadable: 0`). El usuario detectó que el alcance original se había dejado corto: `Props/Fountain.prefab` (los 3 objetos `Water`, geometría procedural sobre el modelo `.glb` importado), `Props/TrafficLight.prefab` (8 partes: `Pole`, `PoleBase`, `Arm`, `Housing`, `Visor`, `Lamp_Red`\|`Amber`\|`Green`) y `Vegetation/Tree.prefab` (`Trunk`, `Crown`, `Crown_Top`) seguían con `ProBuilderMesh`. Convertidos con un script de Editor: `ToMesh()` + `Refresh()` + `EditorMeshUtility.Optimize(pb)`, copia de la malla resultante a un asset nuevo en `Assets/Meshes/` (14 activos: `Fountain_Water[_1][_2]`, `TrafficLight_*`, `Tree_*`), `MeshFilter`/`MeshCollider` reapuntados al asset, componente `ProBuilderMesh` eliminado. `m_IsReadable` en `false` requirió `Mesh.UploadMeshData(true)` **antes** de `AssetDatabase.CreateAsset` (llamarlo después, o editar el flag ya serializado vía `SerializedObject`, no persiste — comportamiento verificado empíricamente en este proyecto). Los `sharedMaterial` de los tres lamps del semáforo no se tocaron, así que el swap de estado en `TrafficLight.cs` sigue intacto. `City.unity` regenerada con "Re-Build City in Current Scene": `grep -c pb_Mesh` pasó de 227 a **0**, verificado visualmente sin regresiones |
-| B.1 | Sombras `TwoSided` en los 6 prefabs de edificio | `m_CastShadows: 1` (On) en los seis |
+| B.1 | Sombras `TwoSided` en los prefabs de edificio | `m_CastShadows: 1` (On) en todos |
 | B.3 | FBX de edificios importando rig y animación | `animationType: 0`, `importAnimation: 0` en los 41 FBX de `Models/Buildings` |
 | B.4 | 32 clips importados en `character-male-d.fbx` | `clipAnimations` reducido a los 5 que usa el `PlayerAnimator` |
 | B.5 | Prefab `Lamp` con 4 renderers | Bajado a 2 `MeshRenderer` |
 | C.1 | Shadowmap 8192 px, 4 cascadas, 150 m | `PC_RPAsset`: 2048 px, 2 cascadas, 70 m, `SoftShadowQuality: 1` |
 | C.2 | `_CameraOpaqueTexture` generada sin consumidor | `m_RequireOpaqueTexture: 0`. `m_RequireDepthTexture` sigue a 1, justificado por el SSAO del `PC_Renderer` |
 | C.3 | GPU Resident Drawer desactivado | `m_GPUResidentDrawerMode: 1` (Instanced Drawing), habilitado por A.1 |
-| C.4 | Framerate sin objetivo fijado | `CityGenerator.Runtime.PerformanceBootstrap`: `vSyncCount = 0`, `targetFrameRate = 60`. Deliberadamente **en el paquete** y no en `ProjectSettings`, para que viaje con la tool |
-| A.7 | Tick por-coche de `CarAgent` (2026-08-20) | Nuevo `CityGenerator.Runtime.TrafficManager`: `CarAgent` ya no implementa `Update()`, expone `Tick(float dt, bool runSensor)` y se registra contra el `TrafficManager` que resuelve vía `network.Manager` (con fallback a búsqueda/auto-creación si el componente no viene del generador). El `TrafficManager.Instance` singleton original se eliminó en SPEC 04 para que varias ciudades convivan en la misma escena. `TrafficManager.Update()` itera la lista de agentes registrados y llama a `Tick` desde un único punto. Con más de `staggerMinAgentCount` (60 por defecto) coches registrados, además escalona el `SphereCast` del sensor frontal para los coches lejos de `Camera.main`, reutilizando el último `clearance` en los frames que se saltan — por debajo de ese umbral (la demo por defecto tiene 30) el comportamiento es idéntico al `Update()` original. `CityGeneratorTrafficBuilder.AddManagerComponent` añade el componente al `GameObject` `TrafficNetwork` solo si `includeTraffic` está activo, y `BuildVehicles` inyecta la referencia a `TrafficNetwork` en cada `CarAgent` generado vía `SerializedObject`, sustituyendo el `FindFirstObjectByType<TrafficNetwork>()` que antes hacía cada coche en `Start`. Verificado en Play mode sobre la ciudad de prueba regenerada: 28/30 coches con `DistanceTravelled > 0.5 m` tras 4 s, sin errores en consola |
+| C.4 | Framerate sin objetivo fijado | Se resolvió con un `PerformanceBootstrap` dentro del paquete (`vSyncCount = 0`, `targetFrameRate = 60`) y **después se revirtió**: en v2.0.0 se eliminó el componente por completo. Un paquete portable no debe imponerle a su proyecto anfitrión una política global de framerate; hoy es decisión del usuario y no hay opt-in de paquete que lo sustituya. Documentado como tal en el README |
+| A.7 | Tick por-coche de `CarAgent` (2026-08-20) | Nuevo `CityGenerator.Runtime.TrafficManager`: `CarAgent` ya no implementa `Update()`, expone `Tick(float dt, bool runSensor)` y se registra contra el `TrafficManager` que resuelve vía `network.Manager` (con fallback a búsqueda/auto-creación si el componente no viene del generador). El `TrafficManager.Instance` singleton original se eliminó en SPEC 04 para que varias ciudades convivan en la misma escena. `TrafficManager.Update()` itera la lista de agentes registrados y llama a `Tick` desde un único punto. Con más de `staggerMinAgentCount` (60 por defecto) coches registrados, además escalona el `SphereCast` del sensor frontal para los coches lejos de `Camera.main`, reutilizando el último `clearance` en los frames que se saltan — por debajo de ese umbral el comportamiento es idéntico al `Update()` original. `CityGeneratorTrafficBuilder.AddManagerComponent` añade el componente al `GameObject` `TrafficNetwork` solo si `includeTraffic` está activo, y `BuildVehicles` inyecta la referencia a `TrafficNetwork` en cada `CarAgent` generado vía `SerializedObject`, sustituyendo el `FindFirstObjectByType<TrafficNetwork>()` que antes hacía cada coche en `Start`. Verificado en Play mode sobre la ciudad de prueba regenerada: 28/30 coches con `DistanceTravelled > 0.5 m` tras 4 s, sin errores en consola |
 | A.18 | Sin README del paquete (2026-08-20) | `Assets/CityGenerator/README.md` en su momento, absorbido después por el `README.md`/`README.es.md` de la raíz del repo (SPEC 02): requisitos (Input System, capa `Vehicle`), qué hacer con `CityGeneratorDefaultAssets.cs` al portar la tool a otro proyecto, requisitos de los prefabs del usuario (pivote en la base, edificios al slot de 22 m, vehículos con `BoxCollider` único y sin `Rigidbody`), pasos posteriores por escena que quedan fuera del alcance de la tool (bake de lightmaps/occlusion, `LODGroup`), y la tabla de configuración de proyecto recomendada (grupo C) |
 
 ### Pendientes
@@ -144,7 +143,7 @@ nadie ha medido todavía que el recuento de objetos sea, en la práctica, un pro
 
 ### A.13 `ScriptableObject` para el tuning de vehículos — no recomendado
 
-Los cuatro prefabs de coche llevan sus ~7 valores de conducción serializados en cada uno.
+Cada prefab de coche lleva sus ~7 valores de conducción serializados.
 Centralizarlos en un `CarProfile` como `ScriptableObject` permitiría ajustar el tuning sin
 tocar cada prefab. Es mejora de mantenibilidad, no de rendimiento, y **complica el
 paquete**: el usuario tendría que crear y asignar perfiles además de prefabs, cuando hoy
@@ -154,15 +153,14 @@ solo tiene que arrastrar un prefab. **No hacerlo** salvo que el tuning se toque 
 
 ## B. Contenido de demo — viaja con el paquete desde SPEC 02
 
-### B.6 Modelos no referenciados — sin acción
+### B.6 Modelos no referenciados — cerrado
 
-`Assets/Models/Pets` no está referenciada por ningún prefab de demo ni escena, así que
-Unity no la incluye en la build: cero coste en runtime. **No tocar**: se mantiene a
-propósito, hay planes de usar esos modelos; SPEC 02 ya excluye estos huérfanos del package
-por el mismo motivo (`AssetDatabase.GetDependencies`, no inspección manual). Actualización:
-los huérfanos de `Characters`/`Buildings`/`Cars`/`Props` sí acabaron borrándose del repo una
-vez los modelos referenciados se movieron dentro del package, así que `Pets` es hoy lo único
-que queda en `Assets/Models/`.
+Los FBX huérfanos de `Assets/Models/` no los incluía Unity en la build (ningún prefab de
+demo ni escena los referenciaba), así que el hallazgo era de cero coste en runtime y en su
+momento se dejaron a propósito por si se usaban más adelante. Se acabaron borrando categoría
+por categoría, a medida que los modelos sí referenciados se movían dentro del package;
+`Assets/Models/` ya no existe. El criterio de qué entra en el package sigue siendo
+`AssetDatabase.GetDependencies` (SPEC 02), no inspección manual.
 
 ---
 
@@ -183,7 +181,10 @@ como referencia de qué se ajustó y por qué.
 | `m_SoftShadowQuality` | 1 | High no aporta a esta escala |
 | `m_RequireOpaqueTexture` | 0 | Ningún shader lee `_CameraOpaqueTexture`; forzaba una copia del color buffer por frame |
 | `m_GPUResidentDrawerMode` | 1 | Requiere objetos marcados static (A.1) y URP en Forward+; hace batching vía `BatchRendererGroup` y añade GPU occlusion culling |
-| `targetFrameRate` | 60 | Lo fija `PerformanceBootstrap`, dentro del paquete, no aquí |
+
+`targetFrameRate`/`vSyncCount` **no** están en esta tabla a propósito: el paquete llegó a
+fijarlos en runtime y dejó de hacerlo en v2.0.0 (ver C.4). Son preferencia del proyecto
+destino.
 
 Nota de coherencia: `QualitySettings.asset` declara sus propios `shadowDistance`/
 `shadowCascades`, pero bajo URP se ignoran y manda el URP Asset. No intentar alinearlos: es
@@ -267,21 +268,22 @@ Es, de forma realista, una reescritura completa.
 
 ### F.2 Qué ganarías
 
-Nada medible hoy. El coste de CPU del tráfico es 30 coches × (un `SphereCast` + aritmética
-trivial): unos cientos de microsegundos por frame. Lo que limitaba al proyecto era el shadow
-pass y la ausencia de batching, y **ambos ya están resueltos** por A.1 + C.1 + C.3 sin tocar
-la arquitectura. El GPU Resident Drawer *es* `BatchRendererGroup`, la misma tecnología que
+Nada medible hoy. El coste de CPU del tráfico es unas decenas de coches × (un `SphereCast` +
+aritmética trivial): unos cientos de microsegundos por frame. Lo que limitaba al proyecto era
+el shadow pass y la ausencia de batching, y **ambos ya están resueltos** por A.1 + C.1 + C.3
+sin tocar la arquitectura. El GPU Resident Drawer *es* `BatchRendererGroup`, la misma tecnología que
 usa Entities Graphics, disponible sin migrar nada.
 
 ### F.3 Dónde sí tendría sentido, y a partir de cuándo
 
 - **Vehículos** — el único candidato real. El umbral práctico está en **2 000–5 000 agentes
-  simultáneos**. Hoy hay 30, y la propia tool advierte de gridlock por encima del 40 % de
-  ocupación de nodos. El límite para escalar el tráfico **no es el rendimiento, es la
+  simultáneos**. Hoy son decenas, y la propia tool advierte de gridlock por encima de su
+  umbral de ocupación de nodos. El límite para escalar el tráfico **no es el rendimiento, es la
   ausencia de planificación de rutas** en `CarAgent`: migrar a ECS haría llegar al atasco más
   rápido, no lo evitaría.
-- **Peatones** — si algún día se quieren cientos o miles con comportamiento simple, ese sí
-  sería el caso donde DOTS aporta. No existen hoy.
+- **Peatones** — existen desde SPEC 03, en el mismo orden de magnitud que los coches y con
+  su propio tick centralizado, escalonado y pool de buffers (SPEC 05). El umbral donde DOTS
+  aportaría sigue siendo cientos o miles con comportamiento simple; sigue sin alcanzarse.
 - **Geometría estática** — herramienta equivocada; lo correcto ya está hecho (A.1 + C.3).
 - **Jugador, cámara, semáforos, generador** — nunca.
 
@@ -294,13 +296,12 @@ el camino con mejor relación coste/beneficio no es ECS, sino, por orden:
    significa atascarse antes. Todo lo demás es prematuro hasta resolver esto.
 2. A.7, ya implementado (`TrafficManager`: tick centralizado + escalonado de sensores por
    encima de `staggerMinAgentCount`).
-3. Sustituir el `SphereCast` por una **rejilla espacial** propia: los coches ya viven en un
-   grafo de carriles conocido, así que "el coche de delante" se resuelve por índice de carril
-   en O(1) **sin tocar el motor de física** — y de paso desaparece la necesidad del
-   `Physics.SyncTransforms()` de A.4. Cambio localizado en `CarAgent` + `TrafficNetwork`, y
-   viaja con el paquete.
-4. Solo si tras eso el perfilado señala a la lógica de agentes: Jobs + Burst sobre esa
-   rejilla, **sin** migrar a Entities.
+3. Sustituir el `SphereCast` por un índice propio — **ya implementado en SPEC 05**:
+   `TrafficLaneOccupancy` resuelve "el coche de delante" por índice de carril en O(1) sin
+   tocar el motor de física, con la consulta física solo como fallback, y `PedestrianRoad
+   ProximityGrid` hace lo propio para el sensor de peatones.
+4. Solo si tras eso el perfilado señala a la lógica de agentes: Jobs + Burst sobre esas
+   estructuras, **sin** migrar a Entities.
 
 Con esos pasos el proyecto soportaría del orden de 500–1 000 coches por ciudad generada.
 
@@ -326,7 +327,11 @@ Para cualquiera de los cambios pendientes, la comprobación mínima:
 
 - **Línea base con el Profiler**: capturar 300 frames en una ciudad generada antes y después.
   Mirar ms de CPU/GPU, `SetPass calls`, `Batches`, `GC Alloc`/frame, y memoria de mallas.
-  Con `targetFrameRate` ya fijado a 60 por `PerformanceBootstrap`, la comparación es estable.
+  Fija el mismo `targetFrameRate`/`vSyncCount` en las dos capturas (el paquete ya no los
+  toca, ver C.4) o la comparación no es estable.
+- **Suite de tests** (`Assets/Tests/`, SPEC 05): antes que cualquier medición manual, pasar
+  EditMode/PlayMode/Performance desde el Test Runner. Un fallo de la suite de Performance se
+  trata como señal de correctitud, no como ruido.
 - **B.2 (resuelta, 2026-08-20)**: se verificó con el mismo indicador — `grep -c pb_Mesh
   Assets/Scenes/City.unity` bajó de 227 a 0 tras regenerar la escena con "Re-Build City in
   Current Scene". Comprobado visualmente que la geometría no cambió y que los colliders

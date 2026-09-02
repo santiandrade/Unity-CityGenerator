@@ -10,8 +10,7 @@ The tool lives in the embedded package `Packages/com.santiandrade.citygenerator/
 
 Everything else in the repo supports the package, in one of three roles:
 
-- **Demo content** — `Packages/com.santiandrade.citygenerator/DefaultAssets/`, ships inside the package.
-- **Orphan models** — `Assets/Models/`, FBX library entries that no demo prefab uses, kept for future use, deliberately **not** in the package. Currently empty and absent from the repo: each category's orphans were removed once its referenced models moved into the package, most recently `Pets/` — `animal-cat`/`animal-dog` moved into `DefaultAssets/Models/Pets/` as SPEC 12's Custom Pedestrian demo prefabs, and the other 22 unreferenced animal FBX from the same pack were deleted rather than kept.
+- **Demo content** — `Packages/com.santiandrade.citygenerator/DefaultAssets/`, ships inside the package. Only the models a demo prefab actually references live there; unreferenced orphans from the same asset packs were deleted rather than kept (`Assets/Models/` no longer exists).
 - **Test scene** — `Assets/Scenes/City.unity`, disposable output kept only to eyeball the result.
 
 The tool's behaviour is considered **done and correct**: reproduce it, don't redesign it.
@@ -22,7 +21,7 @@ Historical note: the layout the tool reproduces was originally a hand-built ProB
 
 | Area | Document |
 | --- | --- |
-| Editor window, UI Toolkit, validation, pipeline, builders, defaults | [`docs/architecture/editor-tool.md`](docs/architecture/editor-tool.md) |
+| Editor window, UI Toolkit, validation, pipeline, builders, defaults, minimap, day/night, audio | [`docs/architecture/editor-tool.md`](docs/architecture/editor-tool.md) |
 | Runtime components: player, camera, traffic graph/agents/manager, collider policy | [`docs/architecture/runtime-and-traffic.md`](docs/architecture/runtime-and-traffic.md) |
 | Pedestrian network, agents, manager, layers, removed POI machinery | [`docs/architecture/pedestrians.md`](docs/architecture/pedestrians.md) |
 | Custom Places | [`docs/architecture/custom-places.md`](docs/architecture/custom-places.md) |
@@ -38,7 +37,7 @@ Embedded Unity package (`name` `com.santiandrade.citygenerator`, `unity` `6000.0
 
 ### Generation pipeline
 
-`CityGeneratorValidator` → `CityGeneratorSceneBuilder` → `CityGeneratorContentAssembler` → `Grid` → `GroundBuilder` → `CustomPlaceBuilder` → `BuildingBuilder` → `PlazaBuilder` → `StreetPropsBuilder` → `TrafficBuilder` → `PedestrianBuilder` → `MinimapBuilder`.
+`CityGeneratorValidator` → `CityGeneratorSceneBuilder` → `CityGeneratorContentAssembler` → `Grid` → `GroundBuilder` → `CustomPlaceBuilder` → `BuildingBuilder` → `PlazaBuilder` → `StreetPropsBuilder` → `TrafficBuilder` → `PedestrianBuilder` → `CustomPedestrianBuilder` → `MinimapBuilder` → `AudioBuilder`.
 
 ## Specs and reviews
 
@@ -57,6 +56,8 @@ Specs are in `specs/` (Spanish, driven by a `/spec-*` workflow configured by `sp
 | [`09-city-audio.md`](specs/09-city-audio.md) | The Audio tab: looping 2D Ambience and one positional 3D source per generated plaza, both applied on Build and Re-Build. |
 | [`10-pedestrian-interior-routes.md`](specs/10-pedestrian-interior-routes.md) | The `Interior` pedestrian node kind (a cross through the gap between a normal block's 4 building slots) and how `PlanNewDestination` reaches it. |
 | [`11-custom-grid.md`](specs/11-custom-grid.md) | Custom Grid: the "Customize" mode replacing the rectangular footprint with an arbitrary poliomino, the 3-arm traffic light rule (applied to both grid modes), and the perimeter sidewalk band + walkway that make a city end in sidewalk rather than asphalt. |
+| [`12-custom-pedestrians.md`](specs/12-custom-pedestrians.md) | Custom Pedestrians: a separate budget of pedestrians confined to a hand-traced subgraph, its node-graph picker, and the `Pets/` demo prefabs (rigid-rig Animator culling). |
+| [`13-free-camera.md`](specs/13-free-camera.md) | Free Camera: `FreeCameraController` alongside `ThirdPersonCamera` on the Main Camera, and the `Free View` action map. |
 
 - [`docs/technical-review.md`](docs/technical-review.md) — standing technical review (performance, code quality, ECS analysis) with the pending findings.
 - [`docs/technical-review-2026-08-25.md`](docs/technical-review-2026-08-25.md) — external review; its critical/architectural findings were addressed by SPEC 04 and its performance findings (items 6-9) by SPEC 05. Remaining medium/low-priority items (demo content, docs, `CityGeneratorWindow` splitting) stay open.
@@ -73,7 +74,7 @@ Each links to the document explaining why.
 - **`obstacles` is the single source of truth for overlap avoidance.** New categories append to it; `CityGeneratorSpatialHash` is a pure index over it, never a second source. ([editor-tool](docs/architecture/editor-tool.md))
 - **`CarAgent`'s unsignalled-crossing reservation must keep all three of its pieces** — it once deadlocked every car for five minutes and its current shape *is* the fix. Likewise, forward-sensor hits are discarded by identity, never by distance. ([runtime-and-traffic](docs/architecture/runtime-and-traffic.md))
 - **Don't reintroduce rotation smoothing on `ThirdPersonCamera`** — it was tried and caused visible motion sickness. ([runtime-and-traffic](docs/architecture/runtime-and-traffic.md))
-- **Don't lower `TrafficManager.staggerMinAgentCount`** without re-verifying the default 80-car demo behaves the same. ([runtime-and-traffic](docs/architecture/runtime-and-traffic.md))
+- **Don't lower `TrafficManager.staggerMinAgentCount`** without re-verifying that a default-settings demo city behaves the same. ([runtime-and-traffic](docs/architecture/runtime-and-traffic.md))
 - **Vehicle/pedestrian masks and layers are written per generated instance**, never trusted from the prefab's baked serialized data. ([editor-tool](docs/architecture/editor-tool.md), [pedestrians](docs/architecture/pedestrians.md))
 - **A pedestrian prefab whose model isn't skinned (no `SkinnedMeshRenderer`, e.g. rigid per-limb `MeshRenderer`s) must get `Animator.cullingMode = Always Animate`, never `Cull Completely`** — `CityGeneratorPedestrianBuilder.ApplyAnimatorCullingMode` decides this per instance; hardcoding `Cull Completely` again silently freezes that rig's Animator forever (parameters keep updating, state time never advances, no console warning). A new FBX for such a prefab also needs its Locomotion clips' `Loop Time` explicitly enabled (`ModelImporter.clipAnimations`) — auto-split take clips default to it off, which freezes the pose on the last frame after under a second in a visually identical way but needs the opposite fix. ([pedestrians](docs/architecture/pedestrians.md))
 - **A collider deeper in a user prefab's hierarchy is left completely untouched**; only the root proxy collider gets the `Vehicle`/`Pedestrian` layer. ([runtime-and-traffic](docs/architecture/runtime-and-traffic.md))
@@ -91,6 +92,8 @@ Each links to the document explaining why.
 
 ## Working in this project
 
+- **Documentation records mechanisms and the reasons behind them, never current values.** Don't write the tool's default settings, package version, asset counts or prefab inventories into `README*.md`, `CLAUDE.md` or `docs/` — those change on any "Set Current Selection As Default" or content tweak, and a stale number in a doc is worse than no number. Point at the source instead (`CityGeneratorDefaultAssets.ApplyTo`, `CityGeneratorSettings`, `CityGeneratorConstants`, `package.json`, the asset folder). A constant's *value* is fine to cite where the value is itself the explanation (why a band is that wide, why a threshold sits where it does); a settings default is not.
+- `specs/`, `docs/technical-review-2026-08-25.md` and `docs/pedestrian-network-plan.md` are **historical records, not living documents** — they say what was decided or found at a point in time. Don't rewrite them to match today's code; correct today's docs instead.
 - There is no CLI build/lint pipeline and no CI — everything runs through the Unity Editor (or Rider/Visual Studio via the generated `.sln`). The `Unity.*.csproj` files and `.sln` at the root are IDE-generated and gitignored; never hand-edit or commit them. The test suite runs manually from the Unity Test Runner.
 - New code goes in `Packages/com.santiandrade.citygenerator/Runtime` (namespace `CityGenerator.Runtime`) or `.../Editor` (namespace `CityGenerator.Editor`) — extend those, don't introduce a new namespace, and remember both are behind `.asmdef`s, so anything new they reference must be added to the asmdef's `references`.
 - Structural, hard-to-hand-author assets (AnimatorControllers, ModelImporter reconfiguration, prefab creation) are built via one-off editor scripts run through the Unity MCP tooling, not by writing `.controller`/`.meta`/`.prefab` YAML directly. Create prefabs with `PrefabUtility.SaveAsPrefabAsset`, place instances with `PrefabUtility.InstantiatePrefab`, and edit existing prefabs with `PrefabUtility.LoadPrefabContents`/`SaveAsPrefabAsset`.

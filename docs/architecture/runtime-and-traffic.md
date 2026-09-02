@@ -44,7 +44,7 @@ Ticks every registered `CarAgent` from a single `Update` (`Register`/`Unregister
 
 Not a scene-global singleton (no `static Instance`, removed in SPEC 04): `CityGeneratorTrafficBuilder.AddManagerComponent` adds it to the `TrafficNetwork` GameObject only when `includeTraffic` is on, and wires it into `TrafficNetwork.Manager` (same GameObject) so `CarAgent` resolves it through the network rather than a global; a `CarAgent` used outside the generator falls back to finding or auto-creating one, so it still drives standalone. This is what lets multiple generated cities coexist in the same scene without their managers fighting over which one ticks which cars.
 
-Below `staggerMinAgentCount` (60 by default) every car's forward sensor runs every frame, identical to the old per-car `Update` — **do not lower this without re-verifying the default 80-car demo still behaves the same**. Above it, cars farther than `staggerDistance` from `Camera.main` only run their sensor 1 of every `staggerFrames` frames, reusing the previous clearance in between.
+Below `staggerMinAgentCount` every car's forward sensor runs every frame, identical to the old per-car `Update` — **do not lower this without re-verifying that a default-settings demo city still behaves the same**. Above it, cars farther than `staggerDistance` from `Camera.main` only run their sensor 1 of every `staggerFrames` frames, reusing the previous clearance in between.
 
 Since SPEC 05 it also calls `Physics.SyncTransforms()` once per frame after ticking every agent (moved here from `TrafficNetwork`), and only when `agents.Count > 0` — a scene with traffic disabled or with every `CarAgent` unregistered no longer pays for it.
 
