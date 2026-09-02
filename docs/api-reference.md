@@ -26,6 +26,10 @@ if (CityGeneratorAPI.IsCityAvailable)
   same assumption the rest of the tool makes. Regenerating the city at runtime (not something the
   tool itself does — generation is an Editor-only workflow) would leave the cached reference
   pointing at a destroyed object.
+- `CityGeneratorInfo`'s own fields drive `CityGeneratorAPI`'s getters, but its Inspector is read-only
+  (a custom editor greys it out) — it's a snapshot filled once at Build/Re-Build time, not a live
+  control, so editing it by hand has no effect on the running city. Go through `CityGeneratorAPI`
+  instead.
 - Every getter, on every module, returns a safe default — `0`, `false`, `Vector2Int.zero`,
   `Vector3.zero`, or `null` for the few cases returning an object — when `IsCityAvailable` is
   `false`. None of them throw. There's no need to guard every call with an `IsCityAvailable` check

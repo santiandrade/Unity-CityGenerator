@@ -27,6 +27,10 @@ if (CityGeneratorAPI.IsCityAvailable)
   API asume una ciudad generada por sesión de Play, la misma asunción que hace el resto de la tool.
   Regenerar la ciudad en runtime (algo que la propia tool no hace — la generación es un flujo
   exclusivo del Editor) dejaría la referencia cacheada apuntando a un objeto destruido.
+- Los propios campos de `CityGeneratorInfo` son los que alimentan los getters de `CityGeneratorAPI`,
+  pero su Inspector es de solo lectura (un editor personalizado lo muestra deshabilitado) — es una
+  instantánea rellenada una vez en cada Build/Re-Build, no un control en vivo, así que editarla a
+  mano no tiene ningún efecto sobre la ciudad en marcha. Usa `CityGeneratorAPI` en su lugar.
 - Todo getter, en todos los módulos, devuelve un valor por defecto seguro — `0`, `false`,
   `Vector2Int.zero`, `Vector3.zero`, o `null` en los pocos casos que devuelven un objeto — cuando
   `IsCityAvailable` es `false`. Ninguno lanza una excepción. No hace falta proteger cada llamada con

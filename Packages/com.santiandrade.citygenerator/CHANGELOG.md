@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   throwing when no city is active. A small number of setters already safe at runtime are exposed:
   `City.SetDayNightEnabled`/`SetHour`, `Minimap.SetVisible`/`SetViewRadiusMeters`. Backed by a new
   `CityGeneratorInfo` runtime component that `CityGeneratorSceneBuilder`/`CityGeneratorContentAssembler`
-  populate on every Build/Re-Build. See `docs/api-reference.md`.
+  populate on every Build/Re-Build. See `docs/api-reference.md`. `CityGeneratorInfo`'s Inspector is
+  now read-only (`Editor/CityGeneratorInfoEditor.cs`) since it's a build-time snapshot, not a live
+  control — hand-editing its fields never had any effect on the generated city.
 
 ## [2.9.0] - 2026-09-02
 ### Added
