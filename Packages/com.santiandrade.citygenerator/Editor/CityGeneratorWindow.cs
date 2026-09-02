@@ -56,6 +56,7 @@ namespace CityGenerator.Editor
         private CityGeneratorCard playerCard;
         private CityGeneratorCard playerSettingsCard;
         private CityGeneratorCard cameraCard;
+        private CityGeneratorCard freeCameraCard;
         private CityGeneratorCard pedestrianBehaviourCard;
         private CityGeneratorCard crowdCard;
         private CityGeneratorCard customPlacesCard;
@@ -224,6 +225,7 @@ namespace CityGenerator.Editor
             BuildPlayerCard(playerContainer);
             BuildPlayerSettingsCard(playerContainer);
             BuildCameraCard(playerContainer);
+            BuildFreeCameraCard(playerContainer);
 
             BuildTrafficCard(trafficContainer);
             BuildVehiclesCard(trafficContainer);
@@ -533,6 +535,17 @@ namespace CityGenerator.Editor
             content.Add(CreateField("camera.collisionMask"));
             content.Add(CreateField("camera.collisionRadius"));
             content.Add(CreateField("camera.lockCursor"));
+        }
+
+        private void BuildFreeCameraCard(VisualElement parent)
+        {
+            freeCameraCard = AddCard(parent, "freeCamera", "Free Camera", "d_SceneViewCamera", defaultExpanded: false, TabPlayer);
+            VisualElement content = freeCameraCard.ContentContainer;
+
+            content.Add(CreateField("freeCamera.enabled", "Enabled"));
+            content.Add(CreateField("freeCamera.moveSpeed"));
+            content.Add(CreateField("freeCamera.sprintMultiplier"));
+            content.Add(CreateField("freeCamera.rotationSmoothTime"));
         }
 
         private void BuildPedestrianBehaviourCard(VisualElement parent)

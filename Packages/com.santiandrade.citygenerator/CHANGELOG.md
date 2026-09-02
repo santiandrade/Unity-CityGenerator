@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New "Free Camera" card (Player tab): a "Free View" mode toggled with the V key, replacing the
+  Player and its third-person camera with a free-flying first-person camera (WASD + Q/E vertical,
+  Shift to sprint, mouse-look with smoothed rotation, basic collision against scene colliders).
+  Toggling again restores the Player exactly where it was and the third-person camera resumes
+  orbiting it. Backed by a new "Free View" Input Actions map and a `Toggle` action added to the
+  existing `Player` map, both editable like the rest of the project's input actions. Ignored (no
+  Free Camera added, no error) when Player is disabled.
 
 ## [2.8.0] - 2026-09-02
 ### Added

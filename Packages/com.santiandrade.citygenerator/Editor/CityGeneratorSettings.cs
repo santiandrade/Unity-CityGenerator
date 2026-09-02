@@ -18,6 +18,7 @@ namespace CityGenerator.Editor
         public List<PedestrianEntry> pedestrians = new();
         public PlayerSettings player = new();
         public CameraSettings camera = new();
+        public FreeCameraSettings freeCamera = new();
         public PedestrianBehaviourSettings pedestrianBehaviour = new();
         public CrowdSettings crowd = new();
         public List<CustomPlaceEntry> customPlaces = new();
@@ -176,6 +177,8 @@ namespace CityGenerator.Editor
         public string sprintActionName = "Sprint";
         [Tooltip("Name of the Look (Vector2) action within the action map, consumed by the generated camera.")]
         public string lookActionName = "Look"; // consumed by ThirdPersonCamera, kept here alongside the rest of the Player action map
+        [Tooltip("Name of the Toggle (button) action within the action map, read by FreeCameraController to enter Free View. Also present in the Free View action map itself.")]
+        public string toggleActionName = "Toggle";
     }
 
     // Applied to the generated Main Camera's ThirdPersonCamera by CityGeneratorSceneBuilder.CreateMainCamera.
@@ -212,6 +215,41 @@ namespace CityGenerator.Editor
         [Header("Cursor")]
         [Tooltip("Lock and hide the mouse cursor while playing, so mouse movement always orbits the camera.")]
         public bool lockCursor = true;
+    }
+
+    // Applied to the generated Main Camera's FreeCameraController by CityGeneratorSceneBuilder.CreateMainCamera,
+    // alongside CameraSettings/ThirdPersonCamera. collisionRadius/collisionMask are not serialized
+    // here: FreeCameraController fixes them in code to the same values ThirdPersonCamera already
+    // uses (0.3 m, all layers), to keep this card to its minimal field set.
+    [Serializable]
+    internal class FreeCameraSettings
+    {
+        [Tooltip("Add the Free View free-flying camera to the generated Player. Ignored (no Free Camera added, no error) when Player is disabled.")]
+        public bool enabled = true;
+
+        [Header("Movement")]
+        [Tooltip("Base flying speed on all three axes (WASD horizontal, Q/E vertical), in metres/second.")]
+        public float moveSpeed = 8f;
+        [Tooltip("Multiplier applied to moveSpeed while holding the Free View Sprint action.")]
+        public float sprintMultiplier = 2.5f;
+
+        [Header("Rotation")]
+        [Tooltip("Smoothing time for yaw/pitch reaching the Look-driven target angle. Unlike ThirdPersonCamera, Free Camera smooths rotation itself, not just position tracking.")]
+        public float rotationSmoothTime = 0.08f;
+
+        [Header("Input Actions")]
+        [Tooltip("Name of the Free View action map in Input Actions.")]
+        public string actionMapName = "Free View";
+        [Tooltip("Name of the Move (Vector2, WASD) action within the Free View action map.")]
+        public string moveActionName = "Move";
+        [Tooltip("Name of the Vertical (1D, Q/E) action within the Free View action map.")]
+        public string verticalActionName = "Vertical";
+        [Tooltip("Name of the Sprint (button) action within the Free View action map.")]
+        public string sprintActionName = "Sprint";
+        [Tooltip("Name of the Look (Vector2) action within the Free View action map.")]
+        public string lookActionName = "Look";
+        [Tooltip("Name of the Toggle (button) action, present both in this map and in the Player action map, used to enter/exit Free View.")]
+        public string toggleActionName = "Toggle";
     }
 
     // Applied to every generated PedestrianAgent instance by CityGeneratorPedestrianBuilder.BuildPedestrians —
