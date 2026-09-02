@@ -231,7 +231,7 @@ namespace CityGenerator.Editor
         [Tooltip("Base flying speed on all three axes (WASD horizontal, Q/E vertical), in metres/second.")]
         public float moveSpeed = 8f;
         [Tooltip("Multiplier applied to moveSpeed while holding the Free View Sprint action.")]
-        public float sprintMultiplier = 2.5f;
+        public float sprintMultiplier = 4.5f;
 
         [Header("Rotation")]
         [Tooltip("Smoothing time for yaw/pitch reaching the Look-driven target angle. Unlike ThirdPersonCamera, Free Camera smooths rotation itself, not just position tracking.")]
