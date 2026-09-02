@@ -56,7 +56,7 @@ namespace CityGenerator.Editor
                     AssignPedestrianLayer(player);
                 }
 
-                CreateMainCamera(scene, player, settings.general.inputActions, settings.player.actionMapName, settings.player.lookActionName, settings.camera);
+                CreateMainCamera(scene, player, settings.general.inputActions, settings.player, settings.camera, settings.freeCamera);
                 CreateMinimapHud(scene, settings.minimap);
 
                 EditorSceneManager.SaveScene(scene, scenePath);
@@ -277,7 +277,7 @@ namespace CityGenerator.Editor
                 player.layer = pedestrianLayer;
         }
 
-        private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions, string actionMapName, string lookActionName, CameraSettings settings)
+        private static void CreateMainCamera(Scene scene, GameObject player, UnityEngine.InputSystem.InputActionAsset inputActions, PlayerSettings playerSettings, CameraSettings settings, FreeCameraSettings freeCameraSettings)
         {
             var cameraGO = new GameObject("Main Camera") { tag = "MainCamera" };
             SceneManager.MoveGameObjectToScene(cameraGO, scene);
@@ -290,8 +290,8 @@ namespace CityGenerator.Editor
 
             var cameraSerialized = new SerializedObject(thirdPersonCamera);
             cameraSerialized.FindProperty("inputActions").objectReferenceValue = inputActions;
-            cameraSerialized.FindProperty("actionMapName").stringValue = actionMapName;
-            cameraSerialized.FindProperty("lookActionName").stringValue = lookActionName;
+            cameraSerialized.FindProperty("actionMapName").stringValue = playerSettings.actionMapName;
+            cameraSerialized.FindProperty("lookActionName").stringValue = playerSettings.lookActionName;
             if (player != null)
                 cameraSerialized.FindProperty("target").objectReferenceValue = player.transform;
             cameraSerialized.FindProperty("verticalOffset").floatValue = settings.verticalOffset;
@@ -306,6 +306,29 @@ namespace CityGenerator.Editor
             cameraSerialized.FindProperty("collisionRadius").floatValue = settings.collisionRadius;
             cameraSerialized.FindProperty("lockCursor").boolValue = settings.lockCursor;
             cameraSerialized.ApplyModifiedPropertiesWithoutUndo();
+
+            // Ignored in silence (no FreeCameraController, no validation error) when Player itself
+            // is disabled or absent — see FreeCameraSettings.enabled's remarks.
+            if (player != null && freeCameraSettings.enabled)
+            {
+                var freeCamera = cameraGO.AddComponent<FreeCameraController>();
+                var freeCameraSerialized = new SerializedObject(freeCamera);
+                freeCameraSerialized.FindProperty("inputActions").objectReferenceValue = inputActions;
+                freeCameraSerialized.FindProperty("playerActionMapName").stringValue = playerSettings.actionMapName;
+                freeCameraSerialized.FindProperty("playerToggleActionName").stringValue = playerSettings.toggleActionName;
+                freeCameraSerialized.FindProperty("actionMapName").stringValue = freeCameraSettings.actionMapName;
+                freeCameraSerialized.FindProperty("moveActionName").stringValue = freeCameraSettings.moveActionName;
+                freeCameraSerialized.FindProperty("verticalActionName").stringValue = freeCameraSettings.verticalActionName;
+                freeCameraSerialized.FindProperty("sprintActionName").stringValue = freeCameraSettings.sprintActionName;
+                freeCameraSerialized.FindProperty("lookActionName").stringValue = freeCameraSettings.lookActionName;
+                freeCameraSerialized.FindProperty("toggleActionName").stringValue = freeCameraSettings.toggleActionName;
+                freeCameraSerialized.FindProperty("moveSpeed").floatValue = freeCameraSettings.moveSpeed;
+                freeCameraSerialized.FindProperty("sprintMultiplier").floatValue = freeCameraSettings.sprintMultiplier;
+                freeCameraSerialized.FindProperty("rotationSmoothTime").floatValue = freeCameraSettings.rotationSmoothTime;
+                freeCameraSerialized.FindProperty("player").objectReferenceValue = player;
+                freeCameraSerialized.FindProperty("thirdPersonCamera").objectReferenceValue = thirdPersonCamera;
+                freeCameraSerialized.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             if (player == null)
                 return;

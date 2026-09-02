@@ -306,7 +306,7 @@ namespace CityGenerator.Editor
             PlayerSettings player = settings.player;
             source = ReplaceField(source, "walkSpeed", FormatFloat(player.walkSpeed) + "f");
             source = ReplaceField(source, "runSpeed", FormatFloat(player.runSpeed) + "f");
-            source = ReplaceField(source, "rotationSmoothTime", FormatFloat(player.rotationSmoothTime) + "f");
+            source = ReplaceFieldInScope(source, "class PlayerSettings", "rotationSmoothTime", FormatFloat(player.rotationSmoothTime) + "f");
             source = ReplaceField(source, "gravity", FormatFloat(player.gravity) + "f");
             source = ReplaceField(source, "jumpHeight", FormatFloat(player.jumpHeight) + "f");
             source = ReplaceField(source, "controllerHeight", FormatFloat(player.controllerHeight) + "f");
@@ -316,11 +316,12 @@ namespace CityGenerator.Editor
             source = ReplaceField(source, "controllerStepOffset", FormatFloat(player.controllerStepOffset) + "f");
             source = ReplaceField(source, "controllerSkinWidth", FormatFloat(player.controllerSkinWidth) + "f");
             source = ReplaceField(source, "controllerMinMoveDistance", FormatFloat(player.controllerMinMoveDistance) + "f");
-            source = ReplaceStringField(source, "actionMapName", player.actionMapName);
-            source = ReplaceStringField(source, "moveActionName", player.moveActionName);
+            source = ReplaceStringFieldInScope(source, "class PlayerSettings", "actionMapName", player.actionMapName);
+            source = ReplaceStringFieldInScope(source, "class PlayerSettings", "moveActionName", player.moveActionName);
             source = ReplaceStringField(source, "jumpActionName", player.jumpActionName);
-            source = ReplaceStringField(source, "sprintActionName", player.sprintActionName);
-            source = ReplaceStringField(source, "lookActionName", player.lookActionName);
+            source = ReplaceStringFieldInScope(source, "class PlayerSettings", "sprintActionName", player.sprintActionName);
+            source = ReplaceStringFieldInScope(source, "class PlayerSettings", "lookActionName", player.lookActionName);
+            source = ReplaceStringFieldInScope(source, "class PlayerSettings", "toggleActionName", player.toggleActionName);
 
             CameraSettings camera = settings.camera;
             source = ReplaceField(source, "fieldOfView", FormatFloat(camera.fieldOfView) + "f");
@@ -335,6 +336,18 @@ namespace CityGenerator.Editor
             source = ReplaceLayerMaskField(source, "collisionMask", camera.collisionMask);
             source = ReplaceField(source, "collisionRadius", FormatFloat(camera.collisionRadius) + "f");
             source = ReplaceField(source, "lockCursor", camera.lockCursor ? "true" : "false");
+
+            FreeCameraSettings freeCamera = settings.freeCamera;
+            source = ReplaceField(source, "enabled", freeCamera.enabled ? "true" : "false");
+            source = ReplaceField(source, "moveSpeed", FormatFloat(freeCamera.moveSpeed) + "f");
+            source = ReplaceField(source, "sprintMultiplier", FormatFloat(freeCamera.sprintMultiplier) + "f");
+            source = ReplaceFieldInScope(source, "class FreeCameraSettings", "rotationSmoothTime", FormatFloat(freeCamera.rotationSmoothTime) + "f");
+            source = ReplaceStringFieldInScope(source, "class FreeCameraSettings", "actionMapName", freeCamera.actionMapName);
+            source = ReplaceStringFieldInScope(source, "class FreeCameraSettings", "moveActionName", freeCamera.moveActionName);
+            source = ReplaceStringField(source, "verticalActionName", freeCamera.verticalActionName);
+            source = ReplaceStringFieldInScope(source, "class FreeCameraSettings", "sprintActionName", freeCamera.sprintActionName);
+            source = ReplaceStringFieldInScope(source, "class FreeCameraSettings", "lookActionName", freeCamera.lookActionName);
+            source = ReplaceStringFieldInScope(source, "class FreeCameraSettings", "toggleActionName", freeCamera.toggleActionName);
 
             PedestrianBehaviourSettings behaviour = settings.pedestrianBehaviour;
             source = ReplaceField(source, "walkReferenceSpeed", FormatFloat(behaviour.walkReferenceSpeed) + "f");
@@ -410,6 +423,58 @@ namespace CityGenerator.Editor
             string pattern = $@"(public\s+Vector3\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
             string literal = $"new({FormatFloat(newValue.x)}f, {FormatFloat(newValue.y)}f, {FormatFloat(newValue.z)}f)";
             return Regex.Replace(source, pattern, m => m.Groups[1].Value + literal + ";");
+        }
+
+        // Scoped variants of ReplaceField/ReplaceStringField, for a field name shared by more than
+        // one class in this file (e.g. PlayerSettings and FreeCameraSettings both declare
+        // actionMapName/moveActionName/sprintActionName/lookActionName/toggleActionName/
+        // rotationSmoothTime) — an unscoped, file-wide Regex.Replace would silently overwrite the
+        // other class's field with this one's value. Scoped to the class body via brace matching
+        // (classSignature must be "class ClassName", found by IndexOf, then balanced from its
+        // first '{').
+        private static string ReplaceFieldInScope(string source, string classSignature, string fieldName, string newLiteral)
+        {
+            return ReplaceInClassScope(source, classSignature, body =>
+            {
+                string pattern = $@"(public\s+(?:int|bool|float)\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
+                return Regex.Replace(body, pattern, m => m.Groups[1].Value + newLiteral + ";");
+            });
+        }
+
+        private static string ReplaceStringFieldInScope(string source, string classSignature, string fieldName, string newValue)
+        {
+            return ReplaceInClassScope(source, classSignature, body =>
+            {
+                string pattern = $@"(public\s+string\s+{Regex.Escape(fieldName)}\s*=\s*)[^;]+;";
+                return Regex.Replace(body, pattern, m => m.Groups[1].Value + "\"" + Escape(newValue) + "\";");
+            });
+        }
+
+        private static string ReplaceInClassScope(string source, string classSignature, Func<string, string> transformBody)
+        {
+            int classStart = source.IndexOf(classSignature, StringComparison.Ordinal);
+            if (classStart < 0)
+                return source;
+            int braceStart = source.IndexOf('{', classStart);
+            if (braceStart < 0)
+                return source;
+
+            int depth = 0;
+            int i = braceStart;
+            for (; i < source.Length; i++)
+            {
+                if (source[i] == '{') depth++;
+                else if (source[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0) { i++; break; }
+                }
+            }
+            int classEnd = i;
+
+            string body = source.Substring(classStart, classEnd - classStart);
+            string newBody = transformBody(body);
+            return source.Substring(0, classStart) + newBody + source.Substring(classEnd);
         }
 
         // Replaces an object-initializer assignment ("fieldName = ...,") but only within the one
