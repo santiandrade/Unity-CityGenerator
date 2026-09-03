@@ -1026,20 +1026,39 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
-        /// A 1xN or Nx1 grid has no interior intersections, so it has no zebra crossings/traffic
-        /// lights either: every block's pedestrian ring ends up isolated from every other one.
+        /// A city with no signalled intersection has no zebra crossings either (both follow the
+        /// same >= 3 real arms rule), so every block's pedestrian ring ends up isolated from every
+        /// other one. Asked to CityGeneratorTrafficBuilder's shared predicate rather than
+        /// re-derived: this warning used to test "gridWidth > 1 &amp;&amp; gridHeight > 1" and so
+        /// claimed a 1xN/Nx1 grid had no crossings, which stopped being true once SPEC 11 started
+        /// signalling border T-intersections (a 1x2 grid gets 6 lights, 6 crossings and a single
+        /// connected pedestrian component). It also ignored Custom Grid entirely.
         /// </summary>
         private string GetIsolatedBlocksWarning()
         {
             if (!FindProperty("general.includePedestrians").boolValue)
                 return null;
 
+            if (FindProperty("general.useCustomGrid").boolValue)
+            {
+                SerializedProperty customCellsProperty = FindProperty("general.customBlockCells");
+                var cells = new List<Vector2Int>(customCellsProperty.arraySize);
+                for (int i = 0; i < customCellsProperty.arraySize; i++)
+                    cells.Add(customCellsProperty.GetArrayElementAtIndex(i).vector2IntValue);
+
+                if (CityGeneratorTrafficBuilder.HasSignalledIntersection(cells))
+                    return null;
+
+                return "This custom shape has no signalled intersection, so it has no crossings: " +
+                       "every block's pedestrians stay confined to their own sidewalk ring.";
+            }
+
             int gridWidth = FindProperty("general.gridWidth").intValue;
             int gridHeight = FindProperty("general.gridHeight").intValue;
-            if (gridWidth > 1 && gridHeight > 1)
+            if (CityGeneratorTrafficBuilder.HasSignalledIntersection(gridWidth, gridHeight))
                 return null;
 
-            return $"A {gridWidth}x{gridHeight} grid has no interior intersections, so it has no crossings: " +
+            return $"A {gridWidth}x{gridHeight} grid has no signalled intersection, so it has no crossings: " +
                    "every block's pedestrians stay confined to their own sidewalk ring.";
         }
 

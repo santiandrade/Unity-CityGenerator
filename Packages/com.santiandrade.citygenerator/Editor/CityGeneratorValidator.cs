@@ -89,14 +89,19 @@ namespace CityGenerator.Editor
             if (settings.general.inputActions != null)
                 ValidateInputActions(settings, issues);
 
-            bool hasInteriorIntersection = settings.general.useCustomGrid
-                ? HasFourWayIntersection(settings.general.customBlockCells)
-                : settings.general.gridWidth > 1 && settings.general.gridHeight > 1;
-            if (hasInteriorIntersection)
+            // Asked straight to the builder's own predicate rather than re-derived here: the two
+            // once disagreed and let a 1x2 (or Custom, T-intersection) city pass validation with
+            // no prefab, only to instantiate a null one during generation. Note the lights are
+            // built even with Include Traffic off (see CityGeneratorContentAssembler), so this
+            // requirement is deliberately independent of it.
+            bool hasSignalledIntersection = settings.general.useCustomGrid
+                ? CityGeneratorTrafficBuilder.HasSignalledIntersection(settings.general.customBlockCells)
+                : CityGeneratorTrafficBuilder.HasSignalledIntersection(settings.general.gridWidth, settings.general.gridHeight);
+            if (hasSignalledIntersection)
             {
                 if (settings.props.trafficLightPrefab == null)
                 {
-                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab is required when the grid has at least one interior intersection (Grid Width and Grid Height both greater than 1)."));
+                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab is required when the grid has at least one signalled intersection (a 4-way, or a T-intersection along the grid's border)."));
                 }
                 else if (settings.props.trafficLightPrefab.GetComponent<Runtime.TrafficLight>() == null)
                 {
@@ -210,17 +215,6 @@ namespace CityGenerator.Editor
             ValidateAudio(settings, issues);
 
             return !issues.Exists(issue => !issue.isWarning);
-        }
-
-        private static bool HasFourWayIntersection(List<Vector2Int> customBlockCells)
-        {
-            var cellSet = new HashSet<Vector2Int>(customBlockCells);
-            foreach (Vector2Int cell in cellSet)
-            {
-                if (cellSet.Contains(cell + new Vector2Int(1, 0)) && cellSet.Contains(cell + new Vector2Int(0, 1)) && cellSet.Contains(cell + new Vector2Int(1, 1)))
-                    return true;
-            }
-            return false;
         }
 
         /// <summary>Blocking: an enabled Ambience/Plazas card with no entries, or an entry missing its clip, would silently play nothing — same "required field" treatment as every other prefab list in the tool.</summary>
