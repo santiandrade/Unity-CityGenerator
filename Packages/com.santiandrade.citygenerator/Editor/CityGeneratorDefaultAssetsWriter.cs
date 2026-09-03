@@ -109,6 +109,9 @@ namespace CityGenerator.Editor
             AppendCustomPlacesList(sb, settings.customPlaces, warnings);
             sb.AppendLine();
 
+            AppendCustomPedestriansList(sb, settings.customPedestrians, warnings);
+            sb.AppendLine();
+
             AppendAssignment(sb, "settings.props.trafficLightPrefab", BuildGameObjectExpr(settings.props.trafficLightPrefab, warnings, "Props > Traffic Light Prefab"));
             AppendAssignment(sb, "settings.props.lampPrefab", BuildGameObjectExpr(settings.props.lampPrefab, warnings, "Props > Lamp Prefab"));
             AppendAssignment(sb, "settings.props.binPrefab", BuildGameObjectExpr(settings.props.binPrefab, warnings, "Props > Bin Prefab"));
@@ -207,6 +210,43 @@ namespace CityGenerator.Editor
                 sb.AppendLine("                },");
             }
             sb.AppendLine("            };");
+        }
+
+        private static void AppendCustomPedestriansList(StringBuilder sb, List<CustomPedestrianEntry> customPedestrians, List<string> warnings)
+        {
+            sb.AppendLine("            settings.customPedestrians = new List<CustomPedestrianEntry>");
+            sb.AppendLine("            {");
+            foreach (CustomPedestrianEntry entry in customPedestrians)
+            {
+                string expression = BuildGameObjectExpr(entry.prefab, warnings, $"Custom Pedestrians > {entry.title}");
+                if (expression == null)
+                    continue;
+                sb.AppendLine("                new()");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    title = \"{Escape(entry.title)}\",");
+                sb.AppendLine($"                    prefab = {expression},");
+                sb.AppendLine($"                    count = {entry.count.ToString(CultureInfo.InvariantCulture)},");
+                // graphFingerprint travels with the indices: dropping it would make every restored
+                // entry look stale against a graph that hasn't actually changed.
+                sb.AppendLine($"                    selectedNodeIndices = new List<int> {{ {FormatIntList(entry.selectedNodeIndices)} }},");
+                sb.AppendLine($"                    graphFingerprint = {entry.graphFingerprint.ToString(CultureInfo.InvariantCulture)},");
+                sb.AppendLine("                },");
+            }
+            sb.AppendLine("            };");
+        }
+
+        private static string FormatIntList(List<int> values)
+        {
+            if (values == null || values.Count == 0)
+                return string.Empty;
+            var sb = new StringBuilder();
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (i > 0)
+                    sb.Append(", ");
+                sb.Append(values[i].ToString(CultureInfo.InvariantCulture));
+            }
+            return sb.ToString();
         }
 
         private static void AppendAmbienceClips(StringBuilder sb, List<AmbienceClipEntry> clips, List<string> warnings)
