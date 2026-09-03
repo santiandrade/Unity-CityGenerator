@@ -239,7 +239,7 @@ Mobiliario urbano, más el prefab de semáforo que usa la red de tráfico.
 
 | Parámetro | Qué hace |
 |---|---|
-| **Traffic Light Prefab (if Include Traffic)** | Se coloca en cada cruce semaforizado. Debe llevar un componente `TrafficLight`. Obligatorio siempre que la ciudad tenga al menos un cruce interior, **incluso con los vehículos desactivados**: la red y sus semáforos se generan siempre para que los pasos de peatones estén conectados a un semáforo real. |
+| **Traffic Light Prefab** | Se coloca en cada cruce semaforizado: aquel con al menos tres brazos de calle reales, es decir un cruce en X completo o una intersección en T en el borde de la ciudad. Debe llevar un componente `TrafficLight`. Obligatorio siempre que la ciudad tenga al menos uno de esos cruces, lo que incluye una retícula 1 × N o N × 1 y la mayoría de formas personalizadas; solo una ciudad de una única manzana no tiene ninguno. Obligatorio **incluso con los vehículos desactivados**: la red y sus semáforos se generan siempre para que los pasos de peatones estén conectados a un semáforo real. |
 | **Lamp Prefab** | Farola opcional, colocada a lo largo de las aceras. |
 | **Lamp Density** | Fracción de los puntos candidatos de farola ocupados en cada lado de manzana (hay 3 candidatos por lado). |
 | **Bin Prefab** | Papelera opcional, colocada en las esquinas. |
@@ -448,9 +448,11 @@ Aquí pueden aparecer dos avisos no bloqueantes:
 - **Saturación.** Pasada una fracción amplia de los puntos transitables del grafo, la multitud
   empieza a leerse como sobrepoblada. Los peatones nunca se atascan como los coches, así que el
   umbral es mucho más permisivo que el de vehículos.
-- **Manzanas aisladas.** Una retícula 1 × N o N × 1 no tiene cruces interiores, y por tanto no
-  tiene pasos de cebra ni semáforos: los peatones de cada manzana se quedan confinados en su
-  propio anillo de acera, sin poder pasar a la manzana vecina.
+- **Manzanas aisladas.** Una ciudad sin ningún cruce semaforizado —una sola manzana, o una
+  forma personalizada cuyas celdas no llegan a formar uno— no tiene pasos de cebra ni
+  semáforos: sus peatones se quedan confinados en su propio anillo de acera, sin poder pasar
+  a la manzana vecina. Una retícula 1 × N o N × 1 *no* está en ese caso: sus intersecciones
+  en T del borde sí están semaforizadas y sí tienen pasos de cebra.
 
 ### 7.2 Pedestrians
 
@@ -729,7 +731,7 @@ generada arregla exactamente una ciudad y se pierde en la siguiente generación.
 | **Todo se ve en magenta** | Los materiales de demostración son URP/Lit. Con Built-in o HDRP tienes que aportar tus propios materiales: la herramienta en sí no depende de ningún pipeline. |
 | **Un edificio se mete dentro del contiguo** | Los edificios no se comprueban contra solapamientos. Dimensiona tus prefabs al hueco de esquina de 22 m. |
 | **El tráfico está parado en todas partes** | Vehicle Count es demasiado alto para la retícula; el aviso bajo el campo indica el máximo recomendado. |
-| **Los peatones no pueden cruzar la calle** | La retícula es 1 × N o N × 1, que no tiene cruces y por tanto no tiene pasos de cebra. |
+| **Los peatones no pueden cruzar la calle** | La ciudad no tiene ningún cruce semaforizado (una sola manzana, o una forma personalizada sin cruces en X ni en T), y por tanto no tiene pasos de cebra. |
 | **Los peatones atraviesan un objeto** | No tiene `Collider` en ninguna parte de su jerarquía. Dale uno y reconstruye la red de peatones. |
 | **Los vehículos no se detectan entre sí ni a los peatones** | Todas las capas de tu proyecto están ocupadas y no se han podido crear las capas `Vehicle`/`Pedestrian`. La consola lo indica. Libera una capa. |
 | **Los peatones patinan al andar** | Walk/Run Reference Speed ya no coinciden con Player Settings > Walk/Run Speed; la card Behaviour lo avisa. |

@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- **Traffic light validation now matches what the builder actually places.** The validator asked for
+  a Traffic Light prefab only on a grid larger than 1x1 (or a custom shape containing a full 2x2 of
+  cells), while `CityGeneratorTrafficBuilder` has signalled every intersection with at least 3 real
+  arms since SPEC 11 — so a 1xN/Nx1 grid, or a custom shape with a T-intersection, passed validation
+  with the prefab left empty and then failed generation with a `NullReferenceException` from
+  instantiating a null prefab. Both sides now share one predicate
+  (`CityGeneratorTrafficBuilder.HasSignalledIntersection`), pinned to the builder by
+  `SignalledIntersectionAgreementTests`. The requirement is independent of `Include Traffic`, since
+  the lights are generated even with traffic off.
+- The Pedestrians tab's "isolated blocks" warning used that same stale rule and so wrongly claimed a
+  1xN/Nx1 city had no crossings (a 1x2 city actually gets 6 lights, 6 crossings and a single
+  connected pedestrian component); it also ignored Custom Grid entirely. It now asks the shared
+  predicate and covers both grid modes.
 
 ## [2.10.0] - 2026-09-03
 ### Added

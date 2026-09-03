@@ -235,7 +235,7 @@ Street furniture, plus the traffic light prefab used by the traffic network.
 
 | Parameter | What it does |
 |---|---|
-| **Traffic Light Prefab (if Include Traffic)** | Placed at every signalled intersection. Must carry a `TrafficLight` component. Required whenever the city has at least one interior intersection — including when vehicles are disabled, because the network and its lights are always generated so pedestrian crossings stay wired to a real light. |
+| **Traffic Light Prefab** | Placed at every signalled intersection — one with at least three real street arms, so a full 4-way crossroads or a T-intersection along the city's own border. Must carry a `TrafficLight` component. Required whenever the city has at least one of those, which includes a 1 × N or N × 1 grid and most custom shapes; only a single-block city has none. Required **even when Include Traffic is off**, because the network and its lights are always generated so pedestrian crossings stay wired to a real light. |
 | **Lamp Prefab** | Optional street lamp, placed along the sidewalks. |
 | **Lamp Density** | Fraction of the candidate lamp points filled along each block side (there are 3 candidate points per side). |
 | **Bin Prefab** | Optional bin, placed at street corners. |
@@ -441,9 +441,11 @@ Two non-blocking warnings can appear here:
 - **Crowding.** Past a large fraction of the graph's walkable points, the crowd starts reading
   as overcrowded. Pedestrians never gridlock the way cars do, so the threshold is much more
   permissive than the vehicle one.
-- **Isolated blocks.** A 1 × N or N × 1 grid has no interior intersections, therefore no zebra
-  crossings and no traffic lights: every block's pedestrians stay confined to their own
-  sidewalk ring, unable to reach a neighbouring block.
+- **Isolated blocks.** A city with no signalled intersection at all — a single block, or a
+  custom shape whose cells never form one — gets no zebra crossings and no traffic lights:
+  its pedestrians stay confined to their own sidewalk ring, unable to reach a neighbouring
+  block. A 1 × N or N × 1 grid is *not* in this situation: its border T-intersections are
+  signalled and do get crossings.
 
 ### 7.2 Pedestrians
 
@@ -716,7 +718,7 @@ exactly one city and is lost on the next generation.
 | **Everything renders magenta** | The demo materials are URP/Lit. Under Built-in or HDRP you need to supply your own materials — the tool itself has no pipeline dependency. |
 | **A building clips into its neighbour** | Buildings are not overlap-checked. Size your building prefabs to the 22 m corner slot. |
 | **Traffic is stopped everywhere** | Vehicle Count is too high for the grid; the warning under the field gives a recommended maximum. |
-| **Pedestrians can't cross the street** | The grid is 1 × N or N × 1, which has no intersections, so there are no crossings at all. |
+| **Pedestrians can't cross the street** | The city has no signalled intersection at all (a single block, or a custom shape with no 4-way and no T), so there are no crossings. |
 | **Pedestrians walk through an object** | It has no `Collider` anywhere in its hierarchy. Give it one and rebuild the pedestrian network. |
 | **Vehicles don't detect each other or the pedestrians** | Every layer slot in your project is taken, so the `Vehicle`/`Pedestrian` layers couldn't be created. The Console reports it. Free a layer slot. |
 | **Pedestrians foot-slide** | Walk/Run Reference Speed no longer match Player Settings > Walk/Run Speed; the Behaviour card warns about it. |

@@ -65,6 +65,84 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
+        /// Minimum number of real arms that makes an intersection a signalled one: a full 4-way,
+        /// or a T-intersection along the shape's own border, is a real decision point where one
+        /// flow must yield to another. A perimeter corner (exactly 2 perpendicular arms, a street
+        /// simply bending 90 degrees with only one possible way through) never needs a light.
+        /// </summary>
+        internal const int SignalledIntersectionMinArms = 3;
+
+        /// <summary>
+        /// Fills <paramref name="armReal"/> (length 4, indexed like <see cref="Dirs"/>) for the
+        /// intersection at grid coordinates (<paramref name="i"/>, <paramref name="j"/>) of a
+        /// rectangular grid, and returns how many of its arms are real.
+        /// </summary>
+        internal static int CountRealArms(int gridWidth, int gridHeight, int i, int j, bool[] armReal)
+        {
+            armReal[0] = i < gridWidth;
+            armReal[1] = i > 0;
+            armReal[2] = j < gridHeight;
+            armReal[3] = j > 0;
+            return (armReal[0] ? 1 : 0) + (armReal[1] ? 1 : 0) + (armReal[2] ? 1 : 0) + (armReal[3] ? 1 : 0);
+        }
+
+        /// <summary>Custom Grid counterpart of <see cref="CountRealArms(int, int, int, int, bool[])"/>.</summary>
+        internal static int CountRealArms(HashSet<Vector2Int> cellSet, int i, int j, bool[] armReal)
+        {
+            int realArmCount = 0;
+            for (int k = 0; k < 4; k++)
+            {
+                armReal[k] = IsStreetSegmentReal(cellSet, i, j, k);
+                if (armReal[k])
+                    realArmCount++;
+            }
+            return realArmCount;
+        }
+
+        /// <summary>
+        /// True when the rectangular grid contains at least one intersection that
+        /// <see cref="BuildTrafficLights(GameObject, Transform, int, int, System.Random)"/> would
+        /// signal, i.e. one with at least <see cref="SignalledIntersectionMinArms"/> real arms.
+        /// This is the single predicate CityGeneratorValidator shares with the builder: the two
+        /// once disagreed (the validator asked for a Traffic Light prefab only on a grid larger
+        /// than 1x1, while the builder already signalled the T-intersections of a 1xN/Nx1 grid),
+        /// so a 1x2 city with no prefab passed validation and then instantiated a null prefab.
+        /// </summary>
+        internal static bool HasSignalledIntersection(int gridWidth, int gridHeight)
+        {
+            var armReal = new bool[4];
+            for (int i = 0; i <= gridWidth; i++)
+            {
+                for (int j = 0; j <= gridHeight; j++)
+                {
+                    if (CountRealArms(gridWidth, gridHeight, i, j, armReal) >= SignalledIntersectionMinArms)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Custom Grid counterpart of <see cref="HasSignalledIntersection(int, int)"/>.</summary>
+        internal static bool HasSignalledIntersection(IReadOnlyCollection<Vector2Int> blockCells)
+        {
+            if (blockCells == null || blockCells.Count == 0)
+                return false;
+
+            var cellSet = new HashSet<Vector2Int>(blockCells);
+            var armReal = new bool[4];
+            int canvas = CityGeneratorConstants.MaxGridSize;
+            for (int i = 0; i <= canvas; i++)
+            {
+                for (int j = 0; j <= canvas; j++)
+                {
+                    if (CountRealArms(cellSet, i, j, armReal) >= SignalledIntersectionMinArms)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Places lights at every intersection with at least 3 real arms (a full 4-way, always
         /// true for a strictly interior intersection, or a T-intersection along the grid's own
         /// border) -- a real decision point where one flow must yield to another. A perimeter
@@ -78,14 +156,13 @@ namespace CityGenerator.Editor
         {
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
+            var armReal = new bool[4];
 
             for (int i = 0; i <= gridWidth; i++)
             {
                 for (int j = 0; j <= gridHeight; j++)
                 {
-                    bool[] armReal = { i < gridWidth, i > 0, j < gridHeight, j > 0 };
-                    int realArmCount = (armReal[0] ? 1 : 0) + (armReal[1] ? 1 : 0) + (armReal[2] ? 1 : 0) + (armReal[3] ? 1 : 0);
-                    if (realArmCount < 3)
+                    if (CountRealArms(gridWidth, gridHeight, i, j, armReal) < SignalledIntersectionMinArms)
                         continue;
 
                     Vector3 centre = new(
@@ -139,21 +216,13 @@ namespace CityGenerator.Editor
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
             int canvas = CityGeneratorConstants.MaxGridSize;
+            var armReal = new bool[4];
 
             for (int i = 0; i <= canvas; i++)
             {
                 for (int j = 0; j <= canvas; j++)
                 {
-                    var armReal = new bool[4];
-                    int realArmCount = 0;
-                    for (int k = 0; k < 4; k++)
-                    {
-                        armReal[k] = IsStreetSegmentReal(cellSet, i, j, k);
-                        if (armReal[k])
-                            realArmCount++;
-                    }
-
-                    if (realArmCount < 3)
+                    if (CountRealArms(cellSet, i, j, armReal) < SignalledIntersectionMinArms)
                         continue;
 
                     Vector3 centre = new(
