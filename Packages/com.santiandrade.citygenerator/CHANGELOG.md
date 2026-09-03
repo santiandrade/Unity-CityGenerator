@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.10.1] - 2026-09-04
 ### Fixed
 
 - **Traffic light validation now matches what the builder actually places.** The validator asked for
@@ -21,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1xN/Nx1 city had no crossings (a 1x2 city actually gets 6 lights, 6 crossings and a single
   connected pedestrian component); it also ignored Custom Grid entirely. It now asks the shared
   predicate and covers both grid modes.
+- **"Set Current Selection As Default" silently dropped the Custom Pedestrians list.** The generated
+  defaults file rebuilt every other card but omitted `settings.customPedestrians` entirely, so saving
+  a selection as default and then resetting the window lost every custom pedestrian entry. The writer
+  now emits the list, including each entry's node selection and its graph fingerprint — without the
+  fingerprint a restored entry would look stale against a graph that hasn't actually changed.
+
+### Changed
+
+- The bundled default settings now ship with two Custom Pedestrians entries (a Dog and a Cat from
+  `DefaultAssets/Prefabs/Pets/`), each confined to its own hand-traced area, so a fresh install
+  demonstrates the Custom Pedestrians card out of the box.
 
 ## [2.10.0] - 2026-09-03
 ### Added
