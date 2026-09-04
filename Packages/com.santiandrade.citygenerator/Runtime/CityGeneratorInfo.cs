@@ -5,8 +5,10 @@ namespace CityGenerator.Runtime
     /// <summary>
     /// Added to the root of every generated city (alongside CityGeneratorRoot) by
     /// CityGeneratorSceneBuilder/CityGeneratorContentAssembler on every Build/Re-Build. Ships in
-    /// Runtime so it also exists in player builds, not just the Editor; CityGeneratorAPI reads it
+    /// Runtime so it also exists in player builds, not just the Editor; CityGeneratorCity reads it
     /// as its single source of truth instead of each module resolving its own references.
+    /// Registers itself with CityGeneratorAPI on OnEnable/OnDisable, the same lifecycle pattern
+    /// TrafficManager/PedestrianManager use for their agents -- never a global search.
     /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("")]
@@ -53,5 +55,8 @@ namespace CityGenerator.Runtime
         public DayNightCycle dayNightCycle;
         public MinimapHUD minimapHUD;
         public MinimapData minimapData;
+
+        private void OnEnable() => CityGeneratorAPI.Register(this);
+        private void OnDisable() => CityGeneratorAPI.Unregister(this);
     }
 }

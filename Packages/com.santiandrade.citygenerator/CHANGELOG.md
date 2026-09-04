@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed (BREAKING)
+
+- **`CityGeneratorAPI` reworked from a static, single-city cache into a per-city resolver.** v2.10's
+  `CityGeneratorAPI.IsCityAvailable`/`.City`/`.Player`/`.Traffic`/`.Pedestrians`/`.Minimap`/`.Audio`
+  static surface is removed. In its place: `CityGeneratorAPI.Default`/`.All`/`.InScene(scene)`/
+  `.For(info)` resolve an explicit, immutable `CityGeneratorCity` handle against a registry that
+  `CityGeneratorInfo` maintains via `OnEnable`/`OnDisable` (no cached/global lookup remains anywhere
+  in the class), and the handle exposes the exact same six modules and the exact same data/mutation
+  surface as v2.10, as properties for reads and methods for writes (`city.City.SetHour(12f)`). The
+  old static cache never invalidated once resolved, so with more than one city in memory (a
+  regenerated city, two scenes loaded additively) it could silently answer for the wrong one. See
+  `docs/api-reference.md` for the full migration table.
+### Added
+
+- `Assets/Tests/PlayMode/CityGeneratorAPITests.cs`, `MinimapHUDTests.cs` and
+  `FreeCameraControllerTests.cs` — behavioral coverage for the reworked API's registration/
+  resolution lifecycle and characterization coverage for the Minimap HUD and Free Camera, closing
+  the P1 gap `docs/technical-review-2026-09-03.md` flagged for all three.
 
 ## [2.10.1] - 2026-09-04
 ### Fixed
