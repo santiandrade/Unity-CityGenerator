@@ -44,6 +44,8 @@ ciudad generada (y algunos setters seguros) desde tus propios scripts, en Play M
   conjunto completo de prefabs de demostración incluido. No hace falta tocar el código
   del package.
 
+https://github.com/user-attachments/assets/a9d60403-b874-4ed3-93a3-91fdd9c3b4fa
+
 ## Instalación
 
 En tu proyecto de Unity, abre **Window > Package Manager**, pulsa el botón **+**, elige

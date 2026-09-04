@@ -42,6 +42,8 @@ handful of safe setters) from your own scripts, in Play Mode and in a build.
   `com.santiandrade.citygenerator`, installable directly from a git URL, with a complete
   set of demo prefabs included. No package code needs to be touched.
 
+https://github.com/user-attachments/assets/a9d60403-b874-4ed3-93a3-91fdd9c3b4fa
+
 ## Installation
 
 In your Unity project, open **Window > Package Manager**, click the **+** button, choose
