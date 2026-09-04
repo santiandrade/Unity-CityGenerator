@@ -241,6 +241,11 @@ pipeline de render — no requiere ni configura URP, y no se genera ningún
 materiales que ese pipeline entienda. Solo el contenido de demostración incluido es
 específico de URP.
 
+## Créditos
+
+El contenido de demostración incluido usa assets 3D de [Kenney](https://www.kenney.nl)
+(CC0 — dominio público, sin atribución requerida). Gracias Kenney, ¡son geniales!
+
 ## Licencia
 
 MIT — ver [LICENSE.md](LICENSE.md).

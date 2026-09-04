@@ -226,6 +226,11 @@ require or configure URP, and no `Global Volume` is generated — so it works wi
 pipeline as long as you supply materials that pipeline understands. Only the bundled
 demo content is URP-specific.
 
+## Credits
+
+The bundled demo content uses 3D assets from [Kenney](https://www.kenney.nl) (CC0 —
+public domain, no attribution required). Thanks Kenney, you're awesome!
+
 ## License
 
 MIT — see [LICENSE.md](LICENSE.md).
