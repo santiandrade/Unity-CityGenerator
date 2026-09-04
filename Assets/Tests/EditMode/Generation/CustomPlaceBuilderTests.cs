@@ -46,6 +46,7 @@ namespace CityGenerator.Tests.EditMode.Generation
             settings.general.gridHeight = gridHeight;
             settings.general.plazaCells.Clear();
             settings.customPlaces.Clear();
+            settings.customPedestrians.Clear(); // default Dog/Cat node indices target a different grid size than this fixture's
             settings.audio.plazaAudio.enabled = false; // no plazas in this fixture; avoid the unrelated "no clip entries" issue
             settings.general.useCustomSeed = true;
             settings.general.seed = seed;
