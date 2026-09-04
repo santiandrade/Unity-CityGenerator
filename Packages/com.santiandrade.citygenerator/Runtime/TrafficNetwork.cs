@@ -292,15 +292,15 @@ namespace CityGenerator.Runtime
                     {
                         nodes[NodeIndex(i, j, k, true)] = new Node
                         {
-                            Position = EntryPosition(i, j, k),
-                            Direction = Dirs[k],
+                            Position = transform.TransformPoint(EntryPosition(i, j, k)),
+                            Direction = transform.TransformDirection(Dirs[k]),
                             IsEntry = true,
                             Intersection = i * nz + j
                         };
                         nodes[NodeIndex(i, j, k, false)] = new Node
                         {
-                            Position = ExitPosition(i, j, k),
-                            Direction = Dirs[k],
+                            Position = transform.TransformPoint(ExitPosition(i, j, k)),
+                            Direction = transform.TransformDirection(Dirs[k]),
                             IsEntry = false,
                             Intersection = i * nz + j
                         };
@@ -394,6 +394,22 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
+        /// Traffic lights this network is allowed to match against: only the ones under its own
+        /// city (the CityGeneratorRoot ancestor, if any), so two cities in the same scene never
+        /// cross-match each other's signals. Falls back to a scene-wide search when this network
+        /// has no CityGeneratorRoot ancestor (e.g. a synthetic network in a test, or standalone
+        /// use outside the generation pipeline) -- the same behaviour as before this scoping was
+        /// introduced.
+        /// </summary>
+        private TrafficLight[] FindLightsInScope()
+        {
+            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>();
+            return root != null
+                ? root.GetComponentsInChildren<TrafficLight>(true)
+                : FindObjectsByType<TrafficLight>(FindObjectsInactive.Exclude);
+        }
+
+        /// <summary>
         /// Matches each crossing entry with the traffic light that regulates it: the one facing
         /// head-on the driver arriving with that direction of travel.
         /// </summary>
@@ -401,23 +417,24 @@ namespace CityGenerator.Runtime
         {
             int nx = axesX.Length;
             int nz = axesZ.Length;
-            TrafficLight[] lights = FindObjectsByType<TrafficLight>(FindObjectsInactive.Exclude);
+            TrafficLight[] lights = FindLightsInScope();
             hasSignals = new bool[nx * nz];
 
             for (int i = 0; i < nx; i++)
             {
                 for (int j = 0; j < nz; j++)
                 {
-                    Vector3 centre = IntersectionPosition(i, j);
+                    Vector3 centre = transform.TransformPoint(IntersectionPosition(i, j));
                     for (int k = 0; k < 4; k++)
                     {
+                        Vector3 dirWorld = transform.TransformDirection(Dirs[k]);
                         TrafficLight best = null;
                         float bestDistance = float.MaxValue;
 
                         foreach (TrafficLight light in lights)
                         {
                             Vector3 facing = light.transform.forward;
-                            if (Vector3.Dot(facing, Dirs[k]) > -0.9f)
+                            if (Vector3.Dot(facing, dirWorld) > -0.9f)
                             {
                                 continue;
                             }
@@ -600,7 +617,7 @@ namespace CityGenerator.Runtime
         {
             EnsureBuilt();
             int nz = axesZ.Length;
-            return IntersectionPosition(intersection / nz, intersection % nz);
+            return transform.TransformPoint(IntersectionPosition(intersection / nz, intersection % nz));
         }
 
         /// <summary>

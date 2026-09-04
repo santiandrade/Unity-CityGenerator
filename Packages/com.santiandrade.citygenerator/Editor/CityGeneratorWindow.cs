@@ -139,6 +139,19 @@ namespace CityGenerator.Editor
             Debug.Log("[City Generator] Pedestrian network rebuilt.");
         }
 
+        /// <summary>
+        /// SPEC 16: recaptures the minimap snapshot for the city/cities currently in the scene, at
+        /// their current position -- fixes a minimap left out of sync after moving a
+        /// CityGeneratorRoot by hand, without regenerating anything. See
+        /// <see cref="CityGeneratorMinimapBuilder.RebuildMinimap"/> for the one-city/several-cities
+        /// behaviour split.
+        /// </summary>
+        [MenuItem("Tools/City Generator/Rebuild Minimap")]
+        private static void RebuildMinimapMenuItem()
+        {
+            CityGeneratorMinimapBuilder.RebuildMinimap(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+        }
+
         // Runs once per window instance (not on every domain reload's OnEnable, since
         // defaultsInitialized is itself serialized): AssetDatabase can't be touched from a field
         // initializer, so the tool's own reference-city prefabs are assigned here instead.
@@ -1171,6 +1184,24 @@ namespace CityGenerator.Editor
                 "Cancel");
             if (!confirmed)
                 return;
+
+            // SPEC 16: with two or more cities in the scene, Re-Build destroys all of them and
+            // leaves only the freshly generated one -- a more destructive outcome than the single-
+            // city case the dialog above already covers, so it gets its own confirmation naming
+            // what's about to be destroyed.
+            var existingRoots = CityGeneratorSceneBuilder.FindAllCityRoots(
+                UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+            if (existingRoots.Count >= 2)
+            {
+                string names = string.Join(", ", existingRoots.ConvertAll(root => root.name));
+                bool confirmedMultiple = EditorUtility.DisplayDialog(
+                    "City Generator - Re-Build City",
+                    $"This scene has {existingRoots.Count} cities: {names}. Re-Build will destroy all of them and leave only the newly generated city. Continue?",
+                    "Confirm",
+                    "Cancel");
+                if (!confirmedMultiple)
+                    return;
+            }
 
             try
             {

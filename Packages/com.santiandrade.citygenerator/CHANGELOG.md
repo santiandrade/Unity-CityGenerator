@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- **Multiple cities can now coexist in the same scene** (SPEC 16). `TrafficNetwork` and
+  `PedestrianNetwork` build their graph nodes relative to their own root's transform
+  (`transform.TransformPoint`/`TransformDirection`) instead of in absolute world space, so a
+  `CityGeneratorRoot` copied to a new position (only translation is supported — see the user
+  manual) keeps a correct graph. Traffic light/intersection matching is scoped to each network's
+  own `CityGeneratorRoot` hierarchy (falling back to a scene-wide search when there is none), so
+  two cities in the same scene never cross-match each other's signals.
+- New `Tools > City Generator > Rebuild Minimap` menu: recaptures the minimap snapshot for the
+  city/cities currently in the scene at their current position, without regenerating anything —
+  fixes a minimap left out of sync after moving a `CityGeneratorRoot` by hand. With two or more
+  cities, captures one snapshot covering the union of their footprints (with an editable
+  resolution) and points every one of their `MinimapData` at it, merging their Points of Interest.
+- `MinimapData.localCenter`/`localSize`: each city's own footprint in its root's local space,
+  invariant to moving the root — the stable source `Rebuild Minimap` reads instead of
+  recalculating the footprint from scratch or trusting `Renderer.bounds`.
+- `MinimapHUD` now picks whichever city's captured footprint contains the player (falling back to
+  the closest by centre distance) instead of always resolving the first `MinimapData` found —
+  needed once more than one city can have the Minimap enabled at once.
+- `Rebuild City in Current Scene` now handles two or more `CityGeneratorRoot`s in the active scene:
+  with one confirmation dialog naming them, it destroys all of them and leaves only the newly
+  generated city (unchanged behaviour with zero or one).
+- `Assets/Tests/EditMode/Generation/MultiCityNetworkTests.cs` — synthetic multi-root coverage for
+  the coordinate-relativity and hierarchy-scoping rules above.
 
 ## [3.0.0] - 2026-09-04
 ### Changed (BREAKING)

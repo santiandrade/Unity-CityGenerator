@@ -49,8 +49,8 @@ namespace CityGenerator.Runtime
 
         private void Start()
         {
-            data = FindAnyObjectByType<MinimapData>();
             player = FindAnyObjectByType<PlayerController>();
+            data = player != null ? FindDataForPlayer(player.transform.position) : null;
 
             if (data == null || player == null)
             {
@@ -62,6 +62,44 @@ namespace CityGenerator.Runtime
                 mapImage.texture = data.snapshot;
 
             EnsurePoiMarkerPool(data.pointsOfInterest.Count);
+        }
+
+        /// <summary>
+        /// With several cities in the scene (SPEC 16), picks the one whose captured footprint
+        /// actually contains the player -- falling back to the closest by centre distance if none
+        /// does (e.g. the player standing just outside every captured worldOrigin/worldSize, or a
+        /// zero-sized footprint left by a MinimapData never captured). With a single city this
+        /// always resolves to it, same as the old FindAnyObjectByType<MinimapData>() behaviour.
+        /// </summary>
+        private static MinimapData FindDataForPlayer(Vector3 playerPosition)
+        {
+            MinimapData[] candidates = FindObjectsByType<MinimapData>(FindObjectsInactive.Exclude);
+            if (candidates.Length == 0)
+                return null;
+
+            MinimapData closest = null;
+            float closestDistance = float.MaxValue;
+
+            foreach (MinimapData candidate in candidates)
+            {
+                Vector2 origin = candidate.worldOrigin;
+                Vector2 size = candidate.worldSize;
+                if (playerPosition.x >= origin.x && playerPosition.x <= origin.x + size.x &&
+                    playerPosition.z >= origin.y && playerPosition.z <= origin.y + size.y)
+                {
+                    return candidate;
+                }
+
+                Vector2 centre = origin + size * 0.5f;
+                float distance = (new Vector2(playerPosition.x, playerPosition.z) - centre).sqrMagnitude;
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closest = candidate;
+                }
+            }
+
+            return closest;
         }
 
         private void LateUpdate()

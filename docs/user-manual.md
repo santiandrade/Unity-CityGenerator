@@ -54,7 +54,8 @@ already installed.
 - [11. What ends up in your scene](#11-what-ends-up-in-your-scene)
 - [12. Playing the generated city](#12-playing-the-generated-city)
 - [13. After generating](#13-after-generating)
-- [14. Troubleshooting](#14-troubleshooting)
+- [14. Multiple cities in a scene](#14-multiple-cities-in-a-scene)
+- [15. Troubleshooting](#15-troubleshooting)
 
 ---
 
@@ -710,7 +711,44 @@ exactly one city and is lost on the next generation.
 
 ---
 
-## 14. Troubleshooting
+## 14. Multiple cities in a scene
+
+The tool has no button to generate a second city alongside an existing one — you generate each
+city in its own scene as usual, then **copy its root GameObject** (named `City`, marked
+internally by a `CityGeneratorRoot` component) into whichever scene should hold both. Once
+copied, the pasted city works like any other: its own traffic, its own pedestrians, its own
+minimap.
+
+**Only moving (translating) a copied city is supported.** Dragging its root to a new position
+in the Hierarchy or Scene view is fine — its traffic and pedestrian networks, and its minimap,
+all follow the move correctly. **Rotating or scaling a copied city's root is not supported**:
+the tool does not stop you from doing it, but the result is wrong — sensor ranges, lane
+offsets, and the minimap's fixed north all assume the city is at its original orientation and
+1:1 scale.
+
+Two limitations, currently by design:
+
+- **Ambience audio isn't scoped per city.** If more than one city has 2D Ambience enabled, both
+  will play at once. Disable it on all but one if that's not what you want (City tab → Audio,
+  or the Audio tab's Ambience card, per city).
+- **Traffic and pedestrians never cross between cities.** Each city's vehicles and pedestrians
+  stay confined to their own network, even if two cities are placed right next to each other.
+
+**Tools > City Generator > Rebuild Minimap** recaptures the minimap snapshot for the city or
+cities currently in the scene, at their *current* position — use it after moving a city's root
+by hand, since neither city's minimap updates on its own when you do that. With a single city
+in the scene it recaptures immediately, no confirmation needed. With two or more, it asks you to
+confirm (showing how many cities it found and the combined area it will cover, with an editable
+texture resolution) and then captures **one** snapshot covering all of them, pointing every
+city's minimap at it — Points of Interest from every city show up on all of their minimaps.
+
+**Re-Build City in Current Scene**, when the active scene holds two or more cities, asks you to
+confirm before it destroys all of them and generates the one new city in their place — copy
+elsewhere first anything you want to keep.
+
+---
+
+## 15. Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|

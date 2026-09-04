@@ -244,6 +244,32 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
+        /// This city's own TrafficNetwork, resolved by hierarchy so two cities in the same scene
+        /// never borrow each other's traffic state for CanCross. Falls back to a scene-wide search
+        /// when this network has no CityGeneratorRoot ancestor, same as before this scoping existed.
+        /// </summary>
+        private TrafficNetwork FindTrafficNetworkInScope()
+        {
+            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>();
+            return root != null
+                ? root.GetComponentInChildren<TrafficNetwork>(true)
+                : FindAnyObjectByType<TrafficNetwork>();
+        }
+
+        /// <summary>
+        /// TrafficLightIntersection instances this network is allowed to match crossings against:
+        /// only the ones under its own city, mirroring TrafficNetwork.FindLightsInScope. Falls back
+        /// to a scene-wide search when this network has no CityGeneratorRoot ancestor.
+        /// </summary>
+        private TrafficLightIntersection[] FindIntersectionsInScope()
+        {
+            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>();
+            return root != null
+                ? root.GetComponentsInChildren<TrafficLightIntersection>(true)
+                : FindObjectsByType<TrafficLightIntersection>(FindObjectsInactive.Exclude);
+        }
+
+        /// <summary>
         /// Rebuilds the whole graph from the street axes and re-matches crossings against the
         /// scene's TrafficLightIntersection instances. Doubles as the explicit re-bake: safe to
         /// call again at any time (e.g. after moving a building), since it always starts from a
@@ -262,7 +288,7 @@ namespace CityGenerator.Runtime
 
             if (trafficNetwork == null)
             {
-                trafficNetwork = FindAnyObjectByType<TrafficNetwork>();
+                trafficNetwork = FindTrafficNetworkInScope();
             }
 
             int blocksX = axesX.Length - 1;
@@ -319,7 +345,7 @@ namespace CityGenerator.Runtime
             // shape hole, and FindNearestIntersection already skips an intersection with no
             // matching TrafficLightIntersection (never placed at a perimeter corner, exactly 2
             // arms), so widening this loop can't add crossings where there's no real one.
-            var intersections = FindObjectsByType<TrafficLightIntersection>(FindObjectsInactive.Exclude);
+            var intersections = FindIntersectionsInScope();
             for (int i = 0; i < axesX.Length; i++)
             {
                 for (int j = 0; j < axesZ.Length; j++)
@@ -383,13 +409,13 @@ namespace CityGenerator.Runtime
         }
 
         private Vector3 BlockCentre(int bi, int bj)
-            => new((axesX[bi] + axesX[bi + 1]) * 0.5f, sidewalkY, (axesZ[bj] + axesZ[bj + 1]) * 0.5f);
+            => transform.TransformPoint(new Vector3((axesX[bi] + axesX[bi + 1]) * 0.5f, sidewalkY, (axesZ[bj] + axesZ[bj + 1]) * 0.5f));
 
         // Same as BlockCentre, but also valid for the ring of cells just outside the axes arrays:
         // the perimeter walkway is tiled from the *missing* cells around the city, which for a
         // rectangular grid sit at index -1 / blocksX, past either end of the arrays.
         private Vector3 BlockCentreOutside(int bi, int bj)
-            => new(axesX[0] + (bi + 0.5f) * CellPitch, sidewalkY, axesZ[0] + (bj + 0.5f) * CellPitch);
+            => transform.TransformPoint(new Vector3(axesX[0] + (bi + 0.5f) * CellPitch, sidewalkY, axesZ[0] + (bj + 0.5f) * CellPitch));
 
         // Whether block (bi, bj) actually has a ring built for it: in range, and (for a Custom
         // Grid shape) a real cell rather than a hole cornerNode was never populated for.
@@ -630,7 +656,11 @@ namespace CityGenerator.Runtime
         /// </summary>
         private void BuildCrossings(int i, int j, int blocksX, int blocksZ, int[,,] cornerNode, TrafficLightIntersection[] intersections)
         {
-            Vector3 centre = new(axesX[i], sidewalkY, axesZ[j]);
+            // Transformed like BlockCentre/BlockCentreOutside: FindNearestIntersection matches
+            // against TrafficLight world positions, and the arm offsets below (lateral, travel)
+            // are pure vector arithmetic that stays correct once centre itself is in world space
+            // (only translation of the root is supported -- see CLAUDE.md).
+            Vector3 centre = transform.TransformPoint(new Vector3(axesX[i], sidewalkY, axesZ[j]));
             TrafficLightIntersection matched = FindNearestIntersection(centre, intersections);
             if (matched == null)
             {
