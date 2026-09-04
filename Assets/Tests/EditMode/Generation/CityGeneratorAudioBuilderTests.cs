@@ -48,11 +48,15 @@ namespace CityGenerator.Tests.EditMode.Generation
             Assert.AreEqual(1f, settings.audio.ambience.clips[0].volume);
 
             Assert.IsTrue(settings.audio.plazaAudio.enabled);
-            Assert.AreEqual(1, settings.audio.plazaAudio.clips.Count);
+            Assert.AreEqual(2, settings.audio.plazaAudio.clips.Count);
             Assert.IsNotNull(settings.audio.plazaAudio.clips[0].clip, "Default plaza clip must load.");
             Assert.AreEqual(1f, settings.audio.plazaAudio.clips[0].volume);
-            Assert.AreEqual(10f, settings.audio.plazaAudio.clips[0].minDistance);
-            Assert.AreEqual(40f, settings.audio.plazaAudio.clips[0].maxDistance);
+            Assert.AreEqual(4f, settings.audio.plazaAudio.clips[0].minDistance);
+            Assert.AreEqual(20f, settings.audio.plazaAudio.clips[0].maxDistance);
+            Assert.IsNotNull(settings.audio.plazaAudio.clips[1].clip, "Second default plaza clip must load.");
+            Assert.AreEqual(1f, settings.audio.plazaAudio.clips[1].volume);
+            Assert.AreEqual(20f, settings.audio.plazaAudio.clips[1].minDistance);
+            Assert.AreEqual(50f, settings.audio.plazaAudio.clips[1].maxDistance);
 
             bool valid = CityGeneratorValidator.Validate(settings, out List<string> errors);
             Assert.IsTrue(valid, "Default settings must not be blocked by the new Audio validation rules. Errors: " + string.Join("; ", errors));
