@@ -308,7 +308,15 @@ namespace CityGenerator.Editor
                 resolution = chosenResolution;
             }
 
-            StartTwoPhaseCapture(roots, resolution);
+            var allRootsInScene = new List<CityGeneratorRoot>();
+            foreach (GameObject go in scene.GetRootGameObjects())
+            {
+                var root = go.GetComponent<CityGeneratorRoot>();
+                if (root != null)
+                    allRootsInScene.Add(root);
+            }
+
+            StartTwoPhaseCapture(roots, allRootsInScene, resolution);
         }
 
         private static (Vector2 origin, Vector2 size) ComputeWorldFootprint(CityGeneratorRoot root)
@@ -361,21 +369,25 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Phase 1 (synchronous): hides every city's Vehicles/Pedestrians groups, saving their prior
-        /// active state, then defers the actual capture to the next Editor update via
-        /// <see cref="EditorApplication.delayCall"/>. Needed because these roots already existed
-        /// before this call (unlike generation's freshly-created ones): a manual Camera.Render()
-        /// does not reflect a same-call visibility change on an object Unity has already rendered
-        /// before -- see the class remarks. Visibility is restored in a finally once phase 2 (or its
-        /// own failure) completes.
+        /// active state, then defers the actual capture by <see cref="HideSettleFrameCount"/> Editor
+        /// updates (see that constant) via chained <see cref="EditorApplication.delayCall"/>s.
+        /// Visibility is restored in a finally once phase 2 (or its own failure) completes.
+        /// <para>
+        /// <paramref name="hideRoots"/> is every <see cref="CityGeneratorRoot"/> in the scene, not
+        /// just <paramref name="roots"/> (the subset with Minimap enabled that <see cref="RebuildMinimap"/>
+        /// captures into): a neighbouring city with the Minimap disabled still sits inside the union
+        /// footprint's camera frustum, and its Vehicles/Pedestrians must be hidden too or they leak
+        /// into the snapshot.
+        /// </para>
         /// </summary>
-        private static void StartTwoPhaseCapture(List<CityGeneratorRoot> roots, int resolution)
+        private static void StartTwoPhaseCapture(List<CityGeneratorRoot> roots, List<CityGeneratorRoot> hideRoots, int resolution)
         {
             var vehicleGroups = new List<Transform>();
             var pedestrianGroups = new List<Transform>();
             var vehiclesWereActive = new List<bool>();
             var pedestriansWereActive = new List<bool>();
 
-            foreach (CityGeneratorRoot root in roots)
+            foreach (CityGeneratorRoot root in hideRoots)
             {
                 Transform vehicles = root.transform.Find("Vehicles");
                 Transform pedestrians = root.transform.Find("Pedestrians");
@@ -390,21 +402,19 @@ namespace CityGenerator.Editor
                     pedestrians.gameObject.SetActive(false);
             }
 
-            EditorApplication.CallbackFunction phase2 = null;
-            phase2 = () =>
+            void Finish()
             {
-                EditorApplication.delayCall -= phase2;
                 try
                 {
                     CompleteTwoPhaseCapture(roots, resolution);
                 }
                 finally
                 {
-                    for (int i = 0; i < roots.Count; i++)
+                    for (int i = 0; i < hideRoots.Count; i++)
                     {
                         // A root captured in phase 1 may have been destroyed in the interim (the
-                        // user closing/changing the scene while the delayCall was pending).
-                        if (roots[i] == null)
+                        // user closing/changing the scene while the delayed capture was pending).
+                        if (hideRoots[i] == null)
                             continue;
 
                         if (vehicleGroups[i] != null)
@@ -413,8 +423,34 @@ namespace CityGenerator.Editor
                             pedestrianGroups[i].gameObject.SetActive(pedestriansWereActive[i]);
                     }
                 }
-            };
-            EditorApplication.delayCall += phase2;
+            }
+
+            ChainDelayCalls(HideSettleFrameCount, Finish);
+        }
+
+        /// <summary>
+        /// How many <see cref="EditorApplication.delayCall"/> hops to let pass between hiding the
+        /// Vehicles/Pedestrians groups and actually rendering the snapshot. A single hop (the
+        /// original design) was not enough: <c>GameObject.activeSelf</c> reliably read back
+        /// <c>false</c> at the exact moment of <see cref="CaptureSnapshot"/>'s <c>Camera.Render()</c>
+        /// call (confirmed by direct instrumentation), yet the rendered PNG still showed the
+        /// vehicles anyway, parked at their exact original positions -- one stray delayCall hop
+        /// wasn't enough to let whatever GPU Resident Drawer / SRP Batcher culling cache backs this
+        /// Unity/URP version's static/instanced rendering path settle before the manual render.
+        /// Several extra hops reliably cleared it in testing.
+        /// </summary>
+        private const int HideSettleFrameCount = 4;
+
+        /// <summary>Invokes <paramref name="onDone"/> after <paramref name="count"/> Editor updates, chaining <see cref="EditorApplication.delayCall"/> rather than a single call.</summary>
+        private static void ChainDelayCalls(int count, System.Action onDone)
+        {
+            if (count <= 0)
+            {
+                onDone();
+                return;
+            }
+
+            EditorApplication.delayCall += () => ChainDelayCalls(count - 1, onDone);
         }
 
         /// <summary>
