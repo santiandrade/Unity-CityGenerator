@@ -53,7 +53,8 @@ documento da por hecho que el paquete ya está instalado.
 - [11. Qué acaba en tu escena](#11-qué-acaba-en-tu-escena)
 - [12. Jugar la ciudad generada](#12-jugar-la-ciudad-generada)
 - [13. Después de generar](#13-después-de-generar)
-- [14. Resolución de problemas](#14-resolución-de-problemas)
+- [14. Varias ciudades en una escena](#14-varias-ciudades-en-una-escena)
+- [15. Resolución de problemas](#15-resolución-de-problemas)
 
 ---
 
@@ -723,7 +724,46 @@ generada arregla exactamente una ciudad y se pierde en la siguiente generación.
 
 ---
 
-## 14. Resolución de problemas
+## 14. Varias ciudades en una escena
+
+La herramienta no tiene ningún botón para generar una segunda ciudad junto a una ya existente:
+generas cada ciudad en su propia escena como de costumbre y luego **copias su GameObject raíz**
+(llamado `City`, marcado internamente con un componente `CityGeneratorRoot`) a la escena que
+deba contener a ambas. Una vez copiada, la ciudad pegada funciona como cualquier otra: su propio
+tráfico, sus propios peatones, su propio minimapa.
+
+**Solo mover (trasladar) una ciudad copiada está soportado.** Arrastrar su raíz a una nueva
+posición en la Hierarchy o en la vista de escena funciona sin problemas: sus redes de tráfico y
+peatones, y su minimapa, siguen el movimiento correctamente. **Rotar o escalar la raíz de una
+ciudad copiada no está soportado**: la herramienta no te lo impide, pero el resultado queda mal
+— los rangos de los sensores, los desplazamientos de carril y el norte fijo del minimapa asumen
+que la ciudad conserva su orientación y escala 1:1 originales.
+
+Dos limitaciones, por diseño actual:
+
+- **La ambiencia de audio no está acotada por ciudad.** Si más de una ciudad tiene la Ambience 2D
+  activada, sonarán todas a la vez. Desactívala en todas menos una si no es lo que quieres
+  (pestaña City → Audio, o la tarjeta Ambience de la pestaña Audio, por ciudad).
+- **El tráfico y los peatones nunca cruzan entre ciudades.** Los vehículos y peatones de cada
+  ciudad se quedan confinados a su propia red, aunque dos ciudades estén colocadas justo una al
+  lado de la otra.
+
+**Tools > City Generator > Rebuild Minimap** recaptura la instantánea del minimapa para la
+ciudad o ciudades presentes en la escena, en su posición *actual* — úsalo después de mover a
+mano la raíz de una ciudad, ya que ningún minimapa se actualiza solo cuando haces eso. Con una
+sola ciudad en la escena recaptura de inmediato, sin pedir confirmación. Con dos o más, pide
+confirmación (mostrando cuántas ciudades encontró y el área combinada que va a cubrir, con una
+resolución de textura editable) y luego captura **una sola** instantánea que cubre todas ellas,
+apuntando el minimapa de cada ciudad a la misma — los Puntos de Interés de todas las ciudades
+aparecen en todos sus minimapas.
+
+**Re-Build City in Current Scene**, cuando la escena activa contiene dos o más ciudades, pide
+confirmación antes de destruirlas todas y generar la única ciudad nueva en su lugar — copia a
+otro sitio antes lo que quieras conservar.
+
+---
+
+## 15. Resolución de problemas
 
 | Síntoma | Causa probable |
 |---|---|

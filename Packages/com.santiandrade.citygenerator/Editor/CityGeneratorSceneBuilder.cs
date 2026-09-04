@@ -72,12 +72,31 @@ namespace CityGenerator.Editor
         }
 
         /// <summary>
+        /// Every <see cref="CityGeneratorRoot"/> at the root of <paramref name="scene"/>, in
+        /// hierarchy order. Used both by <see cref="RebuildInActiveScene"/> and by
+        /// <c>CityGeneratorWindow</c> to decide whether a Re-Build needs the "several cities will be
+        /// destroyed" confirmation.
+        /// </summary>
+        public static System.Collections.Generic.List<GameObject> FindAllCityRoots(Scene scene)
+        {
+            var roots = new System.Collections.Generic.List<GameObject>();
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                if (root.GetComponent<CityGeneratorRoot>() != null)
+                    roots.Add(root);
+            }
+
+            return roots;
+        }
+
+        /// <summary>
         /// Regenerates the city in the currently active scene from <paramref name="settings"/>,
-        /// transactionally: the new city is built under a temporary root first, and the previous
-        /// one (found by <see cref="CityGeneratorRoot"/>, not by name) is only destroyed once
-        /// generation finishes without throwing. If <see cref="CityGeneratorContentAssembler.Assemble"/>
-        /// throws, the failed temporary root is destroyed, the previous city is left completely
-        /// intact, and the exception is rethrown for the caller (<c>CityGeneratorWindow</c>) to
+        /// transactionally: the new city is built under a temporary root first, and every previous
+        /// one (found by <see cref="CityGeneratorRoot"/>, not by name -- SPEC 16: there can be more
+        /// than one) is only destroyed once generation finishes without throwing. If
+        /// <see cref="CityGeneratorContentAssembler.Assemble"/> throws, the failed temporary root is
+        /// destroyed, every previous city is left completely intact (moved back to its original
+        /// position), and the exception is rethrown for the caller (<c>CityGeneratorWindow</c>) to
         /// report. Camera, volume and player are left untouched; the Directional Light's day/night
         /// cycle is the one exception — its <see cref="DayNightCycle"/> is added/updated to match
         /// <paramref name="settings"/>.dayNight and reapplies Start Hour, everything else about the
@@ -94,26 +113,23 @@ namespace CityGenerator.Editor
         {
             Scene scene = EditorSceneManager.GetActiveScene();
 
-            // Moved aside (never destroyed yet) *before* the new city is built: the previous city
-            // isn't destroyed until Assemble below succeeds (see the invariant this preserves,
-            // right below), so without this it sits in the exact same world-space footprint as the
-            // new one for the whole call -- two sets of static colliders stacked exactly on top of
-            // each other made PedestrianNetwork.PrunePlacedObstacles' downward Physics.Raycast
-            // ground check intermittently (roughly every other Rebuild) find no hit at all,
-            // wrongly marking most/all nodes Blocked -- confirmed directly against this exact
-            // scene. Moved back in the catch below so a failed rebuild still leaves the previous
-            // city exactly where it was.
-            GameObject previousCityRoot = null;
-            Vector3 previousCityRootPosition = default;
-            foreach (GameObject root in scene.GetRootGameObjects())
+            // Moved aside (never destroyed yet) *before* the new city is built: none of the
+            // previous cities are destroyed until Assemble below succeeds (see the invariant this
+            // preserves, right below), so without this they'd sit in the exact same world-space
+            // footprint as the new one for the whole call -- two sets of static colliders stacked
+            // exactly on top of each other made PedestrianNetwork.PrunePlacedObstacles' downward
+            // Physics.Raycast ground check intermittently (roughly every other Rebuild) find no hit
+            // at all, wrongly marking most/all nodes Blocked -- confirmed directly against this
+            // exact scene. Moved back in the catch below so a failed rebuild still leaves every
+            // previous city exactly where it was. Each gets its own offset multiple (index-based) so
+            // two or more previous cities never overlap each other while isolated either.
+            System.Collections.Generic.List<GameObject> previousCityRoots = FindAllCityRoots(scene);
+            var previousCityRootPositions = new Vector3[previousCityRoots.Count];
+            for (int i = 0; i < previousCityRoots.Count; i++)
             {
-                if (root.GetComponent<CityGeneratorRoot>() != null)
-                {
-                    previousCityRoot = root;
-                    previousCityRootPosition = root.transform.position;
-                    root.transform.position = previousCityRootPosition + new Vector3(PreviousCityIsolationOffsetX, 0f, 0f);
-                    break;
-                }
+                previousCityRootPositions[i] = previousCityRoots[i].transform.position;
+                previousCityRoots[i].transform.position =
+                    previousCityRootPositions[i] + new Vector3(PreviousCityIsolationOffsetX * (i + 1), 0f, 0f);
             }
 
             var cityRootGO = new GameObject("City (generating)");
@@ -128,8 +144,8 @@ namespace CityGenerator.Editor
             catch
             {
                 Object.DestroyImmediate(cityRootGO);
-                if (previousCityRoot != null)
-                    previousCityRoot.transform.position = previousCityRootPosition;
+                for (int i = 0; i < previousCityRoots.Count; i++)
+                    previousCityRoots[i].transform.position = previousCityRootPositions[i];
                 throw;
             }
 
@@ -140,7 +156,7 @@ namespace CityGenerator.Editor
             if (previousMinimapHud != null)
                 Undo.DestroyObjectImmediate(previousMinimapHud);
 
-            if (previousCityRoot != null)
+            foreach (GameObject previousCityRoot in previousCityRoots)
                 Undo.DestroyObjectImmediate(previousCityRoot);
 
             Undo.RegisterCreatedObjectUndo(cityRootGO, "Rebuild City");
