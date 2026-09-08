@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- Editing any setting that shapes the pedestrian graph (Grid Width/Height among them) no longer
+  scatters traffic lights across the open scene. The Custom Pedestrians node picker builds a
+  throwaway preview of the graph, which instantiates the real Traffic Light Prefab to place its
+  crossing nodes; its root was hidden with `HideFlags.HideAndDontSave`, which hides an object from
+  the Hierarchy but still renders it and still registers its colliders. The preview root is now
+  inactive and carries its own `CityGeneratorRoot`, so nothing reaches the scene and
+  `PedestrianNetwork` still scopes its traffic-light matching to the preview itself.
+- The same preview no longer cross-matches against a real generated city's intersections when one
+  is open in the scene, which added `Curb`/`Crossing` nodes to the picker at corners the generated
+  city would leave unsignalled.
+- A preview root stranded by a domain reload (its owning window's reference is lost, but a
+  `DontSave` object survives) is now destroyed on the next preview build instead of staying in the
+  scene forever, invisible in the Hierarchy.
 
 ## [3.1.0] - 2026-09-05
 ### Added
