@@ -250,7 +250,10 @@ namespace CityGenerator.Runtime
         /// </summary>
         private TrafficNetwork FindTrafficNetworkInScope()
         {
-            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>();
+            // includeInactive: the Custom Pedestrians preview graph (CityGeneratorPedestrianPreview)
+            // lives under an inactive root, and a scoped lookup that silently fell back to a
+            // scene-wide search there would borrow the real city's state.
+            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>(true);
             return root != null
                 ? root.GetComponentInChildren<TrafficNetwork>(true)
                 : FindAnyObjectByType<TrafficNetwork>();
@@ -263,7 +266,7 @@ namespace CityGenerator.Runtime
         /// </summary>
         private TrafficLightIntersection[] FindIntersectionsInScope()
         {
-            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>();
+            CityGeneratorRoot root = GetComponentInParent<CityGeneratorRoot>(true);
             return root != null
                 ? root.GetComponentsInChildren<TrafficLightIntersection>(true)
                 : FindObjectsByType<TrafficLightIntersection>(FindObjectsInactive.Exclude);
@@ -743,7 +746,9 @@ namespace CityGenerator.Runtime
 
             foreach (TrafficLightIntersection candidate in intersections)
             {
-                TrafficLight[] lights = candidate.GetComponentsInChildren<TrafficLight>();
+                // includeInactive, so an intersection under an inactive root (the Custom
+                // Pedestrians preview graph) still resolves its own lights instead of being skipped.
+                TrafficLight[] lights = candidate.GetComponentsInChildren<TrafficLight>(true);
                 if (lights.Length == 0)
                 {
                     continue;

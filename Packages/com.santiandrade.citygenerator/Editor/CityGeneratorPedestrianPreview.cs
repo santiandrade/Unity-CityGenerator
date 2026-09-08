@@ -17,14 +17,36 @@ namespace CityGenerator.Editor
     /// safety net if that ever happens).
     ///
     /// Built under a HideFlags.HideAndDontSave root, never saved to the scene; the caller disposes
-    /// it once done reading nodes. Known limitation: PedestrianNetwork.Build() matches crossings by
-    /// scanning the whole scene for TrafficLightIntersection, so if a real city is already
-    /// generated in the same open scene while a picker is opened, this preview's graph is matched
-    /// against both its own temporary intersections and the real city's -- harmless in practice
-    /// (both sit at the same world positions), but not scene-isolated the way the real pipeline is.
+    /// it once done reading nodes.
+    ///
+    /// That root is **inactive** and carries its own <see cref="CityGeneratorRoot"/>, and both
+    /// halves are load-bearing:
+    /// <list type="bullet">
+    /// <item>Inactive, because HideAndDontSave only hides the object from the Hierarchy -- it still
+    /// renders. Leaving it active drew a full grid of the user's Traffic Light Prefab across the
+    /// Scene view (and put their colliders into the physics scene, where the user's own raycasts
+    /// and this preview's own obstacle pruning could hit them) on every edit to Grid Width/Height,
+    /// with nothing in the Hierarchy to explain where they came from.</item>
+    /// <item><see cref="CityGeneratorRoot"/>, because <c>PedestrianNetwork</c> only scopes its
+    /// TrafficLightIntersection search to its own city when it finds that marker among its
+    /// ancestors; without it the preview falls back to a scene-wide search that (a) sees nothing at
+    /// all once this root is inactive and (b) cross-matched against a real generated city's
+    /// intersections when one happened to be open. It never reaches the Scene-level searches for
+    /// CityGeneratorRoot (CityGeneratorSceneBuilder / CityGeneratorMinimapBuilder), which enumerate
+    /// <c>Scene.GetRootGameObjects()</c> -- a HideAndDontSave object belongs to no scene.</item>
+    /// </list>
     /// </summary>
     internal sealed class CityGeneratorPedestrianPreview : IDisposable
     {
+        private const string RootName = "CityGeneratorPedestrianPreview (temporary)";
+
+        // Every root built by this session and not yet disposed. Static state is cleared by a
+        // domain reload, which is precisely when a root becomes unreachable -- so anything bearing
+        // RootName that is *not* in here is by definition an orphan DestroyLeakedRoots may reap.
+        // Needed because more than one preview can legitimately be alive at once (the window's
+        // shared one plus the fallback CityGeneratorValidator builds when it isn't handed that one).
+        private static readonly List<GameObject> LiveRoots = new();
+
         private readonly GameObject root;
         private readonly PedestrianNetwork network;
 
@@ -45,7 +67,14 @@ namespace CityGenerator.Editor
         /// </summary>
         public static CityGeneratorPedestrianPreview Build(CityGeneratorSettings settings)
         {
-            var root = new GameObject("CityGeneratorPedestrianPreview (temporary)") { hideFlags = HideFlags.HideAndDontSave };
+            DestroyLeakedRoots();
+
+            var root = new GameObject(RootName) { hideFlags = HideFlags.HideAndDontSave };
+            // Deactivated before anything is parented under it, so the traffic light instances
+            // below are never visible/pickable/collidable in the scene for even a single frame.
+            root.SetActive(false);
+            root.AddComponent<CityGeneratorRoot>();
+            LiveRoots.Add(root);
             var trafficLightsGroup = new GameObject("TrafficLights").transform;
             trafficLightsGroup.SetParent(root.transform);
             var pedestrianNetworkGroup = new GameObject("PedestrianNetwork").transform;
@@ -158,8 +187,34 @@ namespace CityGenerator.Editor
 
         public void Dispose()
         {
+            LiveRoots.Remove(root);
             if (root != null)
                 UnityEngine.Object.DestroyImmediate(root);
+        }
+
+        /// <summary>
+        /// Destroys any preview root left over from a previous session. A HideAndDontSave object
+        /// survives both a scene change and a domain reload, while the window's reference to it
+        /// does not, so an editor crash (or any path that skips CityGeneratorWindow.OnDisable)
+        /// strands one permanently, invisible in the Hierarchy and unreachable by its owner. Found
+        /// via Resources.FindObjectsOfTypeAll, the only lookup that returns hidden objects.
+        /// </summary>
+        private static void DestroyLeakedRoots()
+        {
+            foreach (GameObject candidate in Resources.FindObjectsOfTypeAll<GameObject>())
+            {
+                if (candidate.name != RootName || candidate.transform.parent != null)
+                    continue;
+                if ((candidate.hideFlags & HideFlags.DontSave) == 0)
+                    continue;
+                // FindObjectsOfTypeAll also returns loaded assets; never destroy one.
+                if (UnityEditor.EditorUtility.IsPersistent(candidate))
+                    continue;
+                if (LiveRoots.Contains(candidate))
+                    continue;
+
+                UnityEngine.Object.DestroyImmediate(candidate);
+            }
         }
     }
 }
