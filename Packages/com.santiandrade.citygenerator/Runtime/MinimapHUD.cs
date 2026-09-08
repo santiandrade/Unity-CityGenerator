@@ -36,23 +36,41 @@ namespace CityGenerator.Runtime
 
         [Tooltip("Displays MinimapData.snapshot, windowed via uvRect to the area within View Radius Meters around the player.")]
         [SerializeField] private RawImage mapImage;
-        [Tooltip("Fixed at the HUD's centre; rotates to reflect the player's current yaw. The map itself never rotates.")]
+        [Tooltip("Fixed at the HUD's centre; rotates to reflect the tracked transform's current yaw. The map itself never rotates.")]
         [SerializeField] private RectTransform playerMarker;
+        [Tooltip("Transform the marker follows. Left null, it falls back to finding the PlayerController in the scene.")]
+        [SerializeField] private Transform markerTarget;
         [Tooltip("Deactivated template cloned once per visible Point of Interest; reused as the single generic icon+label for every POI.")]
         [SerializeField] private RectTransform poiMarkerTemplate;
         [Tooltip("Parent for POI marker clones.")]
         [SerializeField] private RectTransform poiMarkerContainer;
 
+        /// <summary>Transform the marker follows. Null falls back to the scene's PlayerController.</summary>
+        public Transform MarkerTarget
+        {
+            get => markerTarget;
+            set => markerTarget = value;
+        }
+
         private MinimapData data;
-        private PlayerController player;
+        private Transform trackedTransform;
         private readonly List<RectTransform> poiMarkerPool = new();
 
         private void Start()
         {
-            player = FindAnyObjectByType<PlayerController>();
-            data = player != null ? FindDataForPlayer(player.transform.position) : null;
+            if (markerTarget == null)
+            {
+                PlayerController player = FindAnyObjectByType<PlayerController>();
+                trackedTransform = player != null ? player.transform : null;
+            }
+            else
+            {
+                trackedTransform = markerTarget;
+            }
 
-            if (data == null || player == null)
+            data = trackedTransform != null ? FindDataForPlayer(trackedTransform.position) : null;
+
+            if (data == null || trackedTransform == null)
             {
                 gameObject.SetActive(false);
                 return;
@@ -104,10 +122,10 @@ namespace CityGenerator.Runtime
 
         private void LateUpdate()
         {
-            if (data == null || player == null || mapImage == null)
+            if (data == null || trackedTransform == null || mapImage == null)
                 return;
 
-            Vector3 playerPosition = player.transform.position;
+            Vector3 playerPosition = trackedTransform.position;
             UpdateMapWindow(playerPosition);
             UpdatePlayerMarker();
             UpdatePoiMarkers(playerPosition);
@@ -136,7 +154,7 @@ namespace CityGenerator.Runtime
             if (playerMarker == null)
                 return;
 
-            float yaw = player.transform.eulerAngles.y;
+            float yaw = trackedTransform.eulerAngles.y;
             playerMarker.localEulerAngles = new Vector3(0f, 0f, -yaw);
         }
 
