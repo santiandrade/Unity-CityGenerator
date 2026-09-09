@@ -26,7 +26,7 @@ namespace CityGenerator.Editor.UI
 
         public VisualElement ContentContainer => content;
 
-        public CityGeneratorCard(string cardName, string title, string iconName, bool defaultExpanded)
+        public CityGeneratorCard(string cardName, string title, string iconName, bool defaultExpanded, bool isBeta = false)
         {
             this.cardName = cardName;
             AddToClassList("cg-card");
@@ -44,9 +44,21 @@ namespace CityGenerator.Editor.UI
                 header.Add(iconElement);
             }
 
+            var titleRow = new VisualElement();
+            titleRow.AddToClassList("cg-card__title-row");
+            header.Add(titleRow);
+
             titleLabel = new Label(title);
             titleLabel.AddToClassList("cg-card__title");
-            header.Add(titleLabel);
+            titleRow.Add(titleLabel);
+
+            if (isBeta)
+            {
+                var betaTag = new Label("BETA");
+                betaTag.AddToClassList("cg-card__beta-tag");
+                betaTag.tooltip = "This feature is still in beta: behaviour may change in a future update.";
+                titleRow.Add(betaTag);
+            }
 
             badgeLabel = new Label();
             badgeLabel.AddToClassList("cg-card__badge");

@@ -90,10 +90,26 @@
     opacity: 0.85;
 }
 
+.cg-card__title-row {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
 .cg-card__title {
     color: var(--cg-text);
     -unity-font-style: bold;
-    flex-grow: 1;
+}
+
+.cg-card__beta-tag {
+    color: var(--cg-warning);
+    border-width: 1px;
+    border-color: var(--cg-warning);
+    border-radius: 8px;
+    padding: 0 5px;
+    margin-left: 6px;
+    font-size: 9px;
+    -unity-font-style: bold;
 }
 
 .cg-card__badge {

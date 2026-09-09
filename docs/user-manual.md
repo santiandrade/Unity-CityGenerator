@@ -39,7 +39,8 @@ already installed.
   - [5.4 Free Camera](#54-free-camera)
 - [6. Traffic tab](#6-traffic-tab)
   - [6.1 Traffic](#61-traffic)
-  - [6.2 Vehicles](#62-vehicles)
+  - [6.2 Physics](#62-physics)
+  - [6.3 Vehicles](#63-vehicles)
 - [7. Pedestrians tab](#7-pedestrians-tab)
   - [7.1 Pedestrian Settings](#71-pedestrian-settings)
   - [7.2 Pedestrians](#72-pedestrians)
@@ -396,11 +397,6 @@ Toggle action exists in both maps, which is what lets you switch back and forth.
 |---|---|
 | **Enabled** | Generate the traffic network, its lights and the vehicles. |
 | **Vehicle Count** | How many vehicles to spawn, split across the Vehicles list by percentage. |
-| **Enable Physics** | Off by default. Gives every generated vehicle a dynamic Rigidbody and physic material, so it responds realistically to impacts from other vehicles, from any external Rigidbody in the scene (e.g. one driven by the player), or from static geometry, and recovers back onto its route afterwards. Off leaves vehicle behaviour exactly as before this toggle existed. |
-| **Mass** | Rigidbody mass (kg), shared by every generated vehicle. Only shown when Enable Physics is on. |
-| **Drag** | Rigidbody linear drag. Only shown when Enable Physics is on. |
-| **Angular Drag** | Rigidbody angular drag. Only shown when Enable Physics is on. |
-| **Physic Material** | Physic material assigned to each vehicle's collider. Optional — left empty, the collider keeps Unity's default material. Only shown when Enable Physics is on. |
 
 The traffic network and its traffic lights are generated **regardless of this toggle**, so
 pedestrian crossings always have a real light to obey. What the toggle controls is the
@@ -410,6 +406,18 @@ A warning appears under Vehicle Count as soon as the count exceeds a safe fracti
 grid's spawn points. Vehicles have no route planning or congestion avoidance, so beyond that
 point traffic tends to gridlock rather than flow; the message tells you the recommended
 maximum for your current grid. It is a warning, not a blocking error.
+
+### 6.2 Physics
+
+The card's title carries a **BETA** tag — the feature is still under active development.
+
+| Parameter | What it does |
+|---|---|
+| **Enable Physics** | Off by default. Gives every generated vehicle a dynamic Rigidbody and physic material, so it responds realistically to impacts from other vehicles, from any external Rigidbody in the scene (e.g. one driven by the player), or from static geometry, and recovers back onto its route afterwards. Off leaves vehicle behaviour exactly as before this toggle existed. Turning it on shows an info box warning that this is a beta feature which may cause unexpected vehicle behaviour, and recommending against a high vehicle count relative to the generated city's size. |
+| **Mass** | Rigidbody mass (kg), shared by every generated vehicle. Only shown when Enable Physics is on. |
+| **Drag** | Rigidbody linear drag. Only shown when Enable Physics is on. |
+| **Angular Drag** | Rigidbody angular drag. Only shown when Enable Physics is on. |
+| **Physic Material** | Physic material assigned to each vehicle's collider. Optional — left empty, the collider keeps Unity's default material. Only shown when Enable Physics is on. |
 
 With Enable Physics on, a vehicle drives exactly as before (velocity/rotation imposed every
 physics step, no engine forces) until it takes a hard enough impact, at which point it lets go
@@ -422,7 +430,7 @@ are shared by every generated vehicle instance, not configurable per vehicle typ
 particular decides whether an external Rigidbody (e.g. the player's) can push a generated
 vehicle around or bounces off it instead.
 
-### 6.2 Vehicles
+### 6.3 Vehicles
 
 ![Vehicles card](images/manual/card-vehicles.png)
 

@@ -38,7 +38,8 @@ documento da por hecho que el paquete ya está instalado.
   - [5.4 Free Camera](#54-free-camera)
 - [6. Pestaña Traffic](#6-pestaña-traffic)
   - [6.1 Traffic](#61-traffic)
-  - [6.2 Vehicles](#62-vehicles)
+  - [6.2 Physics](#62-physics)
+  - [6.3 Vehicles](#63-vehicles)
 - [7. Pestaña Pedestrians](#7-pestaña-pedestrians)
   - [7.1 Pedestrian Settings](#71-pedestrian-settings)
   - [7.2 Pedestrians](#72-pedestrians)
@@ -402,11 +403,6 @@ Toggle existe en ambos maps, y es lo que permite alternar entre ellos.
 |---|---|
 | **Enabled** | Genera la red de tráfico, sus semáforos y los vehículos. |
 | **Vehicle Count** | Cuántos vehículos generar, repartidos entre la lista Vehicles por porcentaje. |
-| **Enable Physics** | Desactivado por defecto. Da a cada vehículo generado un Rigidbody dinámico y un physic material, para que responda de forma realista a los impactos de otros vehículos, de cualquier Rigidbody externo de la escena (p. ej. uno conducido por el jugador) o de geometría estática, y se recupere volviendo a su ruta después. Desactivado, el comportamiento de los vehículos es idéntico al de antes de que existiera este interruptor. |
-| **Mass** | Masa del Rigidbody (kg), compartida por todos los vehículos generados. Solo visible con Enable Physics activado. |
-| **Drag** | Drag lineal del Rigidbody. Solo visible con Enable Physics activado. |
-| **Angular Drag** | Drag angular del Rigidbody. Solo visible con Enable Physics activado. |
-| **Physic Material** | Physic material asignado al collider de cada vehículo. Opcional — si se deja vacío, el collider conserva el material por defecto de Unity. Solo visible con Enable Physics activado. |
 
 La red de tráfico y sus semáforos se generan **independientemente de este interruptor**, para
 que los pasos de peatones siempre tengan un semáforo real al que obedecer. Lo que controla el
@@ -416,6 +412,18 @@ Bajo Vehicle Count aparece un aviso en cuanto el número supera una fracción se
 puntos de aparición de la retícula. Los vehículos no planifican ruta ni evitan congestión, así
 que a partir de ahí el tráfico tiende a atascarse en lugar de fluir; el mensaje te indica el
 máximo recomendado para tu retícula actual. Es un aviso, no un error bloqueante.
+
+### 6.2 Physics
+
+El título de la card lleva una etiqueta **BETA** — la funcionalidad sigue en desarrollo activo.
+
+| Parámetro | Qué hace |
+|---|---|
+| **Enable Physics** | Desactivado por defecto. Da a cada vehículo generado un Rigidbody dinámico y un physic material, para que responda de forma realista a los impactos de otros vehículos, de cualquier Rigidbody externo de la escena (p. ej. uno conducido por el jugador) o de geometría estática, y se recupere volviendo a su ruta después. Desactivado, el comportamiento de los vehículos es idéntico al de antes de que existiera este interruptor. Al activarlo aparece un aviso informativo de que es una funcionalidad beta que puede provocar comportamientos inesperados en los vehículos, y recomendando no introducir un número de vehículos alto en proporción al tamaño de la ciudad generada. |
+| **Mass** | Masa del Rigidbody (kg), compartida por todos los vehículos generados. Solo visible con Enable Physics activado. |
+| **Drag** | Drag lineal del Rigidbody. Solo visible con Enable Physics activado. |
+| **Angular Drag** | Drag angular del Rigidbody. Solo visible con Enable Physics activado. |
+| **Physic Material** | Physic material asignado al collider de cada vehículo. Opcional — si se deja vacío, el collider conserva el material por defecto de Unity. Solo visible con Enable Physics activado. |
 
 Con Enable Physics activado, un vehículo conduce exactamente igual que antes (velocidad/rotación
 impuestas en cada paso de física, sin fuerzas de motor) hasta que recibe un impacto lo bastante
@@ -428,7 +436,7 @@ dispara esto. Mass/Drag/Angular Drag son compartidos por todos los vehículos ge
 configurables por tipo de vehículo; la masa en particular decide si un Rigidbody externo (p. ej.
 el del jugador) puede empujar a un vehículo generado o rebota contra él.
 
-### 6.2 Vehicles
+### 6.3 Vehicles
 
 ![Card Vehicles](images/manual/card-vehicles.png)
 
