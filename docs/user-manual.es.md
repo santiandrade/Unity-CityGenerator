@@ -436,6 +436,12 @@ dispara esto. Mass/Drag/Angular Drag son compartidos por todos los vehículos ge
 configurables por tipo de vehículo; la masa en particular decide si un Rigidbody externo (p. ej.
 el del jugador) puede empujar a un vehículo generado o rebota contra él.
 
+Los peatones son la única excepción: un peatón generado nunca empuja a un vehículo, nunca lo
+desvía de su carril y nunca cuenta como impacto, por mucho que se le eche encima. Los peatones no
+tienen Rigidbody, así que para el motor de física pesan infinito — dejar ese contacto activo hacía
+que una persona pudiera arrastrar un coche calle abajo. El jugador sí sigue chocando con los
+vehículos con normalidad.
+
 ### 6.3 Vehicles
 
 ![Card Vehicles](images/manual/card-vehicles.png)

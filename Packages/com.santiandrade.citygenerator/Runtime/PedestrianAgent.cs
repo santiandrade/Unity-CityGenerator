@@ -97,6 +97,9 @@ namespace CityGenerator.Runtime
         private float lateralOffset;
         private float stopUntilTime;
         private float distanceTravelled;
+        // Root proxy collider (see CityGeneratorColliderUtility), resolved in OnEnable and kept so
+        // OnDisable can deregister the very same instance from VehiclePedestrianCollisionFilter.
+        private Collider ownCollider;
 
         public PedestrianState State => state;
         public int CurrentNode => currentNode;
@@ -111,6 +114,15 @@ namespace CityGenerator.Runtime
 
         private void OnEnable()
         {
+            // SPEC 17: this agent's root proxy collider (CityGeneratorColliderUtility puts exactly
+            // one there) is paired against every Rigidbody-mode vehicle so a pedestrian -- a static
+            // collider moved by transform, i.e. infinite mass to PhysX -- can't shove a car off its
+            // lane. Registered here, not once at scene start, because Unity resets a collider's
+            // ignore state whenever it is disabled and re-enabled. Costs nothing while no vehicle
+            // is registered, which is every city generated with Enable Physics off.
+            ownCollider = GetComponent<Collider>();
+            VehiclePedestrianCollisionFilter.RegisterPedestrian(ownCollider);
+
             if (network == null)
             {
                 network = FindAnyObjectByType<PedestrianNetwork>();
@@ -173,6 +185,7 @@ namespace CityGenerator.Runtime
 
         private void OnDisable()
         {
+            VehiclePedestrianCollisionFilter.UnregisterPedestrian(ownCollider);
             if (manager != null)
             {
                 manager.Unregister(this);

@@ -430,6 +430,12 @@ are shared by every generated vehicle instance, not configurable per vehicle typ
 particular decides whether an external Rigidbody (e.g. the player's) can push a generated
 vehicle around or bounces off it instead.
 
+Pedestrians are the one exception: a generated pedestrian never pushes a vehicle, never knocks
+it off its lane and never counts as an impact, no matter how it walks into one. Pedestrians have
+no Rigidbody, so to the physics engine they weigh infinitely much — leaving that contact enabled
+meant a person could drag a car down the street. The player still collides with vehicles
+normally.
+
 ### 6.3 Vehicles
 
 ![Vehicles card](images/manual/card-vehicles.png)

@@ -193,6 +193,12 @@ namespace CityGenerator.Runtime
                 // first ticking.
                 physicsState = PhysicsState.Driving;
                 EnterDrivingPhysics();
+
+                // Only a Rigidbody-mode vehicle registers: with Enable Physics off nothing is
+                // paired and the physics scene stays exactly as it was before SPEC 17. See
+                // VehiclePedestrianCollisionFilter for why this is a per-pair ignore and not a
+                // layer-matrix entry.
+                VehiclePedestrianCollisionFilter.RegisterVehicle(ownCollider);
             }
 
             if (network == null)
@@ -220,6 +226,7 @@ namespace CityGenerator.Runtime
         {
             if (ownCollider != null)
                 ColliderRegistry.Remove(ownCollider.GetEntityId());
+            VehiclePedestrianCollisionFilter.UnregisterVehicle(ownCollider);
             if (trafficManager != null)
             {
                 trafficManager.Unregister(this);
@@ -374,6 +381,14 @@ namespace CityGenerator.Runtime
         /// would otherwise put the whole queue into Recovering and stop it respecting lights.
         /// Only vehicles in physics mode, currently Driving, react at all -- kinematic vehicles
         /// have no Rigidbody to receive OnCollisionEnter from in the first place.
+        ///
+        /// SPEC 17: a person never knocks a car out of Driving, whatever the impulse says. A
+        /// pedestrian is a static collider moved by transform (see PedestrianAgent) and the player
+        /// is a CharacterController, so PhysX reports the contact with an effectively infinite mass
+        /// on the other side -- far above the threshold, and the car was then released to physics
+        /// and visibly dragged by whoever walked into it. VehiclePedestrianCollisionFilter already
+        /// suppresses the NPC contact entirely; this check covers everything it deliberately leaves
+        /// colliding (the player, and any user object on the pedestrian layer).
         /// </summary>
         private void OnCollisionEnter(Collision collision)
         {
@@ -383,7 +398,30 @@ namespace CityGenerator.Runtime
             if (collision.impulse.magnitude < VehicleImpactImpulseThreshold)
                 return;
 
+            if (IsPedestrianContact(collision.collider))
+                return;
+
             EnterRecovering();
+        }
+
+        /// <summary>
+        /// Whether a contact comes from a person rather than from a vehicle or scenery. Checks the
+        /// pedestrian layer first (the sensor mask assigned per instance, which covers every
+        /// generated pedestrian and the player) and only then walks the hierarchy, for a user
+        /// pedestrian prefab whose own deeper collider -- left untouched by the tool's collider
+        /// policy, so never on that layer -- is what actually made contact. The walk is reached
+        /// only on a contact already above the impulse threshold, so it never runs on the routine
+        /// bumper-to-bumper touching of a queue.
+        /// </summary>
+        private bool IsPedestrianContact(Collider other)
+        {
+            if (other == null)
+                return false;
+
+            if ((pedestrianMask.value & (1 << other.gameObject.layer)) != 0)
+                return true;
+
+            return other.GetComponentInParent<PedestrianAgent>() != null;
         }
 
         /// <summary>

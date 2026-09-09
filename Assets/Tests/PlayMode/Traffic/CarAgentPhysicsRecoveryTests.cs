@@ -22,6 +22,8 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         private GameObject networkGo;
         private GameObject carGo;
         private GameObject projectileGo;
+        private GameObject pedestrianNetworkGo;
+        private GameObject pedestrianGo;
         private float previousTimeScale;
 
         [SetUp]
@@ -36,6 +38,8 @@ namespace CityGenerator.Tests.PlayMode.Traffic
             Time.timeScale = previousTimeScale;
             if (carGo != null) Object.Destroy(carGo);
             if (projectileGo != null) Object.Destroy(projectileGo);
+            if (pedestrianGo != null) Object.Destroy(pedestrianGo);
+            if (pedestrianNetworkGo != null) Object.Destroy(pedestrianNetworkGo);
             if (networkGo != null) Object.Destroy(networkGo);
         }
 
@@ -109,6 +113,93 @@ namespace CityGenerator.Tests.PlayMode.Traffic
             prb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             projectileGo.AddComponent<SphereCollider>().radius = 1f;
             prb.linearVelocity = Vector3.forward * speed;
+        }
+
+        /// <summary>The tool's own pedestrian layer when the project has it (this one does, created
+        /// at generation time); any unnamed user layer index behaves identically for a synthetic
+        /// physics test, so a project that has never generated a city still runs these.</summary>
+        private static int PedestrianLayer()
+        {
+            int layer = LayerMask.NameToLayer(CityGeneratorConstants.PedestrianLayerName);
+            return layer >= 0 ? layer : 9;
+        }
+
+        /// <summary>Builds a minimal PedestrianAgent (its own network with a single Ring node, so
+        /// Start() finds one and doesn't disable the component) carrying the same kind of root
+        /// proxy collider CityGeneratorColliderUtility gives a generated pedestrian: a plain
+        /// collider with no Rigidbody, i.e. infinite mass to PhysX.</summary>
+        private void BuildPedestrian(Vector3 position)
+        {
+            pedestrianNetworkGo = new GameObject("PedestrianNetwork");
+            PedestrianNetwork pedestrianNetwork = pedestrianNetworkGo.AddComponent<PedestrianNetwork>();
+            PedestrianManager pedestrianManager = pedestrianNetworkGo.AddComponent<PedestrianManager>();
+            SetField(pedestrianNetwork, "manager", pedestrianManager);
+            pedestrianNetwork.AddNode(position, PedestrianNodeKind.Ring);
+
+            pedestrianGo = new GameObject("Pedestrian");
+            pedestrianGo.transform.position = position;
+            pedestrianGo.layer = PedestrianLayer();
+            pedestrianGo.SetActive(false);
+            pedestrianGo.AddComponent<CapsuleCollider>();
+            pedestrianGo.AddComponent<Animator>();
+
+            PedestrianAgent pedestrian = pedestrianGo.AddComponent<PedestrianAgent>();
+            SetField(pedestrian, "network", pedestrianNetwork);
+
+            pedestrianGo.SetActive(true);
+        }
+
+        [UnityTest]
+        public IEnumerator PedestrianCollider_IsIgnoredByAPhysicsVehicle()
+        {
+            (_, CarAgent agent) = BuildDrivingCar(new Vector3(80000f, 0f, 0f));
+            yield return null;
+
+            BuildPedestrian(agent.transform.position + Vector3.forward * 5f);
+            yield return null;
+
+            Assert.IsTrue(Physics.GetIgnoreCollision(agent.OwnCollider, pedestrianGo.GetComponent<Collider>()),
+                "A pedestrian is a static collider moved by transform: left colliding, it shoves the car off its lane.");
+        }
+
+        [UnityTest]
+        public IEnumerator NonPedestrianColliderOnTheSameLayer_KeepsColliding()
+        {
+            (_, CarAgent agent) = BuildDrivingCar(new Vector3(90000f, 0f, 0f));
+            yield return null;
+
+            // The player shares the pedestrian layer (CityGeneratorSceneBuilder.AssignPedestrianLayer)
+            // but is no PedestrianAgent: only registered agents are paired, which is exactly why
+            // this is a per-pair ignore instead of a Vehicle/Pedestrian layer-matrix entry.
+            var playerStandIn = new GameObject("PlayerStandIn") { layer = PedestrianLayer() };
+            playerStandIn.transform.position = agent.transform.position + Vector3.forward * 5f;
+            Collider playerCollider = playerStandIn.AddComponent<CapsuleCollider>();
+            yield return null;
+
+            bool ignored = Physics.GetIgnoreCollision(agent.OwnCollider, playerCollider);
+            Object.Destroy(playerStandIn);
+
+            Assert.IsFalse(ignored, "Only registered PedestrianAgents are ignored; the player must keep colliding with cars.");
+        }
+
+        [UnityTest]
+        public IEnumerator HardImpactFromThePedestrianLayer_NeverEntersRecovering()
+        {
+            (_, CarAgent agent) = BuildDrivingCar(new Vector3(100000f, 0f, 0f));
+            yield return null;
+
+            LayerMask pedestrianMask = 1 << PedestrianLayer();
+            SetField(agent, "pedestrianMask", pedestrianMask);
+
+            // Well above VehicleImpactImpulseThreshold: a person must never knock a car out of
+            // Driving, whatever the impulse says.
+            FireProjectileAt(carGo, speed: 40f, mass: 1500f);
+            projectileGo.layer = PedestrianLayer();
+
+            for (int i = 0; i < 40; i++)
+                yield return new WaitForFixedUpdate();
+
+            Assert.AreEqual("Driving", PhysicsStateName(agent), "A contact from the pedestrian layer must never trigger Recovering.");
         }
 
         [UnityTest]

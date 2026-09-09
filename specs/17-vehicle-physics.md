@@ -172,6 +172,9 @@ Cada paso deja el proyecto compilando y es comprobable por sí solo.
 - [ ] Un vehículo golpeado por un Rigidbody dinámico externo (no generado por la tool) responde de la misma forma.
 - [ ] Un vehículo desviado que choca contra geometría estática (un edificio, una farola) rebota/se detiene contra ella en vez de atravesarla.
 - [ ] Un roce por debajo del umbral de impulso (p. ej. una cola de coches tocándose en un semáforo) NO dispara `Recovering`.
+- [ ] Un peatón que camina contra un vehículo no lo desplaza, no lo desvía de su carril y no dispara `Recovering`, por rápido que llegue.
+- [ ] El player sigue chocando físicamente con los vehículos (no los atraviesa), y tampoco los saca de `Driving`.
+- [ ] Con `Enable Physics` OFF no se ignora ninguna pareja de colliders: el comportamiento físico de la escena es idéntico a antes de esta spec.
 
 **Recuperación**
 
@@ -230,9 +233,19 @@ Cada paso deja el proyecto compilando y es comprobable por sí solo.
 
 - **Tests EditMode del generador + PlayMode de la máquina de estados**, en vez de solo QA manual. Decisión explícita del usuario, siguiendo el precedente ya sentado por SPEC 05/15/16: el bug caro de esta spec (una reserva de cruce que no se libera durante `Recovering`, reproduciendo el deadlock de cinco minutos por otra vía) es exactamente el tipo de regresión silenciosa que solo se manifiesta en PlayMode, no en una inspección visual rápida.
 
+**Peatones contra vehículos (añadido durante QA manual, tras el paso 9)**
+
+- **Un peatón nunca mueve ni desestabiliza a un coche.** Detectado en QA: un peatón que choca contra un coche lo arrastra. La causa no es la masa sino el tipo de cuerpo — un peatón generado es un `Collider` sin `Rigidbody` movido por `transform.position` (`PedestrianAgent`), es decir un collider *estático* teletransportado, de masa infinita para PhysX. La depenetración empuja al coche fuera de su carril y el impulso del contacto supera de largo `VehicleImpactImpulseThreshold`, así que el coche entra en `Recovering`, deja de reescribir su propia velocidad y el peatón lo arrastra visiblemente.
+- **La solución son dos piezas, ambas necesarias.** (1) `VehiclePedestrianCollisionFilter` (`Runtime`) empareja con `Physics.IgnoreCollision` el collider proxy de cada vehículo en modo Rigidbody con el de cada `PedestrianAgent` registrado, así que el contacto no llega a existir; el registro ocurre en el `OnEnable` de ambos agentes (Unity resetea el estado de ignore de un collider al deshabilitarlo y volver a habilitarlo, así que un pase único al arrancar la escena no sobreviviría) y solo para un coche que realmente tiene `Rigidbody`. (2) `CarAgent.OnCollisionEnter` descarta cualquier contacto que `IsPedestrianContact` reconozca (capa de `pedestrianMask` primero, y solo entonces un `GetComponentInParent<PedestrianAgent>()` para el prefab de usuario cuyo collider profundo — intacto por la política de colliders, por tanto nunca en esa capa — es el que ha tocado), sea cual sea el impulso.
+- **Descartado: desactivar el par Vehicle↔Pedestrian en la matriz de colisión del proyecto.** Una línea en vez de un registro por parejas, pero el player vive en la capa `Pedestrian` a propósito (`CityGeneratorSceneBuilder.AssignPedestrianLayer`), así que atravesaría los coches — regresión visible. Además escribe en los Project Settings del usuario, justo lo que el invariante de portabilidad evita. El emparejamiento por `PedestrianAgent` registrado deja al player, y a cualquier otro objeto que el usuario ponga en esa capa, colisionando exactamente igual que antes.
+- **Descartado: convertir el collider proxy del peatón en `isTrigger`.** También elimina la respuesta física y los sensores del coche seguirían viéndolo (`QueryTriggerInteraction.Collide`), pero el player dejaría de chocar con los peatones y cambiaría el comportamiento también con `Enable Physics` OFF — incumple la paridad bit a bit que esta spec exige.
+- **Descartado: subir `VehicleImpactImpulseThreshold`.** El umbral gobierna también los choques legítimos entre coches; subirlo hasta tapar a un peatón de masa infinita (no hay tal valor) mataría los accidentes reales.
+- **Descartado: `Rigidbody` kinemático en el peatón.** Un kinemático sigue teniendo masa infinita y empuja igual; solo abarataría mover un collider estático.
+- **Solo el collider proxy raíz de cada lado entra en el emparejamiento**, coherente con la política de colliders que ya sigue `CityGeneratorColliderUtility`: un collider más profundo en la jerarquía del prefab del usuario se deja intacto también aquí. La segunda pieza (el filtro de `OnCollisionEnter`) es la que cubre ese caso.
+
 **Fuera de alcance**
 
-- **Sin colisión con peatones/player, sin feedback de impacto, sin menú de aplicar físicas a una ciudad ya generada.** Los tres, decisión explícita del usuario en las rondas de clarificación: el primero porque ni `PedestrianAgent` ni el `CharacterController` del player encajan con el mecanismo de `OnCollisionEnter` que esta spec usa (merecería su propio diseño); el segundo porque toca subsistemas ajenos (audio, mallas) sin que se haya pedido; el tercero porque `Enable Physics` es un ajuste de generación como cualquier otro — cambiarlo y regenerar es el flujo ya establecido por la tool para todo lo demás.
+- **Sin colisión con peatones/player, sin feedback de impacto, sin menú de aplicar físicas a una ciudad ya generada.** Los tres, decisión explícita del usuario en las rondas de clarificación: el primero porque ni `PedestrianAgent` ni el `CharacterController` del player encajan con el mecanismo de `OnCollisionEnter` que esta spec usa (merecería su propio diseño) — lo que la spec sí hace, tras el hallazgo de QA de arriba, es *suprimir* esa interacción física, no modelarla: atropellar a un peatón (derribo, ragdoll, feedback) sigue fuera de alcance y necesitaría su propia spec; el segundo porque toca subsistemas ajenos (audio, mallas) sin que se haya pedido; el tercero porque `Enable Physics` es un ajuste de generación como cualquier otro — cambiarlo y regenerar es el flujo ya establecido por la tool para todo lo demás.
 
 ## Riesgos identificados
 
