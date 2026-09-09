@@ -138,6 +138,8 @@ namespace CityGenerator.Editor
             settings.props.lampPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Lamp.prefab");
             settings.props.binPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Bin.prefab");
 
+            settings.vehiclePhysics.physicMaterial = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>($"{DefaultAssetsRoot}/Physics/Vehicle.physicsmaterial");
+
             settings.audio.ambience.clips = new List<AmbienceClipEntry>
             {
                 new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/city-ambiance.wav"), volume = 1f },

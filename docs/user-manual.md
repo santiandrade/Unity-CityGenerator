@@ -396,6 +396,11 @@ Toggle action exists in both maps, which is what lets you switch back and forth.
 |---|---|
 | **Enabled** | Generate the traffic network, its lights and the vehicles. |
 | **Vehicle Count** | How many vehicles to spawn, split across the Vehicles list by percentage. |
+| **Enable Physics** | Off by default. Gives every generated vehicle a dynamic Rigidbody and physic material, so it responds realistically to impacts from other vehicles, from any external Rigidbody in the scene (e.g. one driven by the player), or from static geometry, and recovers back onto its route afterwards. Off leaves vehicle behaviour exactly as before this toggle existed. |
+| **Mass** | Rigidbody mass (kg), shared by every generated vehicle. Only shown when Enable Physics is on. |
+| **Drag** | Rigidbody linear drag. Only shown when Enable Physics is on. |
+| **Angular Drag** | Rigidbody angular drag. Only shown when Enable Physics is on. |
+| **Physic Material** | Physic material assigned to each vehicle's collider. Optional — left empty, the collider keeps Unity's default material. Only shown when Enable Physics is on. |
 
 The traffic network and its traffic lights are generated **regardless of this toggle**, so
 pedestrian crossings always have a real light to obey. What the toggle controls is the
@@ -405,6 +410,17 @@ A warning appears under Vehicle Count as soon as the count exceeds a safe fracti
 grid's spawn points. Vehicles have no route planning or congestion avoidance, so beyond that
 point traffic tends to gridlock rather than flow; the message tells you the recommended
 maximum for your current grid. It is a warning, not a blocking error.
+
+With Enable Physics on, a vehicle drives exactly as before (velocity/rotation imposed every
+physics step, no engine forces) until it takes a hard enough impact, at which point it lets go
+of the Rigidbody entirely — free to tumble, get pushed, or bounce off static geometry — and
+gives up its crossing reservation and lane so it never blocks other traffic while out of
+control. Once it settles (upright, low angular velocity), it straightens up and rejoins the
+network from wherever it ended up, not from where it was hit. A light roll — like a queue of
+cars touching bumper-to-bumper at a red light — never triggers this. Mass/Drag/Angular Drag
+are shared by every generated vehicle instance, not configurable per vehicle type; the mass in
+particular decides whether an external Rigidbody (e.g. the player's) can push a generated
+vehicle around or bounces off it instead.
 
 ### 6.2 Vehicles
 

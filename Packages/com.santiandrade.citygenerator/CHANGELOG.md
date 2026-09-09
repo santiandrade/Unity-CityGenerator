@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New `Enable Physics` toggle in the Traffic card (off by default). When on, every generated
+  vehicle gets a dynamic `Rigidbody` and a configurable physic material (`Mass`/`Drag`/
+  `Angular Drag`/`Physic Material`), so it responds realistically to impacts from other
+  vehicles, from any external Rigidbody in the scene, or from static geometry, and recovers back
+  onto its route afterwards once it settles. With the toggle off, generation and runtime
+  behaviour are unchanged from before this feature.
 
 ## [3.2.0] - 2026-09-09
 ### Added

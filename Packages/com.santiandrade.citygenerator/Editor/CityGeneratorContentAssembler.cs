@@ -178,7 +178,7 @@ namespace CityGenerator.Editor
             {
                 Report("Vehicles", 0.7f);
                 CityGeneratorTrafficBuilder.AddManagerComponent(trafficNetworkGroup, network);
-                vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random);
+                vehicleInstances = CityGeneratorTrafficBuilder.BuildVehicles(settings.vehicles, settings.general.vehicleCount, network, vehicles, random, settings.general.enablePhysics, settings.vehiclePhysics);
                 // Independent of includePedestrians: the player (placed by CityGeneratorSceneBuilder
                 // on the same layer) needs vehicles to detect it too.
                 CityGeneratorPedestrianBuilder.EnsurePedestrianLayerAndAssignMask(vehicles);

@@ -402,6 +402,11 @@ Toggle existe en ambos maps, y es lo que permite alternar entre ellos.
 |---|---|
 | **Enabled** | Genera la red de tráfico, sus semáforos y los vehículos. |
 | **Vehicle Count** | Cuántos vehículos generar, repartidos entre la lista Vehicles por porcentaje. |
+| **Enable Physics** | Desactivado por defecto. Da a cada vehículo generado un Rigidbody dinámico y un physic material, para que responda de forma realista a los impactos de otros vehículos, de cualquier Rigidbody externo de la escena (p. ej. uno conducido por el jugador) o de geometría estática, y se recupere volviendo a su ruta después. Desactivado, el comportamiento de los vehículos es idéntico al de antes de que existiera este interruptor. |
+| **Mass** | Masa del Rigidbody (kg), compartida por todos los vehículos generados. Solo visible con Enable Physics activado. |
+| **Drag** | Drag lineal del Rigidbody. Solo visible con Enable Physics activado. |
+| **Angular Drag** | Drag angular del Rigidbody. Solo visible con Enable Physics activado. |
+| **Physic Material** | Physic material asignado al collider de cada vehículo. Opcional — si se deja vacío, el collider conserva el material por defecto de Unity. Solo visible con Enable Physics activado. |
 
 La red de tráfico y sus semáforos se generan **independientemente de este interruptor**, para
 que los pasos de peatones siempre tengan un semáforo real al que obedecer. Lo que controla el
@@ -411,6 +416,17 @@ Bajo Vehicle Count aparece un aviso en cuanto el número supera una fracción se
 puntos de aparición de la retícula. Los vehículos no planifican ruta ni evitan congestión, así
 que a partir de ahí el tráfico tiende a atascarse en lugar de fluir; el mensaje te indica el
 máximo recomendado para tu retícula actual. Es un aviso, no un error bloqueante.
+
+Con Enable Physics activado, un vehículo conduce exactamente igual que antes (velocidad/rotación
+impuestas en cada paso de física, sin fuerzas de motor) hasta que recibe un impacto lo bastante
+fuerte: entonces suelta el Rigidbody por completo — libre para volcar, ser empujado o rebotar
+contra geometría estática — y renuncia a su reserva de cruce y a su carril, de modo que nunca
+bloquea al resto del tráfico mientras está fuera de control. Al asentarse (en posición vertical,
+con poca velocidad angular), se endereza y se reengancha a la red desde donde haya quedado, no
+desde donde fue golpeado. Un roce leve — como una cola de coches tocándose en un semáforo — nunca
+dispara esto. Mass/Drag/Angular Drag son compartidos por todos los vehículos generados, no
+configurables por tipo de vehículo; la masa en particular decide si un Rigidbody externo (p. ej.
+el del jugador) puede empujar a un vehículo generado o rebota contra él.
 
 ### 6.2 Vehicles
 

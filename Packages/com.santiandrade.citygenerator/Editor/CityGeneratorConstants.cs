@@ -114,5 +114,16 @@ namespace CityGenerator.Editor
         // MaxGridSize canvas regardless of the previous gridWidth/gridHeight.
         public const int MinGridSize = 1;
         public const int MaxGridSize = 10;
+
+        // SPEC 17: only used when a vehicle carries a dynamic Rigidbody (Enable Physics on).
+        // Filters the constant contact of a queue of cars touching bumper-to-bumper at a red
+        // light -- a roll below this impulse never triggers CarAgent.Recovering.
+        public const float VehicleImpactImpulseThreshold = 400f; // kg.m/s
+        public const float VehicleRecoveryAngularVelocitySettle = 0.5f; // rad/s
+        public const float VehicleRecoveryUprightDot = 0.98f; // Vector3.Dot(transform.up, Vector3.up)
+        public const float VehicleRecoveryMinDuration = 0.5f;
+        public const float VehicleRecoveryMaxDuration = 8f;
+        public const int VehicleReattachMaxAttempts = 5;
+        public const float VehicleReattachRetryInterval = 0.5f;
     }
 }

@@ -89,6 +89,7 @@ namespace CityGenerator.Editor
         private VisualElement validationPanel;
         private VisualElement resultPanel;
         private PropertyField seedField;
+        private VisualElement vehiclePhysicsFields;
         private Button buildNewSceneButton;
         private Button rebuildCurrentSceneButton;
 
@@ -421,8 +422,18 @@ namespace CityGenerator.Editor
             vehicleDensityWarning.style.display = DisplayStyle.None;
             content.Add(vehicleDensityWarning);
 
+            content.Add(CreateField("general.enablePhysics", "Enable Physics"));
+
+            vehiclePhysicsFields = new VisualElement();
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.mass", "Mass"));
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.drag", "Drag"));
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.angularDrag", "Angular Drag"));
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.physicMaterial", "Physic Material"));
+            content.Add(vehiclePhysicsFields);
+
             RegisterCardPathAlias("general.includeTraffic", trafficCard, TabTraffic);
             RegisterCardPathAlias("general.vehicleCount", trafficCard, TabTraffic);
+            RegisterCardPathAlias("general.enablePhysics", trafficCard, TabTraffic);
         }
 
         private void BuildVehiclesCard(VisualElement parent)
@@ -840,6 +851,9 @@ namespace CityGenerator.Editor
 
             bool useCustomSeed = FindProperty("general.useCustomSeed").boolValue;
             seedField.style.display = useCustomSeed ? DisplayStyle.Flex : DisplayStyle.None;
+
+            bool enablePhysics = FindProperty("general.enablePhysics").boolValue;
+            vehiclePhysicsFields.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
 
             SetWarning(vehicleDensityWarning, GetVehicleDensityWarning());
             SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());

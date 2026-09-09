@@ -26,6 +26,7 @@ namespace CityGenerator.Editor
         public MinimapSettings minimap = MinimapSettings.Default();
         public DayNightSettings dayNight = DayNightSettings.Default();
         public AudioSettings audio = AudioSettings.Default();
+        public VehiclePhysicsSettings vehiclePhysics = new();
     }
 
     [Serializable]
@@ -61,6 +62,24 @@ namespace CityGenerator.Editor
         public GameObject playerPrefab; // required if playerEnabled
         [Tooltip("Input Actions asset driving the Player Prefab's Move/Sprint/Jump and the generated camera's Look input. Required if Player is enabled.")]
         public InputActionAsset inputActions; // required if playerEnabled
+        [Tooltip("Give generated vehicles their own Rigidbody and physic material, so they respond realistically to impacts from other vehicles, external Rigidbodies in the scene, or static geometry, and recover back onto their route afterwards. Off leaves vehicle behaviour exactly as before this feature.")]
+        public bool enablePhysics = false;
+    }
+
+    // Applied to every generated vehicle instance by CityGeneratorTrafficBuilder.BuildVehicles,
+    // only when GeneralSettings.enablePhysics is on -- mirrors how PlayerSettings/PedestrianBehaviourSettings
+    // are single blocks of subsystem tuning kept apart from GeneralSettings' generation flags.
+    [Serializable]
+    internal class VehiclePhysicsSettings
+    {
+        [Tooltip("Rigidbody mass (kg), shared by every generated vehicle instance.")]
+        public float mass = 1200f;
+        [Tooltip("Rigidbody linear drag.")]
+        public float drag = 0.3f;
+        [Tooltip("Rigidbody angular drag.")]
+        public float angularDrag = 1f;
+        [Tooltip("Physic material assigned to each vehicle's proxy collider. Optional -- left empty, the collider keeps Unity's default material.")]
+        public PhysicsMaterial physicMaterial;
     }
 
     [Serializable]
