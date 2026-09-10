@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- Quitting a city generated with `Enable Physics` on no longer stalls for ten seconds or
+  more, on leaving Play mode and on closing a build alike. Suppressing the vehicle/pedestrian
+  contact registers one ignored pair per (physics vehicle, pedestrian) combination, and Unity
+  keeps every ignored pair in a single global table that it rescans in full whenever *any*
+  collider is destroyed — so a scene teardown paid that scan once per collider in the whole
+  scene, not just per vehicle or pedestrian. The table is now emptied in one pass before
+  teardown starts. Behaviour is otherwise unchanged: pedestrians still never push a vehicle
+  around, and the player still collides with vehicles exactly as before.
 
 ## [3.3.0] - 2026-09-10
 ### Added
