@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- New `Enable Physics` toggle in a new Physics card, below Traffic (off by default), marked
+  **BETA**. When on, every generated vehicle gets a dynamic `Rigidbody` and a configurable physic
+  material (`Mass`/`Drag`/`Angular Drag`/`Physic Material`), so it responds realistically to
+  impacts from other vehicles, from any external Rigidbody in the scene, or from static geometry,
+  and recovers back onto its route afterwards once it settles. With the toggle off, generation and
+  runtime behaviour are unchanged from before this feature. Turning it on shows an info box
+  warning that it's still beta, may cause unexpected vehicle behaviour, and recommending against
+  a high vehicle count relative to the generated city's size. Pedestrians never push a vehicle
+  around under this mode: a generated pedestrian has no `Rigidbody` (infinite mass, as far as the
+  physics engine is concerned), so its contact with a vehicle is suppressed outright and never
+  counts as an impact. The player keeps colliding with vehicles exactly as before.
 
 ## [3.2.0] - 2026-09-09
 ### Added

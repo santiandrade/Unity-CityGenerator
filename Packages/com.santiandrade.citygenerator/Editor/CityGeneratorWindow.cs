@@ -50,6 +50,7 @@ namespace CityGenerator.Editor
         private CityGeneratorCard buildingsCard;
         private CityGeneratorCard vegetationCard;
         private CityGeneratorCard trafficCard;
+        private CityGeneratorCard physicsCard;
         private CityGeneratorCard vehiclesCard;
         private CityGeneratorCard pedestriansCard;
         private CityGeneratorCard pedestrianSettingsCard;
@@ -89,6 +90,8 @@ namespace CityGenerator.Editor
         private VisualElement validationPanel;
         private VisualElement resultPanel;
         private PropertyField seedField;
+        private VisualElement vehiclePhysicsFields;
+        private HelpBox physicsBetaWarning;
         private Button buildNewSceneButton;
         private Button rebuildCurrentSceneButton;
 
@@ -241,6 +244,7 @@ namespace CityGenerator.Editor
             BuildFreeCameraCard(playerContainer);
 
             BuildTrafficCard(trafficContainer);
+            BuildPhysicsCard(trafficContainer);
             BuildVehiclesCard(trafficContainer);
 
             BuildPedestrianSettingsCard(pedestriansContainer);
@@ -423,6 +427,33 @@ namespace CityGenerator.Editor
 
             RegisterCardPathAlias("general.includeTraffic", trafficCard, TabTraffic);
             RegisterCardPathAlias("general.vehicleCount", trafficCard, TabTraffic);
+        }
+
+        private void BuildPhysicsCard(VisualElement parent)
+        {
+            physicsCard = AddCard(parent, "physics", "Physics", "d_PhysicsMaterial Icon", defaultExpanded: false, TabTraffic, isBeta: true);
+            VisualElement content = physicsCard.ContentContainer;
+
+            content.Add(CreateField("general.enablePhysics", "Enable Physics"));
+
+            physicsBetaWarning = new HelpBox(
+                "Enable Physics is a BETA feature: it may cause unexpected vehicle behaviour. For "
+                + "reliable results, avoid a high vehicle count relative to the generated city's size.",
+                HelpBoxMessageType.Info);
+            content.Add(physicsBetaWarning);
+
+            vehiclePhysicsFields = new VisualElement();
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.mass", "Mass"));
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.drag", "Drag"));
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.angularDrag", "Angular Drag"));
+            vehiclePhysicsFields.Add(CreateField("vehiclePhysics.physicMaterial", "Physic Material"));
+            content.Add(vehiclePhysicsFields);
+
+            RegisterCardPathAlias("general.enablePhysics", physicsCard, TabTraffic);
+            RegisterCardPathAlias("vehiclePhysics.mass", physicsCard, TabTraffic);
+            RegisterCardPathAlias("vehiclePhysics.drag", physicsCard, TabTraffic);
+            RegisterCardPathAlias("vehiclePhysics.angularDrag", physicsCard, TabTraffic);
+            RegisterCardPathAlias("vehiclePhysics.physicMaterial", physicsCard, TabTraffic);
         }
 
         private void BuildVehiclesCard(VisualElement parent)
@@ -670,9 +701,9 @@ namespace CityGenerator.Editor
             resetButton.clicked += ResetToDefaults;
         }
 
-        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId)
+        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId, bool isBeta = false)
         {
-            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded);
+            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded, isBeta);
             parent.Add(card);
             cardsBySettingsSegment[settingsSegment] = card;
             tabIdBySettingsSegment[settingsSegment] = tabId;
@@ -761,6 +792,7 @@ namespace CityGenerator.Editor
             buildingsCard.SetBadge($"{FindProperty("buildingPrefabs").arraySize} prefabs");
             vegetationCard.SetBadge($"{FindProperty("vegetation.prefabs").arraySize} prefabs");
             trafficCard.SetBadge(FindProperty("general.includeTraffic").boolValue ? $"{vehicleCount} vehicles" : "Disabled");
+            physicsCard.SetBadge(FindProperty("general.enablePhysics").boolValue ? "Enabled" : "Disabled");
             vehiclesCard.SetBadge($"{FindProperty("vehicles").arraySize} entries");
             pedestriansCard.SetBadge($"{FindProperty("pedestrians").arraySize} entries");
 
@@ -840,6 +872,10 @@ namespace CityGenerator.Editor
 
             bool useCustomSeed = FindProperty("general.useCustomSeed").boolValue;
             seedField.style.display = useCustomSeed ? DisplayStyle.Flex : DisplayStyle.None;
+
+            bool enablePhysics = FindProperty("general.enablePhysics").boolValue;
+            vehiclePhysicsFields.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
+            physicsBetaWarning.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
 
             SetWarning(vehicleDensityWarning, GetVehicleDensityWarning());
             SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());

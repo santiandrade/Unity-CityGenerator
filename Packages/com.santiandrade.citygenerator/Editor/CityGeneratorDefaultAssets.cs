@@ -116,27 +116,13 @@ namespace CityGenerator.Editor
 
             settings.customPedestrians = new List<CustomPedestrianEntry>
             {
-                new()
-                {
-                    title = "Dog",
-                    prefab = Load($"{DefaultAssetsRoot}/Prefabs/Pets/Animal-Dog.prefab"),
-                    count = 1,
-                    selectedNodeIndices = new List<int> { 125, 129, 124, 127, 120, 126, 118, 128, 122 },
-                    graphFingerprint = 1030382475,
-                },
-                new()
-                {
-                    title = "Cat",
-                    prefab = Load($"{DefaultAssetsRoot}/Prefabs/Pets/Animal-Cat.prefab"),
-                    count = 2,
-                    selectedNodeIndices = new List<int> { 211, 215, 210, 212, 204, 214, 208, 213, 206, 207, 205, 203, 209 },
-                    graphFingerprint = 1030382475,
-                },
             };
 
             settings.props.trafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight.prefab");
             settings.props.lampPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Lamp.prefab");
             settings.props.binPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Bin.prefab");
+
+            settings.vehiclePhysics.physicMaterial = LoadPhysicsMaterial($"{DefaultAssetsRoot}/Physics/Vehicle.physicMaterial");
 
             settings.audio.ambience.clips = new List<AmbienceClipEntry>
             {
@@ -152,5 +138,6 @@ namespace CityGenerator.Editor
 
         private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);
         private static AudioClip LoadAudioClip(string path) => AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+        private static PhysicsMaterial LoadPhysicsMaterial(string path) => AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);
     }
 }

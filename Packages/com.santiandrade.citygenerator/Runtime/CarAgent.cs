@@ -53,6 +53,17 @@ namespace CityGenerator.Runtime
         [Tooltip("Seconds a car keeps pushing through once it starts breaking a deadlock.")]
         [SerializeField] private float deadlockBreakDuration = 4f;
 
+        // SPEC 17: own copies of the physics-recovery tuning (not read from
+        // CityGeneratorConstants: that class is Editor-only/internal, and every other Runtime
+        // script in the tool already keeps its own copy of the numbers it needs).
+        private const float VehicleImpactImpulseThreshold = 400f; // kg.m/s
+        private const float VehicleRecoveryAngularVelocitySettle = 0.5f; // rad/s
+        private const float VehicleRecoveryUprightDot = 0.98f; // Vector3.Dot(transform.up, Vector3.up)
+        private const float VehicleRecoveryMinDuration = 0.5f;
+        private const float VehicleRecoveryMaxDuration = 8f;
+        private const int VehicleReattachMaxAttempts = 5;
+        private const float VehicleReattachRetryInterval = 0.5f;
+
         private readonly RaycastHit[] pedestrianHits = new RaycastHit[16];
         // Sized generously above the old SphereCast sensor's 16: VehicleAheadClearance now scans
         // every vehicle within the full sensorRange of this car's own position (see its comment),
@@ -107,6 +118,16 @@ namespace CityGenerator.Runtime
         private float breakingDeadlockUntil;
         private bool approachingUnsignalled;
 
+        // SPEC 17: null when Enable Physics was off at generation time -- detected once in
+        // OnEnable by GetComponent<Rigidbody>(), never read from a settings flag (this component
+        // doesn't know CityGeneratorSettings). Any Rigidbody on this GameObject activates physics
+        // mode, whoever put it there.
+        private Rigidbody rb;
+        private PhysicsState physicsState;
+        private float recoveringSince;
+        private int reattachAttempts;
+        private float nextReattachAttemptTime;
+
         /// <summary>Reason the vehicle is braking, useful for debugging jams.</summary>
         public enum StopReason
         {
@@ -114,6 +135,20 @@ namespace CityGenerator.Runtime
             TrafficLight,
             Priority,
             VehicleAhead
+        }
+
+        /// <summary>Driving state when the vehicle has a dynamic Rigidbody (Enable Physics on
+        /// generation). A vehicle with no Rigidbody never leaves an implicit "cinematic" mode and
+        /// never reads this.</summary>
+        private enum PhysicsState
+        {
+            /// <summary>Driving normally: CarAgent owns the Rigidbody's velocity/rotation every
+            /// FixedUpdate, gravity off, Y position frozen -- the physical equivalent of today's
+            /// y = 0f.</summary>
+            Driving,
+            /// <summary>An impact released the Rigidbody: gravity on, Y unfrozen, all driving
+            /// logic suspended, engine physics free to move/rotate it until it settles.</summary>
+            Recovering
         }
 
         public float Speed => speed;
@@ -129,6 +164,10 @@ namespace CityGenerator.Runtime
         /// another CarAgent's <see cref="VehicleAheadClearance"/> lane-occupancy fast path to
         /// measure real surface distance instead of raw center-to-center distance.</summary>
         public Collider OwnCollider => ownCollider;
+        /// <summary>Whether this instance was generated with Enable Physics on (a non-kinematic
+        /// Rigidbody sits on this GameObject). Read by TrafficManager to route it to FixedUpdate
+        /// instead of Update.</summary>
+        public bool HasPhysics => rb != null;
 
         // Counter reset for Play sessions with Domain Reload disabled, where a static field
         // otherwise keeps growing across sessions and breaks the carId tie-break in IsDeadlockedWith.
@@ -144,6 +183,23 @@ namespace CityGenerator.Runtime
             ownCollider = GetComponent<Collider>();
             if (ownCollider != null)
                 ColliderRegistry[ownCollider.GetEntityId()] = this;
+
+            rb = GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                // Set explicitly here, before Tick ever runs, rather than trusting the builder's
+                // configuration: AddComponent<Rigidbody>() defaults useGravity to true, so without
+                // this the car would fall for the one frame between generation and this component
+                // first ticking.
+                physicsState = PhysicsState.Driving;
+                EnterDrivingPhysics();
+
+                // Only a Rigidbody-mode vehicle registers: with Enable Physics off nothing is
+                // paired and the physics scene stays exactly as it was before SPEC 17. See
+                // VehiclePedestrianCollisionFilter for why this is a per-pair ignore and not a
+                // layer-matrix entry.
+                VehiclePedestrianCollisionFilter.RegisterVehicle(ownCollider);
+            }
 
             if (network == null)
             {
@@ -170,6 +226,7 @@ namespace CityGenerator.Runtime
         {
             if (ownCollider != null)
                 ColliderRegistry.Remove(ownCollider.GetEntityId());
+            VehiclePedestrianCollisionFilter.UnregisterVehicle(ownCollider);
             if (trafficManager != null)
             {
                 trafficManager.Unregister(this);
@@ -214,6 +271,12 @@ namespace CityGenerator.Runtime
         /// </summary>
         public void Tick(float dt, bool runSensor)
         {
+            if (physicsState == PhysicsState.Recovering)
+            {
+                TickRecovering(dt);
+                return;
+            }
+
             TrafficNetwork.Node node = network.GetNode(targetNode);
 
             Vector3 toTarget = node.Position - transform.position;
@@ -289,16 +352,175 @@ namespace CityGenerator.Runtime
             distanceTravelled += step;
             stoppedTime = speed < 0.3f ? stoppedTime + dt : 0f;
 
-            // Uses the just-computed rotation's forward, not transform.forward: matches the
-            // original behaviour where rotation was applied before this was read.
-            Vector3 position = transform.position + (rotation * Vector3.forward) * step;
-            position.y = 0f;
-            transform.SetPositionAndRotation(position, rotation);
+            if (rb != null)
+            {
+                // Y position is already frozen by the Rigidbody's constraints (see
+                // EnterDrivingPhysics), so unlike the kinematic path below there's no y = 0f to
+                // apply by hand.
+                rb.MoveRotation(rotation);
+                rb.linearVelocity = (rotation * Vector3.forward) * speed;
+            }
+            else
+            {
+                // Uses the just-computed rotation's forward, not transform.forward: matches the
+                // original behaviour where rotation was applied before this was read.
+                Vector3 position = transform.position + (rotation * Vector3.forward) * step;
+                position.y = 0f;
+                transform.SetPositionAndRotation(position, rotation);
+            }
 
             if (distance < arriveRadius)
             {
                 AdvanceToNextNode();
             }
+        }
+
+        /// <summary>
+        /// Detects an impact hard enough to break driving behaviour: filters out the constant,
+        /// low-impulse contact of a queue of cars touching bumper-to-bumper at a red light, which
+        /// would otherwise put the whole queue into Recovering and stop it respecting lights.
+        /// Only vehicles in physics mode, currently Driving, react at all -- kinematic vehicles
+        /// have no Rigidbody to receive OnCollisionEnter from in the first place.
+        ///
+        /// SPEC 17: a person never knocks a car out of Driving, whatever the impulse says. A
+        /// pedestrian is a static collider moved by transform (see PedestrianAgent) and the player
+        /// is a CharacterController, so PhysX reports the contact with an effectively infinite mass
+        /// on the other side -- far above the threshold, and the car was then released to physics
+        /// and visibly dragged by whoever walked into it. VehiclePedestrianCollisionFilter already
+        /// suppresses the NPC contact entirely; this check covers everything it deliberately leaves
+        /// colliding (the player, and any user object on the pedestrian layer).
+        /// </summary>
+        private void OnCollisionEnter(Collision collision)
+        {
+            if (rb == null || physicsState != PhysicsState.Driving)
+                return;
+
+            if (collision.impulse.magnitude < VehicleImpactImpulseThreshold)
+                return;
+
+            if (IsPedestrianContact(collision.collider))
+                return;
+
+            EnterRecovering();
+        }
+
+        /// <summary>
+        /// Whether a contact comes from a person rather than from a vehicle or scenery. Checks the
+        /// pedestrian layer first (the sensor mask assigned per instance, which covers every
+        /// generated pedestrian and the player) and only then walks the hierarchy, for a user
+        /// pedestrian prefab whose own deeper collider -- left untouched by the tool's collider
+        /// policy, so never on that layer -- is what actually made contact. The walk is reached
+        /// only on a contact already above the impulse threshold, so it never runs on the routine
+        /// bumper-to-bumper touching of a queue.
+        /// </summary>
+        private bool IsPedestrianContact(Collider other)
+        {
+            if (other == null)
+                return false;
+
+            if ((pedestrianMask.value & (1 << other.gameObject.layer)) != 0)
+                return true;
+
+            return other.GetComponentInParent<PedestrianAgent>() != null;
+        }
+
+        /// <summary>
+        /// Applies the Driving regime to the Rigidbody: no gravity, Y position frozen alongside
+        /// the rotation constraints the builder already set, so a car conducting normally with
+        /// physics on behaves exactly like the kinematic y = 0f case. Called both from OnEnable
+        /// (first drive) and when re-engaging after Recovering.
+        /// </summary>
+        private void EnterDrivingPhysics()
+        {
+            rb.useGravity = false;
+            rb.constraints |= RigidbodyConstraints.FreezePositionY;
+        }
+
+        /// <summary>
+        /// Releases the Rigidbody to the engine's own physics: suspends all driving logic, frees
+        /// gravity/Y position, and gives up the crossing reservation and lane-occupancy segment
+        /// exactly as ReleaseReservationWhileBlocked/AdvanceToNextNode.Leave already do elsewhere --
+        /// an accident that kept either would block that crossing/lane indefinitely, reproducing
+        /// the five-minute deadlock CLAUDE.md documents, by another path.
+        /// </summary>
+        private void EnterRecovering()
+        {
+            physicsState = PhysicsState.Recovering;
+            recoveringSince = Time.time;
+            reattachAttempts = 0;
+            nextReattachAttemptTime = 0f;
+
+            if (reservedIntersection >= 0)
+            {
+                network.Release(reservedIntersection, carId);
+                reservedIntersection = -1;
+            }
+            if (targetNode >= 0)
+                network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+
+            rb.useGravity = true;
+            rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
+        }
+
+        /// <summary>
+        /// While Recovering, waits for the Rigidbody to settle (low angular velocity, close to
+        /// upright) before re-attaching to the network, with a minimum and a maximum safety
+        /// duration so it neither exits mid-tumble nor waits forever. Ticked from FixedUpdate via
+        /// TrafficManager, same as the Driving path, since a physics vehicle's motion is only
+        /// meaningful there.
+        /// </summary>
+        private void TickRecovering(float dt)
+        {
+            float elapsed = Time.time - recoveringSince;
+            bool settled = rb.angularVelocity.magnitude < VehicleRecoveryAngularVelocitySettle
+                            && Vector3.Dot(transform.up, Vector3.up) > VehicleRecoveryUprightDot;
+
+            if (elapsed < VehicleRecoveryMinDuration)
+                return;
+            if (!settled && elapsed < VehicleRecoveryMaxDuration)
+                return;
+
+            TryReattach();
+        }
+
+        /// <summary>
+        /// Straightens the vehicle upright (keeping its current yaw) and looks for a network node
+        /// ahead of its resting position/heading -- the same FindNodeAhead call Start already uses
+        /// for the initial attach. Retries a bounded number of times, spaced out in time (the car
+        /// may still be settling), before giving up via the same enabled = false fallback
+        /// AdvanceToNextNode already uses for a genuine Custom Grid dead end.
+        /// </summary>
+        private void TryReattach()
+        {
+            if (Time.time < nextReattachAttemptTime)
+                return;
+
+            Vector3 forward = transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.forward;
+            Quaternion uprightRotation = Quaternion.LookRotation(forward.normalized, Vector3.up);
+            transform.rotation = uprightRotation;
+
+            int node = network.FindNodeAhead(transform.position, uprightRotation * Vector3.forward);
+            if (node < 0)
+            {
+                reattachAttempts++;
+                if (reattachAttempts >= VehicleReattachMaxAttempts)
+                {
+                    enabled = false;
+                    return;
+                }
+                nextReattachAttemptTime = Time.time + VehicleReattachRetryInterval;
+                return;
+            }
+
+            targetNode = node;
+            fromNode = -1;
+            network.LaneOccupancy?.Enter(this, fromNode, targetNode);
+
+            physicsState = PhysicsState.Driving;
+            EnterDrivingPhysics();
         }
 
         /// <summary>

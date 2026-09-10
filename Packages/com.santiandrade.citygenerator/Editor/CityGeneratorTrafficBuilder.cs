@@ -339,7 +339,7 @@ namespace CityGenerator.Editor
         /// distinct (shuffled) node of the already-built <paramref name="network"/> so it starts
         /// exactly on a lane, facing the lane's direction.
         /// </summary>
-        public static List<GameObject> BuildVehicles(List<VehicleEntry> vehicles, int vehicleCount, TrafficNetwork network, Transform vehiclesGroup, System.Random random)
+        public static List<GameObject> BuildVehicles(List<VehicleEntry> vehicles, int vehicleCount, TrafficNetwork network, Transform vehiclesGroup, System.Random random, bool enablePhysics, VehiclePhysicsSettings physicsSettings)
         {
             var placed = new List<GameObject>();
             if (vehicleCount <= 0 || vehicles.Count == 0 || network == null)
@@ -400,6 +400,26 @@ namespace CityGenerator.Editor
                     Collider proxyCollider = CityGeneratorColliderUtility.EnsureNonTriggerCollider(instance);
                     if (vehicleLayer >= 0)
                         proxyCollider.gameObject.layer = vehicleLayer;
+
+                    // SPEC 17: only when Enable Physics is on -- with it off, generation stays
+                    // bit-for-bit identical to before this feature (no Rigidbody, no material).
+                    // Added on the instance root (same GameObject as the proxy collider, never a
+                    // user prefab's own colliders elsewhere in the hierarchy), so it works with any
+                    // vehicle prefab, not just the ones baked into DefaultAssets.
+                    if (enablePhysics)
+                    {
+                        Rigidbody rb = instance.AddComponent<Rigidbody>();
+                        rb.mass = physicsSettings.mass;
+                        rb.linearDamping = physicsSettings.drag;
+                        rb.angularDamping = physicsSettings.angularDrag;
+                        rb.useGravity = false;
+                        rb.interpolation = RigidbodyInterpolation.Interpolate;
+                        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+
+                        if (physicsSettings.physicMaterial != null)
+                            proxyCollider.sharedMaterial = physicsSettings.physicMaterial;
+                    }
 
                     // vehicleMask must match the proxy's layer exactly, not whatever LayerMask the
                     // prefab happened to be authored with: if the 'Vehicle' layer sits at a

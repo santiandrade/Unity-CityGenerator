@@ -10,6 +10,10 @@ namespace CityGenerator.Runtime
     /// camera, reusing the previous frame's clearance on skipped frames — see the technical
     /// review, A.7. Below <see cref="staggerMinAgentCount"/> every car casts every frame, so a
     /// small generated city (e.g. the default 30-car demo) behaves exactly as before.
+    ///
+    /// SPEC 17: a car generated with Enable Physics on (<see cref="CarAgent.HasPhysics"/>) ticks
+    /// from <c>FixedUpdate</c> instead, since it drives by setting Rigidbody velocity/rotation;
+    /// a kinematic car keeps ticking from <c>Update</c> unchanged, even under the same manager.
     /// </summary>
     [DisallowMultipleComponent]
     public class TrafficManager : MonoBehaviour
@@ -30,11 +34,18 @@ namespace CityGenerator.Runtime
 
         // CarAgent.Tick can synchronously disable its own component (a Custom Grid dead end has
         // nowhere to send the car — see AdvanceToNextNode), which fires OnDisable -> Unregister
-        // -> agents.Remove within the same foreach that is ticking it. Update iterates this
-        // snapshot instead of the live set, rebuilt only when membership actually changes, so a
-        // mid-frame Unregister never invalidates the enumeration in progress.
-        private CarAgent[] agentsSnapshot = System.Array.Empty<CarAgent>();
+        // -> agents.Remove within the same foreach that is ticking it. Update/FixedUpdate iterate
+        // these snapshots instead of the live set, rebuilt only when membership actually changes,
+        // so a mid-frame Unregister never invalidates the enumeration in progress.
+        //
+        // SPEC 17: split by HasPhysics (detected per agent, not by a flag on this manager -- see
+        // CarAgent.HasPhysics) so a Rigidbody-mode car ticks from FixedUpdate while a kinematic one
+        // keeps ticking from Update exactly as before, even under the same manager (SPEC 16: two
+        // cities, one with Enable Physics on and one off, can share a TrafficManager).
+        private CarAgent[] kinematicSnapshot = System.Array.Empty<CarAgent>();
+        private CarAgent[] physicsSnapshot = System.Array.Empty<CarAgent>();
         private bool agentsSnapshotDirty;
+        private int physicsFrameIndex;
 
         /// <summary>Live count of currently registered agents — reflects a car that has since
         /// self-disabled (e.g. a Custom Grid dead end), unlike a count frozen at generation time.</summary>
@@ -52,17 +63,35 @@ namespace CityGenerator.Runtime
                 agentsSnapshotDirty = true;
         }
 
+        private void RebuildSnapshotsIfDirty()
+        {
+            if (!agentsSnapshotDirty)
+                return;
+
+            var kinematic = new List<CarAgent>(agents.Count);
+            var physics = new List<CarAgent>(agents.Count);
+            foreach (CarAgent agent in agents)
+            {
+                if (agent.HasPhysics)
+                    physics.Add(agent);
+                else
+                    kinematic.Add(agent);
+            }
+
+            kinematicSnapshot = kinematic.ToArray();
+            physicsSnapshot = physics.ToArray();
+            agentsSnapshotDirty = false;
+        }
+
         private void Update()
         {
             if (agents.Count == 0)
                 return;
 
-            if (agentsSnapshotDirty)
-            {
-                agentsSnapshot = new CarAgent[agents.Count];
-                agents.CopyTo(agentsSnapshot);
-                agentsSnapshotDirty = false;
-            }
+            RebuildSnapshotsIfDirty();
+
+            if (kinematicSnapshot.Length == 0)
+                return;
 
             float dt = Time.deltaTime;
             bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
@@ -70,7 +99,7 @@ namespace CityGenerator.Runtime
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
             float sqrStaggerDistance = staggerDistance * staggerDistance;
 
-            foreach (CarAgent agent in agentsSnapshot)
+            foreach (CarAgent agent in kinematicSnapshot)
             {
                 bool runSensor = true;
 
@@ -84,19 +113,57 @@ namespace CityGenerator.Runtime
                 agent.Tick(dt, runSensor);
             }
 
-            // CarAgent moves every car by writing transform.position directly (no Rigidbody), and
-            // its forward sensor queries the physics scene in the same frame. With
+            // CarAgent moves every kinematic car by writing transform.position directly (no
+            // Rigidbody), and its forward sensor queries the physics scene in the same frame. With
             // DynamicsManager.m_AutoSyncTransforms off (the project default), the physics scene
             // only sees those moves at the next FixedUpdate, so at 60+ FPS the sensor reads
             // positions up to one frame stale — enough error for cars to miss each other on
-            // corners. One sync here, after every CarAgent has ticked, is cheaper than turning
-            // auto-sync back on (which would sync on every single query instead of once per
-            // frame). Only called when there's at least one agent (the early return above), and
-            // moved here from TrafficNetwork.LateUpdate so a scene with a TrafficNetwork but zero
-            // registered CarAgents never pays for it at all.
+            // corners. One sync here, after every kinematic CarAgent has ticked, is cheaper than
+            // turning auto-sync back on (which would sync on every single query instead of once
+            // per frame). Only called when there's at least one kinematic agent (the early return
+            // above): a Rigidbody-mode car's position is already known to the physics engine, so
+            // it never needs this sync.
             Physics.SyncTransforms();
 
             frameIndex++;
+        }
+
+        // SPEC 17: writing a Rigidbody's velocity/rotation outside the physics step produces
+        // jitter and lets an impact's momentum get overwritten erratically depending on
+        // framerate, so every Rigidbody-mode CarAgent ticks here instead of Update. Only runs at
+        // all once at least one registered agent is in physics mode (the early return below),
+        // exactly mirroring how Update above costs nothing for a scene with zero CarAgents.
+        private void FixedUpdate()
+        {
+            if (agents.Count == 0)
+                return;
+
+            RebuildSnapshotsIfDirty();
+
+            if (physicsSnapshot.Length == 0)
+                return;
+
+            float dt = Time.fixedDeltaTime;
+            bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
+            Camera cam = staggeringActive ? Camera.main : null;
+            Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
+            float sqrStaggerDistance = staggerDistance * staggerDistance;
+
+            foreach (CarAgent agent in physicsSnapshot)
+            {
+                bool runSensor = true;
+
+                if (cam != null)
+                {
+                    float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
+                    if (sqrDistance > sqrStaggerDistance)
+                        runSensor = (physicsFrameIndex + agent.CarId) % staggerFrames == 0;
+                }
+
+                agent.Tick(dt, runSensor);
+            }
+
+            physicsFrameIndex++;
         }
     }
 }

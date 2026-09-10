@@ -38,7 +38,8 @@ documento da por hecho que el paquete ya está instalado.
   - [5.4 Free Camera](#54-free-camera)
 - [6. Pestaña Traffic](#6-pestaña-traffic)
   - [6.1 Traffic](#61-traffic)
-  - [6.2 Vehicles](#62-vehicles)
+  - [6.2 Physics](#62-physics)
+  - [6.3 Vehicles](#63-vehicles)
 - [7. Pestaña Pedestrians](#7-pestaña-pedestrians)
   - [7.1 Pedestrian Settings](#71-pedestrian-settings)
   - [7.2 Pedestrians](#72-pedestrians)
@@ -412,7 +413,36 @@ puntos de aparición de la retícula. Los vehículos no planifican ruta ni evita
 que a partir de ahí el tráfico tiende a atascarse en lugar de fluir; el mensaje te indica el
 máximo recomendado para tu retícula actual. Es un aviso, no un error bloqueante.
 
-### 6.2 Vehicles
+### 6.2 Physics
+
+El título de la card lleva una etiqueta **BETA** — la funcionalidad sigue en desarrollo activo.
+
+| Parámetro | Qué hace |
+|---|---|
+| **Enable Physics** | Desactivado por defecto. Da a cada vehículo generado un Rigidbody dinámico y un physic material, para que responda de forma realista a los impactos de otros vehículos, de cualquier Rigidbody externo de la escena (p. ej. uno conducido por el jugador) o de geometría estática, y se recupere volviendo a su ruta después. Desactivado, el comportamiento de los vehículos es idéntico al de antes de que existiera este interruptor. Al activarlo aparece un aviso informativo de que es una funcionalidad beta que puede provocar comportamientos inesperados en los vehículos, y recomendando no introducir un número de vehículos alto en proporción al tamaño de la ciudad generada. |
+| **Mass** | Masa del Rigidbody (kg), compartida por todos los vehículos generados. Solo visible con Enable Physics activado. |
+| **Drag** | Drag lineal del Rigidbody. Solo visible con Enable Physics activado. |
+| **Angular Drag** | Drag angular del Rigidbody. Solo visible con Enable Physics activado. |
+| **Physic Material** | Physic material asignado al collider de cada vehículo. Opcional — si se deja vacío, el collider conserva el material por defecto de Unity. Solo visible con Enable Physics activado. |
+
+Con Enable Physics activado, un vehículo conduce exactamente igual que antes (velocidad/rotación
+impuestas en cada paso de física, sin fuerzas de motor) hasta que recibe un impacto lo bastante
+fuerte: entonces suelta el Rigidbody por completo — libre para volcar, ser empujado o rebotar
+contra geometría estática — y renuncia a su reserva de cruce y a su carril, de modo que nunca
+bloquea al resto del tráfico mientras está fuera de control. Al asentarse (en posición vertical,
+con poca velocidad angular), se endereza y se reengancha a la red desde donde haya quedado, no
+desde donde fue golpeado. Un roce leve — como una cola de coches tocándose en un semáforo — nunca
+dispara esto. Mass/Drag/Angular Drag son compartidos por todos los vehículos generados, no
+configurables por tipo de vehículo; la masa en particular decide si un Rigidbody externo (p. ej.
+el del jugador) puede empujar a un vehículo generado o rebota contra él.
+
+Los peatones son la única excepción: un peatón generado nunca empuja a un vehículo, nunca lo
+desvía de su carril y nunca cuenta como impacto, por mucho que se le eche encima. Los peatones no
+tienen Rigidbody, así que para el motor de física pesan infinito — dejar ese contacto activo hacía
+que una persona pudiera arrastrar un coche calle abajo. El jugador sí sigue chocando con los
+vehículos con normalidad.
+
+### 6.3 Vehicles
 
 ![Card Vehicles](images/manual/card-vehicles.png)
 

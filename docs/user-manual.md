@@ -39,7 +39,8 @@ already installed.
   - [5.4 Free Camera](#54-free-camera)
 - [6. Traffic tab](#6-traffic-tab)
   - [6.1 Traffic](#61-traffic)
-  - [6.2 Vehicles](#62-vehicles)
+  - [6.2 Physics](#62-physics)
+  - [6.3 Vehicles](#63-vehicles)
 - [7. Pedestrians tab](#7-pedestrians-tab)
   - [7.1 Pedestrian Settings](#71-pedestrian-settings)
   - [7.2 Pedestrians](#72-pedestrians)
@@ -406,7 +407,36 @@ grid's spawn points. Vehicles have no route planning or congestion avoidance, so
 point traffic tends to gridlock rather than flow; the message tells you the recommended
 maximum for your current grid. It is a warning, not a blocking error.
 
-### 6.2 Vehicles
+### 6.2 Physics
+
+The card's title carries a **BETA** tag — the feature is still under active development.
+
+| Parameter | What it does |
+|---|---|
+| **Enable Physics** | Off by default. Gives every generated vehicle a dynamic Rigidbody and physic material, so it responds realistically to impacts from other vehicles, from any external Rigidbody in the scene (e.g. one driven by the player), or from static geometry, and recovers back onto its route afterwards. Off leaves vehicle behaviour exactly as before this toggle existed. Turning it on shows an info box warning that this is a beta feature which may cause unexpected vehicle behaviour, and recommending against a high vehicle count relative to the generated city's size. |
+| **Mass** | Rigidbody mass (kg), shared by every generated vehicle. Only shown when Enable Physics is on. |
+| **Drag** | Rigidbody linear drag. Only shown when Enable Physics is on. |
+| **Angular Drag** | Rigidbody angular drag. Only shown when Enable Physics is on. |
+| **Physic Material** | Physic material assigned to each vehicle's collider. Optional — left empty, the collider keeps Unity's default material. Only shown when Enable Physics is on. |
+
+With Enable Physics on, a vehicle drives exactly as before (velocity/rotation imposed every
+physics step, no engine forces) until it takes a hard enough impact, at which point it lets go
+of the Rigidbody entirely — free to tumble, get pushed, or bounce off static geometry — and
+gives up its crossing reservation and lane so it never blocks other traffic while out of
+control. Once it settles (upright, low angular velocity), it straightens up and rejoins the
+network from wherever it ended up, not from where it was hit. A light roll — like a queue of
+cars touching bumper-to-bumper at a red light — never triggers this. Mass/Drag/Angular Drag
+are shared by every generated vehicle instance, not configurable per vehicle type; the mass in
+particular decides whether an external Rigidbody (e.g. the player's) can push a generated
+vehicle around or bounces off it instead.
+
+Pedestrians are the one exception: a generated pedestrian never pushes a vehicle, never knocks
+it off its lane and never counts as an impact, no matter how it walks into one. Pedestrians have
+no Rigidbody, so to the physics engine they weigh infinitely much — leaving that contact enabled
+meant a person could drag a car down the street. The player still collides with vehicles
+normally.
+
+### 6.3 Vehicles
 
 ![Vehicles card](images/manual/card-vehicles.png)
 
