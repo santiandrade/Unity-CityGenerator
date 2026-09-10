@@ -431,7 +431,7 @@ namespace CityGenerator.Editor
 
         private void BuildPhysicsCard(VisualElement parent)
         {
-            physicsCard = AddCard(parent, "physics", "Physics", "d_PhysicMaterial Icon", defaultExpanded: false, TabTraffic, isBeta: true);
+            physicsCard = AddCard(parent, "physics", "Physics", "d_PhysicsMaterial Icon", defaultExpanded: false, TabTraffic, isBeta: true);
             VisualElement content = physicsCard.ContentContainer;
 
             content.Add(CreateField("general.enablePhysics", "Enable Physics"));

@@ -117,6 +117,9 @@ namespace CityGenerator.Editor
             AppendAssignment(sb, "settings.props.binPrefab", BuildGameObjectExpr(settings.props.binPrefab, warnings, "Props > Bin Prefab"));
             sb.AppendLine();
 
+            AppendAssignment(sb, "settings.vehiclePhysics.physicMaterial", BuildPhysicsMaterialExpr(settings.vehiclePhysics.physicMaterial, warnings, "Physics > Physic Material"));
+            sb.AppendLine();
+
             AppendAmbienceClips(sb, settings.audio.ambience.clips, warnings);
             sb.AppendLine();
 
@@ -126,6 +129,7 @@ namespace CityGenerator.Editor
             sb.AppendLine();
             sb.AppendLine("        private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);");
             sb.AppendLine("        private static AudioClip LoadAudioClip(string path) => AssetDatabase.LoadAssetAtPath<AudioClip>(path);");
+            sb.AppendLine("        private static PhysicsMaterial LoadPhysicsMaterial(string path) => AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             return sb.ToString();
@@ -302,6 +306,18 @@ namespace CityGenerator.Editor
             string fullPath = AssetDatabase.GetAssetPath(prefab);
             warnings.Add($"{fieldLabel} ('{prefab.name}') lives outside {DefaultAssetsRoot}/ (at '{fullPath}'). The generated default now hardcodes that path, which won't resolve in another project — move the asset into DefaultAssets/ and run \"Set Current Selection As Default\" again.");
             return $"AssetDatabase.LoadAssetAtPath<GameObject>(\"{Escape(fullPath)}\")";
+        }
+
+        private static string BuildPhysicsMaterialExpr(PhysicsMaterial material, List<string> warnings, string fieldLabel)
+        {
+            if (material == null)
+                return null;
+            string relative = RelativeToRoot(material);
+            if (relative != null)
+                return $"LoadPhysicsMaterial($\"{{DefaultAssetsRoot}}/{relative}\")";
+            string fullPath = AssetDatabase.GetAssetPath(material);
+            warnings.Add($"{fieldLabel} ('{material.name}') lives outside {DefaultAssetsRoot}/ (at '{fullPath}'). The generated default now hardcodes that path, which won't resolve in another project — move the asset into DefaultAssets/ and run \"Set Current Selection As Default\" again.");
+            return $"LoadPhysicsMaterial(\"{Escape(fullPath)}\")";
         }
 
         private static string BuildInputActionsExpr(InputActionAsset asset, List<string> warnings)
