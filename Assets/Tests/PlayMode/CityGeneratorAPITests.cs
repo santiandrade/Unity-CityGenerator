@@ -206,5 +206,45 @@ namespace CityGenerator.Tests.PlayMode
             int count = CityGeneratorAPI.Default?.City.BuildingCount ?? 0;
             Assert.AreEqual(0, count);
         }
+
+        [Test]
+        public void MinimapMarkers_DelegateToTheCityHud()
+        {
+            CityGeneratorInfo cityInfo = BuildCity("City");
+            var hudGo = new GameObject("MinimapHUD", typeof(RectTransform));
+            hudGo.transform.SetParent(cityInfo.transform, false);
+            cityInfo.minimapHUD = hudGo.AddComponent<MinimapHUD>();
+            var prefabGo = new GameObject("MarkerPrefab", typeof(RectTransform));
+            RectTransform prefab = prefabGo.GetComponent<RectTransform>();
+            CityGeneratorCity city = CityGeneratorAPI.For(cityInfo).Value;
+
+            MinimapMarkerHandle fixedHandle = city.Minimap.AddMarker(new Vector3(10f, 0f, 20f), prefab, true);
+            MinimapMarkerHandle trackedHandle = city.Minimap.AddMarker(cityInfo.transform, prefab, false);
+
+            Assert.IsTrue(fixedHandle.IsValid);
+            Assert.IsTrue(trackedHandle.IsValid);
+            city.Minimap.RemoveMarker(fixedHandle);
+            Assert.IsFalse(fixedHandle.IsValid);
+            Assert.IsTrue(trackedHandle.IsValid);
+
+            Object.DestroyImmediate(prefabGo);
+            Object.DestroyImmediate(cityInfo.gameObject);
+        }
+
+        [Test]
+        public void MinimapMarkers_ReturnInvalidHandleWhenCityHasNoHud()
+        {
+            CityGeneratorInfo cityInfo = BuildCity("City");
+            var prefabGo = new GameObject("MarkerPrefab", typeof(RectTransform));
+            RectTransform prefab = prefabGo.GetComponent<RectTransform>();
+            MinimapModule minimap = CityGeneratorAPI.For(cityInfo).Value.Minimap;
+
+            Assert.IsFalse(minimap.AddMarker(Vector3.zero, prefab, false).IsValid);
+            Assert.IsFalse(minimap.AddMarker(cityInfo.transform, prefab, false).IsValid);
+            Assert.DoesNotThrow(() => minimap.RemoveMarker(default));
+
+            Object.DestroyImmediate(prefabGo);
+            Object.DestroyImmediate(cityInfo.gameObject);
+        }
     }
 }

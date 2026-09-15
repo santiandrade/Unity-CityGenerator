@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Runtime minimap markers can now be registered through `MinimapHUD` or
+  `CityGeneratorCity.Minimap`, using a caller-provided UI prefab and either a moving `Transform` or
+  a fixed world position. Each marker can hide outside the visible radius or remain clamped just
+  inside the circular edge, and is removed safely through an owner-bound `MinimapMarkerHandle`.
+
 ## [3.3.1] - 2026-09-10
 ### Fixed
 

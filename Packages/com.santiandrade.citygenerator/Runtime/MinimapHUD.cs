@@ -4,6 +4,29 @@ using UnityEngine.UI;
 
 namespace CityGenerator.Runtime
 {
+    internal sealed class MinimapMarkerToken
+    {
+    }
+
+    /// <summary>Opaque reference to one runtime minimap marker.</summary>
+    public readonly struct MinimapMarkerHandle
+    {
+        private readonly MinimapHUD owner;
+        private readonly MinimapMarkerToken token;
+
+        internal MinimapMarkerHandle(MinimapHUD owner, MinimapMarkerToken token)
+        {
+            this.owner = owner;
+            this.token = token;
+        }
+
+        /// <summary>True while the owning HUD and marker registration still exist.</summary>
+        public bool IsValid => owner != null && owner.ContainsDynamicMarker(token);
+
+        internal MinimapHUD Owner => owner;
+        internal MinimapMarkerToken Token => token;
+    }
+
     /// <summary>
     /// Circular minimap HUD, built by <c>CityGeneratorSceneBuilder</c> from the package's
     /// <c>DefaultAssets/Prefabs/MinimapHUD.prefab</c> (Canvas Screen Space Overlay + a circle-masked
@@ -24,6 +47,39 @@ namespace CityGenerator.Runtime
     /// </summary>
     public class MinimapHUD : MonoBehaviour
     {
+        private sealed class DynamicMarker
+        {
+            public Transform target;
+            public Vector3 fixedPosition;
+            public bool followsTransform;
+            public bool clampToEdge;
+            public RectTransform instance;
+            public readonly Vector3[] worldCorners = new Vector3[4];
+        }
+
+        private readonly struct MapProjection
+        {
+            public readonly double worldOffsetX;
+            public readonly double worldOffsetY;
+            public readonly double worldDistance;
+            public readonly double projectedDistance;
+            public readonly Vector2 uiOffset;
+
+            public MapProjection(
+                double worldOffsetX,
+                double worldOffsetY,
+                double worldDistance,
+                double projectedDistance,
+                Vector2 uiOffset)
+            {
+                this.worldOffsetX = worldOffsetX;
+                this.worldOffsetY = worldOffsetY;
+                this.worldDistance = worldDistance;
+                this.projectedDistance = projectedDistance;
+                this.uiOffset = uiOffset;
+            }
+        }
+
         [Tooltip("Radius, in meters, of the world area visible around the player. Written by CityGeneratorSceneBuilder from MinimapSettings.viewRadiusMeters.")]
         [SerializeField] private float viewRadiusMeters = 60f;
 
@@ -55,6 +111,153 @@ namespace CityGenerator.Runtime
         private MinimapData data;
         private Transform trackedTransform;
         private readonly List<RectTransform> poiMarkerPool = new();
+        private readonly Dictionary<MinimapMarkerToken, DynamicMarker> dynamicMarkers = new();
+        private readonly List<MinimapMarkerToken> dynamicMarkerSnapshot = new();
+        private bool isUpdatingDynamicMarkers;
+        private bool isTearingDown;
+
+        /// <summary>Adds a marker that follows a Transform in world space.</summary>
+        public MinimapMarkerHandle AddMarker(Transform target, RectTransform prefab, bool clampToEdge)
+        {
+            if (target == null || prefab == null)
+                return default;
+
+            return AddDynamicMarker(target, target.position, true, prefab, clampToEdge);
+        }
+
+        /// <summary>Adds a marker at a fixed world-space position.</summary>
+        public MinimapMarkerHandle AddMarker(Vector3 position, RectTransform prefab, bool clampToEdge)
+        {
+            if (prefab == null || !IsFinite(position))
+                return default;
+
+            return AddDynamicMarker(null, position, false, prefab, clampToEdge);
+        }
+
+        /// <summary>Removes a marker owned by this HUD. Invalid or foreign handles are ignored.</summary>
+        public void RemoveMarker(MinimapMarkerHandle handle)
+        {
+            if (handle.Owner != this || handle.Token == null ||
+                !dynamicMarkers.Remove(handle.Token, out DynamicMarker marker))
+                return;
+
+            DestroyMarkerInstance(marker.instance);
+        }
+
+        internal bool ContainsDynamicMarker(MinimapMarkerToken token) =>
+            token != null && dynamicMarkers.ContainsKey(token);
+
+        private MinimapMarkerHandle AddDynamicMarker(
+            Transform target,
+            Vector3 fixedPosition,
+            bool followsTransform,
+            RectTransform prefab,
+            bool clampToEdge)
+        {
+            if (isTearingDown)
+                return default;
+
+            Transform parent = poiMarkerContainer != null
+                ? poiMarkerContainer
+                : mapImage != null && mapImage.rectTransform.parent != null
+                    ? mapImage.rectTransform.parent
+                    : transform;
+            RectTransform instance = Instantiate(prefab, parent);
+            if (this == null || instance == null || isTearingDown)
+            {
+                DestroyMarkerInstance(instance);
+                return default;
+            }
+
+            var token = new MinimapMarkerToken();
+            var marker = new DynamicMarker
+            {
+                target = target,
+                fixedPosition = fixedPosition,
+                followsTransform = followsTransform,
+                clampToEdge = clampToEdge,
+                instance = instance,
+            };
+            dynamicMarkers.Add(token, marker);
+
+            instance.anchorMin = new Vector2(0.5f, 0.5f);
+            if (!IsOwnedDynamicMarker(this, token, marker))
+            {
+                CleanupFailedDynamicMarker(this, token, marker);
+                return default;
+            }
+
+            instance.anchorMax = new Vector2(0.5f, 0.5f);
+            if (!IsOwnedDynamicMarker(this, token, marker))
+            {
+                CleanupFailedDynamicMarker(this, token, marker);
+                return default;
+            }
+
+            instance.gameObject.SetActive(false);
+            if (!IsOwnedDynamicMarker(this, token, marker))
+            {
+                CleanupFailedDynamicMarker(this, token, marker);
+                return default;
+            }
+
+            return new MinimapMarkerHandle(this, token);
+        }
+
+        private static bool IsOwnedDynamicMarker(
+            MinimapHUD owner,
+            MinimapMarkerToken token,
+            DynamicMarker marker) =>
+            owner != null && !owner.isTearingDown && marker.instance != null &&
+            owner.dynamicMarkers.TryGetValue(token, out DynamicMarker current) &&
+            ReferenceEquals(current, marker);
+
+        private static void CleanupFailedDynamicMarker(
+            MinimapHUD owner,
+            MinimapMarkerToken token,
+            DynamicMarker marker)
+        {
+            if (owner != null &&
+                owner.dynamicMarkers.TryGetValue(token, out DynamicMarker current) &&
+                ReferenceEquals(current, marker))
+            {
+                owner.dynamicMarkers.Remove(token);
+            }
+
+            DestroyMarkerInstance(marker.instance);
+        }
+
+        private static void DestroyMarkerInstance(RectTransform instance)
+        {
+            if (instance == null)
+                return;
+
+            instance.gameObject.SetActive(false);
+            if (instance == null)
+                return;
+
+            if (Application.isPlaying)
+                Destroy(instance.gameObject);
+            else
+                DestroyImmediate(instance.gameObject);
+        }
+
+        private void OnEnable()
+        {
+            bool canRender = TryGetDynamicMarkerPlayerPosition(out Vector3 playerPosition);
+            UpdateDynamicMarkers(playerPosition, canRender);
+        }
+
+        private void OnDestroy()
+        {
+            isTearingDown = true;
+            var markers = new List<DynamicMarker>(dynamicMarkers.Values);
+            dynamicMarkers.Clear();
+            dynamicMarkerSnapshot.Clear();
+
+            foreach (DynamicMarker marker in markers)
+                DestroyMarkerInstance(marker.instance);
+        }
 
         private void Start()
         {
@@ -122,10 +325,11 @@ namespace CityGenerator.Runtime
 
         private void LateUpdate()
         {
-            if (data == null || trackedTransform == null || mapImage == null)
+            bool canRender = TryGetDynamicMarkerPlayerPosition(out Vector3 playerPosition);
+            UpdateDynamicMarkers(playerPosition, canRender);
+            if (!canRender)
                 return;
 
-            Vector3 playerPosition = trackedTransform.position;
             UpdateMapWindow(playerPosition);
             UpdatePlayerMarker();
             UpdatePoiMarkers(playerPosition);
@@ -164,7 +368,7 @@ namespace CityGenerator.Runtime
             EnsurePoiMarkerPool(pointsOfInterest.Count);
 
             RectTransform mapRect = mapImage.rectTransform;
-            float pixelsPerMeter = mapRect.rect.width / (2f * viewRadiusMeters);
+            double unitsPerMeter = UnitsPerMeter(mapRect);
 
             for (int i = 0; i < poiMarkerPool.Count; i++)
             {
@@ -176,16 +380,180 @@ namespace CityGenerator.Runtime
                 }
 
                 PointOfInterestEntry poi = pointsOfInterest[i];
-                Vector2 worldOffset = new(poi.worldPosition.x - playerPosition.x, poi.worldPosition.z - playerPosition.z);
-                if (worldOffset.magnitude > viewRadiusMeters)
+                MapProjection projection = ProjectWorldToUi(poi.worldPosition, playerPosition, unitsPerMeter);
+                if (projection.worldDistance > viewRadiusMeters)
                 {
                     marker.gameObject.SetActive(false);
                     continue;
                 }
 
                 marker.gameObject.SetActive(true);
-                marker.anchoredPosition = worldOffset * pixelsPerMeter;
+                marker.anchoredPosition = projection.uiOffset;
             }
+        }
+
+        private bool TryGetDynamicMarkerPlayerPosition(out Vector3 playerPosition)
+        {
+            playerPosition = default;
+            if (data == null || trackedTransform == null || mapImage == null)
+                return false;
+
+            playerPosition = trackedTransform.position;
+            return true;
+        }
+
+        private void UpdateDynamicMarkers(Vector3 playerPosition, bool canRender)
+        {
+            if (isTearingDown || isUpdatingDynamicMarkers)
+                return;
+
+            isUpdatingDynamicMarkers = true;
+            dynamicMarkerSnapshot.Clear();
+            dynamicMarkerSnapshot.AddRange(dynamicMarkers.Keys);
+
+            try
+            {
+                RectTransform mapRect = canRender ? mapImage.rectTransform : null;
+                bool canProject = mapRect != null && IsFinite(viewRadiusMeters) && viewRadiusMeters > 0f &&
+                                  IsFinite(playerPosition) &&
+                                  IsFinite(mapRect.rect.width) && IsFinite(mapRect.rect.height) &&
+                                  mapRect.rect.width > 0f && mapRect.rect.height > 0f;
+                double unitsPerMeter = canProject
+                    ? UnitsPerMeter(mapRect)
+                    : 0d;
+                float mapRadius = canProject ? Mathf.Min(mapRect.rect.width, mapRect.rect.height) * 0.5f : 0f;
+
+                for (int i = 0; i < dynamicMarkerSnapshot.Count && !isTearingDown; i++)
+                {
+                    MinimapMarkerToken token = dynamicMarkerSnapshot[i];
+                    if (!dynamicMarkers.TryGetValue(token, out DynamicMarker marker))
+                        continue;
+
+                    if ((marker.followsTransform && marker.target == null) || marker.instance == null)
+                    {
+                        RemoveDynamicMarker(token);
+                        continue;
+                    }
+
+                    if (!canProject ||
+                        (marker.followsTransform && !marker.target.gameObject.activeInHierarchy))
+                    {
+                        marker.instance.gameObject.SetActive(false);
+                        continue;
+                    }
+
+                    Vector3 worldPosition = marker.followsTransform ? marker.target.position : marker.fixedPosition;
+                    if (!IsFinite(worldPosition))
+                    {
+                        marker.instance.gameObject.SetActive(false);
+                        continue;
+                    }
+
+                    MapProjection projection = ProjectWorldToUi(worldPosition, playerPosition, unitsPerMeter);
+                    if (!marker.clampToEdge && projection.worldDistance > viewRadiusMeters)
+                    {
+                        marker.instance.gameObject.SetActive(false);
+                        continue;
+                    }
+
+                    Vector2 position = projection.uiOffset;
+                    if (marker.clampToEdge)
+                    {
+                        float markerRadius = MarkerCornerRadius(marker);
+                        float safeRadius = IsFinite(markerRadius) ? Mathf.Max(0f, mapRadius - markerRadius) : 0f;
+                        if (projection.projectedDistance > safeRadius && projection.worldDistance > 0d)
+                        {
+                            double scale = safeRadius / projection.worldDistance;
+                            position = ToFiniteVector2(
+                                projection.worldOffsetX * scale,
+                                projection.worldOffsetY * scale);
+                        }
+                    }
+
+                    marker.instance.anchoredPosition = position;
+                    marker.instance.gameObject.SetActive(true);
+                }
+            }
+            finally
+            {
+                dynamicMarkerSnapshot.Clear();
+                isUpdatingDynamicMarkers = false;
+            }
+        }
+
+        private void RemoveDynamicMarker(MinimapMarkerToken token)
+        {
+            if (dynamicMarkers.Remove(token, out DynamicMarker marker))
+                DestroyMarkerInstance(marker.instance);
+        }
+
+        private double UnitsPerMeter(RectTransform mapRect) =>
+            (double)mapRect.rect.width / (2d * viewRadiusMeters);
+
+        private static MapProjection ProjectWorldToUi(
+            Vector3 worldPosition,
+            Vector3 playerPosition,
+            double unitsPerMeter)
+        {
+            double worldOffsetX = (double)worldPosition.x - playerPosition.x;
+            double worldOffsetY = (double)worldPosition.z - playerPosition.z;
+            double projectedX = worldOffsetX * unitsPerMeter;
+            double projectedY = worldOffsetY * unitsPerMeter;
+            return new MapProjection(
+                worldOffsetX,
+                worldOffsetY,
+                Magnitude(worldOffsetX, worldOffsetY),
+                Magnitude(projectedX, projectedY),
+                ToFiniteVector2(projectedX, projectedY));
+        }
+
+        private static double Magnitude(double x, double y)
+        {
+            double maximum = System.Math.Max(System.Math.Abs(x), System.Math.Abs(y));
+            if (maximum == 0d)
+                return 0d;
+
+            double normalizedX = x / maximum;
+            double normalizedY = y / maximum;
+            return maximum * System.Math.Sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+        }
+
+        private static Vector2 ToFiniteVector2(double x, double y) =>
+            new(ToFiniteFloat(x), ToFiniteFloat(y));
+
+        private static float ToFiniteFloat(double value)
+        {
+            if (double.IsNaN(value))
+                return 0f;
+            if (value > float.MaxValue)
+                return float.MaxValue;
+            if (value < -float.MaxValue)
+                return -float.MaxValue;
+            return (float)value;
+        }
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private static bool IsFinite(Vector3 value) =>
+            IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+
+        private static float MarkerCornerRadius(DynamicMarker marker)
+        {
+            RectTransform instance = marker.instance;
+            RectTransform parent = instance.parent as RectTransform;
+            if (parent == null)
+                return 0f;
+
+            instance.GetWorldCorners(marker.worldCorners);
+            Vector3 pivotWorld = instance.TransformPoint(Vector3.zero);
+            float maximum = 0f;
+            for (int i = 0; i < marker.worldCorners.Length; i++)
+            {
+                Vector3 offset = parent.InverseTransformVector(marker.worldCorners[i] - pivotWorld);
+                maximum = Mathf.Max(maximum, new Vector2(offset.x, offset.y).magnitude);
+            }
+
+            return maximum;
         }
 
         private void EnsurePoiMarkerPool(int count)

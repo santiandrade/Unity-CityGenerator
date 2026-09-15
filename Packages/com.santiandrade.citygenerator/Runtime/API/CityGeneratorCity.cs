@@ -128,6 +128,29 @@ namespace CityGenerator.Runtime
             if (info != null && info.minimapHUD != null)
                 info.minimapHUD.gameObject.SetActive(visible);
         }
+
+        /// <summary>Adds a marker that follows a Transform in world space.</summary>
+        public MinimapMarkerHandle AddMarker(Transform target, RectTransform prefab, bool clampToEdge)
+        {
+            return info != null && info.minimapHUD != null
+                ? info.minimapHUD.AddMarker(target, prefab, clampToEdge)
+                : default;
+        }
+
+        /// <summary>Adds a marker at a fixed world-space position.</summary>
+        public MinimapMarkerHandle AddMarker(Vector3 position, RectTransform prefab, bool clampToEdge)
+        {
+            return info != null && info.minimapHUD != null
+                ? info.minimapHUD.AddMarker(position, prefab, clampToEdge)
+                : default;
+        }
+
+        /// <summary>Removes a marker from this city's HUD. Invalid or foreign handles are ignored.</summary>
+        public void RemoveMarker(MinimapMarkerHandle handle)
+        {
+            if (info != null && info.minimapHUD != null)
+                info.minimapHUD.RemoveMarker(handle);
+        }
     }
 
     public readonly struct AudioModule

@@ -57,9 +57,10 @@ int buildingCount = CityGeneratorAPI.Default?.City.BuildingCount ?? 0;
   excepciones son mutaciones sobre comportamiento que la propia tool ya ejecuta de forma segura en
   runtime (el preview del Day/Night Cycle, el Minimap HUD) — siempre un **método**
   (`city.City.SetHour(12f)`), nunca una propiedad con setter: los módulos son `readonly struct`s
-  devueltos por valor, así que `city.Minimap.ViewRadiusMeters = 120f` no compilaría (CS1612). Nada
-  en esta API genera, destruye ni redimensiona nada: los conteos de vehículos/peatones, el layout
-  de edificios y la propia cuadrícula quedan fijados en el momento de la generación.
+  devueltos por valor, así que `city.Minimap.ViewRadiusMeters = 120f` no compilaría (CS1612). Los
+  marcadores temporales del minimapa son los únicos objetos UI que esta API crea o destruye; los
+  conteos de vehículos/peatones, el layout de edificios y la propia cuadrícula quedan fijados en el
+  momento de la generación.
 - **Consultar demasiado pronto puede no encontrar una ciudad que sí existe.** El registro ocurre en
   el propio `OnEnable` de `CityGeneratorInfo`, y Unity no garantiza ningún orden entre los
   `OnEnable` de objetos distintos. Un script que llame a `CityGeneratorAPI.Default` desde su propio
@@ -143,6 +144,32 @@ Solo lectura.
 | `SetViewRadiusMeters(float meters)` | Cambia el radio de vista; tiene efecto en el siguiente frame. |
 | `IsVisible` | `true` si el GameObject del Canvas del HUD está activo actualmente. |
 | `SetVisible(bool visible)` | Muestra/oculta el HUD alternando su GameObject del Canvas. |
+| `AddMarker(Transform target, RectTransform prefab, bool clampToEdge)` | Instancia un marcador que sigue a `target` en espacio de mundo y devuelve su handle. |
+| `AddMarker(Vector3 position, RectTransform prefab, bool clampToEdge)` | Instancia un marcador en una posición fija de mundo y devuelve su handle. |
+| `RemoveMarker(MinimapMarkerHandle handle)` | Elimina un marcador perteneciente a este HUD. Los handles inválidos, ya retirados o de otro HUD se ignoran. |
+
+`MinimapMarkerHandle.IsValid` permanece a true mientras existan el HUD y el registro. Un
+`Transform` nulo/destruido, un prefab nulo o la ausencia de HUD devuelve un handle inválido sin
+crear nada. Los marcadores pueden registrarse con el HUD oculto o antes de su `Start`; ocultar el
+HUD los conserva. Un objetivo desactivado oculta su marcador hasta reactivarse, mientras que
+destruir el objetivo retira automáticamente el registro.
+
+```csharp
+CityGeneratorCity city = CityGeneratorAPI.Default.Value;
+MinimapMarkerHandle destination = city.Minimap.AddMarker(
+    destinationTransform,
+    destinationMarkerPrefab,
+    clampToEdge: true);
+
+// Más adelante:
+city.Minimap.RemoveMarker(destination);
+```
+
+Las posiciones usan XZ de mundo (Y se ignora) y la misma proyección con norte arriba que los POI
+generados. Sin clamp, un marcador fuera de `ViewRadiusMeters` se oculta. Con `clampToEdge`, mantiene
+la dirección hacia el objetivo y se desplaza lo suficiente hacia dentro del borde circular para que
+quepa su `RectTransform` raíz. Ese rectángulo raíz debe contener todo el contenido visible; no puede
+garantizarse que un contenido demasiado grande quepa.
 
 ## `CityGeneratorCity.Audio`
 
@@ -167,8 +194,9 @@ Solo lectura.
 
 ## Cosas que esta API deliberadamente no hace
 
-- **Ninguna mutación que genere, destruya o redimensione contenido** — vehículos, peatones,
-  edificios, la propia cuadrícula. La generación sigue siendo exclusivamente un flujo del Editor.
+- **Ninguna mutación que genere, destruya o redimensione contenido de la ciudad** — vehículos,
+  peatones, edificios o la propia cuadrícula. Los marcadores del minimapa son UI temporal propiedad
+  del HUD; la generación sigue siendo exclusivamente un flujo del Editor.
 - **Sin `SetFreeViewActive`** — Free View se mantiene como un toggle de input puro (la tecla V).
 - **Sin setters en Traffic/Pedestrians/Audio/Player** — esos módulos son de solo lectura.
 - **Sin eventos/callbacks.** Consulta por polling en su lugar.
