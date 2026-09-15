@@ -214,6 +214,11 @@ namespace CityGenerator.Tests.PlayMode
             var hudGo = new GameObject("MinimapHUD", typeof(RectTransform));
             hudGo.transform.SetParent(cityInfo.transform, false);
             cityInfo.minimapHUD = hudGo.AddComponent<MinimapHUD>();
+            var containerGo = new GameObject("POIMarkerContainer", typeof(RectTransform));
+            containerGo.transform.SetParent(hudGo.transform, false);
+            typeof(MinimapHUD)
+                .GetField("poiMarkerContainer", BindingFlags.NonPublic | BindingFlags.Instance)
+                .SetValue(cityInfo.minimapHUD, containerGo.GetComponent<RectTransform>());
             var prefabGo = new GameObject("MarkerPrefab", typeof(RectTransform));
             RectTransform prefab = prefabGo.GetComponent<RectTransform>();
             CityGeneratorCity city = CityGeneratorAPI.For(cityInfo).Value;
@@ -242,6 +247,27 @@ namespace CityGenerator.Tests.PlayMode
             Assert.IsFalse(minimap.AddMarker(Vector3.zero, prefab, false).IsValid);
             Assert.IsFalse(minimap.AddMarker(cityInfo.transform, prefab, false).IsValid);
             Assert.DoesNotThrow(() => minimap.RemoveMarker(default));
+
+            Object.DestroyImmediate(prefabGo);
+            Object.DestroyImmediate(cityInfo.gameObject);
+        }
+
+        [Test]
+        public void MinimapMarkers_ReturnInvalidHandleWhenTheHudHasNowhereToAnchorThem()
+        {
+            CityGeneratorInfo cityInfo = BuildCity("City");
+            var hudGo = new GameObject("MinimapHUD", typeof(RectTransform));
+            hudGo.transform.SetParent(cityInfo.transform, false);
+            cityInfo.minimapHUD = hudGo.AddComponent<MinimapHUD>();
+            var prefabGo = new GameObject("MarkerPrefab", typeof(RectTransform));
+            RectTransform prefab = prefabGo.GetComponent<RectTransform>();
+            MinimapModule minimap = CityGeneratorAPI.For(cityInfo).Value.Minimap;
+
+            // No POI marker container and no map image: anchoring under the HUD root would centre
+            // the marker on the screen instead of the map, so nothing is created at all.
+            Assert.IsFalse(minimap.AddMarker(Vector3.zero, prefab, false).IsValid);
+            Assert.IsFalse(minimap.AddMarker(cityInfo.transform, prefab, false).IsValid);
+            Assert.AreEqual(0, hudGo.transform.childCount);
 
             Object.DestroyImmediate(prefabGo);
             Object.DestroyImmediate(cityInfo.gameObject);

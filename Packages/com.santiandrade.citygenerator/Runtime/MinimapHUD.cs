@@ -54,7 +54,6 @@ namespace CityGenerator.Runtime
             public bool followsTransform;
             public bool clampToEdge;
             public RectTransform instance;
-            public readonly Vector3[] worldCorners = new Vector3[4];
         }
 
         private readonly struct MapProjection
@@ -157,11 +156,19 @@ namespace CityGenerator.Runtime
             if (isTearingDown)
                 return default;
 
-            Transform parent = poiMarkerContainer != null
+            // Positions are written as anchoredPosition, so the parent's centre has to be the
+            // map's centre: POIMarkerContainer (a zero-sized rect at MapPanel's centre) or, failing
+            // that, MapImage's own parent -- MapImage stretches to fill it, so the two share a
+            // centre. The HUD root is *not* an option: its centre is the screen's, which would put
+            // markers in mid-screen with nothing to explain it. No such parent, no marker.
+            RectTransform parent = poiMarkerContainer != null
                 ? poiMarkerContainer
-                : mapImage != null && mapImage.rectTransform.parent != null
-                    ? mapImage.rectTransform.parent
-                    : transform;
+                : mapImage != null
+                    ? mapImage.rectTransform.parent as RectTransform
+                    : null;
+            if (parent == null)
+                return default;
+
             RectTransform instance = Instantiate(prefab, parent);
             if (this == null || instance == null || isTearingDown)
             {
@@ -180,20 +187,13 @@ namespace CityGenerator.Runtime
             };
             dynamicMarkers.Add(token, marker);
 
+            // Overrides whatever anchors the caller's prefab was authored with, so the projected
+            // offset means the same thing for every marker (documented in docs/api-reference.md).
             instance.anchorMin = new Vector2(0.5f, 0.5f);
-            if (!IsOwnedDynamicMarker(this, token, marker))
-            {
-                CleanupFailedDynamicMarker(this, token, marker);
-                return default;
-            }
-
             instance.anchorMax = new Vector2(0.5f, 0.5f);
-            if (!IsOwnedDynamicMarker(this, token, marker))
-            {
-                CleanupFailedDynamicMarker(this, token, marker);
-                return default;
-            }
 
+            // The only step here that can run the consumer's code -- and so destroy the HUD, the
+            // clone, or this very registration -- is SetActive, through the clone's OnDisable.
             instance.gameObject.SetActive(false);
             if (!IsOwnedDynamicMarker(this, token, marker))
             {
@@ -421,7 +421,11 @@ namespace CityGenerator.Runtime
                 double unitsPerMeter = canProject
                     ? UnitsPerMeter(mapRect)
                     : 0d;
-                float mapRadius = canProject ? Mathf.Min(mapRect.rect.width, mapRect.rect.height) * 0.5f : 0f;
+                // Half the width, not Mathf.Min(width, height): this has to be the very circle
+                // worldDistance == viewRadiusMeters maps to, and UnitsPerMeter derives that from
+                // the width alone. Expressed in the marker parent's space, which shares the map's
+                // centre and scale (see AddDynamicMarker).
+                float mapRadius = canProject ? mapRect.rect.width * 0.5f : 0f;
 
                 for (int i = 0; i < dynamicMarkerSnapshot.Count && !isTearingDown; i++)
                 {
@@ -497,25 +501,21 @@ namespace CityGenerator.Runtime
         {
             double worldOffsetX = (double)worldPosition.x - playerPosition.x;
             double worldOffsetY = (double)worldPosition.z - playerPosition.z;
-            double projectedX = worldOffsetX * unitsPerMeter;
-            double projectedY = worldOffsetY * unitsPerMeter;
+            // Squaring cannot overflow a double for any finite float input: the widest case
+            // reachable here (a float.MaxValue-wide offset scaled by the largest unitsPerMeter a
+            // float.MaxValue map width and a float.Epsilon radius can produce) squares to ~7e243,
+            // against double's 1.8e308 -- so no scaled-hypot dance is needed.
+            double worldDistance =
+                System.Math.Sqrt(worldOffsetX * worldOffsetX + worldOffsetY * worldOffsetY);
             return new MapProjection(
                 worldOffsetX,
                 worldOffsetY,
-                Magnitude(worldOffsetX, worldOffsetY),
-                Magnitude(projectedX, projectedY),
-                ToFiniteVector2(projectedX, projectedY));
-        }
-
-        private static double Magnitude(double x, double y)
-        {
-            double maximum = System.Math.Max(System.Math.Abs(x), System.Math.Abs(y));
-            if (maximum == 0d)
-                return 0d;
-
-            double normalizedX = x / maximum;
-            double normalizedY = y / maximum;
-            return maximum * System.Math.Sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                worldDistance,
+                // |(x, y) * k| == |(x, y)| * k for k > 0, and unitsPerMeter is positive wherever a
+                // caller reads this: a multiply instead of a second square root, per projection and
+                // so per POI and per frame.
+                worldDistance * unitsPerMeter,
+                ToFiniteVector2(worldOffsetX * unitsPerMeter, worldOffsetY * unitsPerMeter));
         }
 
         private static Vector2 ToFiniteVector2(double x, double y) =>
@@ -537,23 +537,26 @@ namespace CityGenerator.Runtime
         private static bool IsFinite(Vector3 value) =>
             IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
 
+        /// <summary>
+        /// Distance from the instance's pivot to the farthest corner of its root rect, in the
+        /// parent's space -- the inset that keeps the whole declared rect inside the map circle.
+        /// <para>
+        /// Read straight off <see cref="RectTransform.rect"/>, which is already expressed relative
+        /// to the pivot, times the local scale. The farthest corner is the one pairing the largest
+        /// |x| with the largest |y|, since the magnitude grows with each independently, and a
+        /// rotation cannot change it — it preserves magnitudes. So this needs neither
+        /// <c>GetWorldCorners</c> and four <c>InverseTransformVector</c> round trips per frame, nor
+        /// a cache to avoid them.
+        /// </para>
+        /// </summary>
         private static float MarkerCornerRadius(DynamicMarker marker)
         {
             RectTransform instance = marker.instance;
-            RectTransform parent = instance.parent as RectTransform;
-            if (parent == null)
-                return 0f;
-
-            instance.GetWorldCorners(marker.worldCorners);
-            Vector3 pivotWorld = instance.TransformPoint(Vector3.zero);
-            float maximum = 0f;
-            for (int i = 0; i < marker.worldCorners.Length; i++)
-            {
-                Vector3 offset = parent.InverseTransformVector(marker.worldCorners[i] - pivotWorld);
-                maximum = Mathf.Max(maximum, new Vector2(offset.x, offset.y).magnitude);
-            }
-
-            return maximum;
+            Rect rect = instance.rect;
+            Vector3 scale = instance.localScale;
+            float x = Mathf.Max(Mathf.Abs(rect.xMin), Mathf.Abs(rect.xMax)) * Mathf.Abs(scale.x);
+            float y = Mathf.Max(Mathf.Abs(rect.yMin), Mathf.Abs(rect.yMax)) * Mathf.Abs(scale.y);
+            return new Vector2(x, y).magnitude;
         }
 
         private void EnsurePoiMarkerPool(int count)

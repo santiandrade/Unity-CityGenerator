@@ -59,6 +59,8 @@ Specs are in `specs/` (Spanish, driven by a `/spec-*` workflow configured by `sp
 | [`12-custom-pedestrians.md`](specs/12-custom-pedestrians.md) | Custom Pedestrians: a separate budget of pedestrians confined to a hand-traced subgraph, its node-graph picker, and the `Pets/` demo prefabs (rigid-rig Animator culling). |
 | [`13-free-camera.md`](specs/13-free-camera.md) | Free Camera: `FreeCameraController` alongside `ThirdPersonCamera` on the Main Camera, and the `Free View` action map. |
 | [`16-multiple-cities.md`](specs/16-multiple-cities.md) | Multiple cities coexisting in one scene: root-relative traffic/pedestrian graphs, hierarchy-scoped signal matching, `MinimapData.localCenter`/`localSize`, and the `Rebuild Minimap` menu. |
+| [`17-vehicle-physics.md`](specs/17-vehicle-physics.md) | The optional `Enable Physics` mode: Rigidbody-backed cars, the pedestrian/vehicle collision filter, and the kinematic path left bit-for-bit unchanged. |
+| [`18-dynamic-minimap-markers.md`](specs/18-dynamic-minimap-markers.md) | Runtime minimap markers registered through `MinimapHUD`/`CityGeneratorCity.Minimap`, their owner-bound handles, and the projection shared with the generated POIs. |
 
 - [`docs/user-manual.md`](docs/user-manual.md) / [`docs/user-manual.es.md`](docs/user-manual.es.md) — end-user manual for the window (every tab, card and parameter), linked from the READMEs. Screenshots live in `docs/images/manual/`; keep both language versions in sync when the UI changes.
 - [`docs/technical-review.md`](docs/technical-review.md) — standing technical review (performance, code quality, ECS analysis) with the pending findings.

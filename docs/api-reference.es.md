@@ -150,7 +150,8 @@ Solo lectura.
 
 `MinimapMarkerHandle.IsValid` permanece a true mientras existan el HUD y el registro. Un
 `Transform` nulo/destruido, un prefab nulo o la ausencia de HUD devuelve un handle inválido sin
-crear nada. Los marcadores pueden registrarse con el HUD oculto o antes de su `Start`; ocultar el
+crear nada, igual que un HUD sin un rect de UI donde anclar los marcadores (uno generado siempre lo
+tiene). Los marcadores pueden registrarse con el HUD oculto o antes de su `Start`; ocultar el
 HUD los conserva. Un objetivo desactivado oculta su marcador hasta reactivarse, mientras que
 destruir el objetivo retira automáticamente el registro.
 
@@ -170,6 +171,12 @@ generados. Sin clamp, un marcador fuera de `ViewRadiusMeters` se oculta. Con `cl
 la dirección hacia el objetivo y se desplaza lo suficiente hacia dentro del borde circular para que
 quepa su `RectTransform` raíz. Ese rectángulo raíz debe contener todo el contenido visible; no puede
 garantizarse que un contenido demasiado grande quepa.
+
+Los `anchorMin`/`anchorMax` del clon se sobrescriben con `(0.5, 0.5)`, sean los que sean los del
+prefab, para que el offset proyectado signifique lo mismo en todos los marcadores. Un prefab
+autorado con anchors de stretch toma por tanto su tamaño del `sizeDelta` al instanciarse; autora
+los prefabs de marcador a tamaño fijo para obtener lo que diseñaste. El asset original nunca se
+modifica.
 
 ## `CityGeneratorCity.Audio`
 

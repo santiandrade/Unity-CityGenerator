@@ -145,7 +145,8 @@ Read-only.
 | `RemoveMarker(MinimapMarkerHandle handle)` | Removes a marker owned by this HUD. Invalid, already removed, or foreign handles are ignored. |
 
 `MinimapMarkerHandle.IsValid` stays true while its HUD and registration exist. A null/destroyed
-`Transform`, null prefab, or missing HUD returns an invalid handle and creates nothing. Markers may
+`Transform`, null prefab, or missing HUD returns an invalid handle and creates nothing, as does a
+HUD with no UI rect to anchor markers to (a generated one always has one). Markers may
 be registered while the HUD is hidden or before its `Start`; hiding the HUD preserves them. A
 disabled target hides its marker until it is active again, while destroying the target removes the
 registration automatically.
@@ -166,6 +167,11 @@ clamping, a marker outside `ViewRadiusMeters` is hidden. With `clampToEdge`, it 
 target's direction and is moved far enough inside the circular edge to fit its root
 `RectTransform`. That root rect must enclose all visible content; oversized content cannot be
 guaranteed to fit.
+
+The clone's `anchorMin`/`anchorMax` are overwritten with `(0.5, 0.5)`, whatever the prefab was
+authored with, so that the projected offset means the same thing for every marker. A prefab built
+on stretch anchors therefore takes its size from its `sizeDelta` once instantiated; author marker
+prefabs at a fixed size to get what you designed. The source prefab asset is never modified.
 
 ## `CityGeneratorCity.Audio`
 
