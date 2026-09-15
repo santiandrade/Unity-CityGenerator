@@ -173,6 +173,12 @@ authored with, so that the projected offset means the same thing for every marke
 on stretch anchors therefore takes its size from its `sizeDelta` once instantiated; author marker
 prefabs at a fixed size to get what you designed. The source prefab asset is never modified.
 
+None of the prefab's component callbacks runs inside `AddMarker`: the clone is created inactive,
+and its `Awake`/`OnEnable` run the first time the HUD shows it. The root rect is also measured
+before Canvas layout has run on it, so a root sized by a `ContentSizeFitter` or `LayoutElement`
+reads as zero-sized on the frame it is first shown and can sit against the edge for that frame;
+give the root a fixed size that encloses its content.
+
 ## `CityGeneratorCity.Audio`
 
 Read-only.

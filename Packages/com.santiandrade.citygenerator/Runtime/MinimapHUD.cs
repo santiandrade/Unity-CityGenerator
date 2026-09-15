@@ -114,6 +114,7 @@ namespace CityGenerator.Runtime
         private readonly List<MinimapMarkerToken> dynamicMarkerSnapshot = new();
         private bool isUpdatingDynamicMarkers;
         private bool isTearingDown;
+        private Transform markerStaging;
 
         /// <summary>Adds a marker that follows a Transform in world space.</summary>
         public MinimapMarkerHandle AddMarker(Transform target, RectTransform prefab, bool clampToEdge)
@@ -153,7 +154,9 @@ namespace CityGenerator.Runtime
             RectTransform prefab,
             bool clampToEdge)
         {
-            if (isTearingDown)
+            // this == null covers a HUD destroyed without ever having been active, which never gets
+            // an OnDestroy to raise isTearingDown.
+            if (isTearingDown || this == null)
                 return default;
 
             // Positions are written as anchoredPosition, so the parent's centre has to be the
@@ -169,62 +172,53 @@ namespace CityGenerator.Runtime
             if (parent == null)
                 return default;
 
-            RectTransform instance = Instantiate(prefab, parent);
-            if (this == null || instance == null || isTearingDown)
-            {
-                DestroyMarkerInstance(instance);
-                return default;
-            }
-
-            var token = new MinimapMarkerToken();
-            var marker = new DynamicMarker
-            {
-                target = target,
-                fixedPosition = fixedPosition,
-                followsTransform = followsTransform,
-                clampToEdge = clampToEdge,
-                instance = instance,
-            };
-            dynamicMarkers.Add(token, marker);
+            // Born inactive in hierarchy and deactivated before it can become active, so none of the
+            // prefab's Awake/OnEnable/OnDisable runs inside AddMarker: the clone's first callbacks
+            // happen when UpdateDynamicMarkers shows it, on a loop built to survive them.
+            // Instantiating straight under an active container ran the clone's OnEnable
+            // mid-Instantiate, where destroying the clone makes Instantiate itself throw -- hence the
+            // inactive staging parent. An already inactive container needs no staging, and must not
+            // use it: while the HUD's GameObject is being deactivated (or destroyed), a clone's
+            // OnDisable may call AddMarker, and Unity refuses SetParent out of a staging child that
+            // is itself mid-deactivation.
+            bool parentIsLive = parent.gameObject.activeInHierarchy;
+            RectTransform instance = Instantiate(prefab, parentIsLive ? MarkerStaging() : parent);
+            instance.gameObject.SetActive(false);
+            if (parentIsLive)
+                instance.SetParent(parent, false);
 
             // Overrides whatever anchors the caller's prefab was authored with, so the projected
             // offset means the same thing for every marker (documented in docs/api-reference.md).
             instance.anchorMin = new Vector2(0.5f, 0.5f);
             instance.anchorMax = new Vector2(0.5f, 0.5f);
 
-            // The only step here that can run the consumer's code -- and so destroy the HUD, the
-            // clone, or this very registration -- is SetActive, through the clone's OnDisable.
-            instance.gameObject.SetActive(false);
-            if (!IsOwnedDynamicMarker(this, token, marker))
+            var token = new MinimapMarkerToken();
+            dynamicMarkers.Add(token, new DynamicMarker
             {
-                CleanupFailedDynamicMarker(this, token, marker);
-                return default;
-            }
-
+                target = target,
+                fixedPosition = fixedPosition,
+                followsTransform = followsTransform,
+                clampToEdge = clampToEdge,
+                instance = instance,
+            });
             return new MinimapMarkerHandle(this, token);
         }
 
-        private static bool IsOwnedDynamicMarker(
-            MinimapHUD owner,
-            MinimapMarkerToken token,
-            DynamicMarker marker) =>
-            owner != null && !owner.isTearingDown && marker.instance != null &&
-            owner.dynamicMarkers.TryGetValue(token, out DynamicMarker current) &&
-            ReferenceEquals(current, marker);
-
-        private static void CleanupFailedDynamicMarker(
-            MinimapHUD owner,
-            MinimapMarkerToken token,
-            DynamicMarker marker)
+        /// <summary>
+        /// Inactive child every marker clone is born under, created on first use so HUDs from
+        /// scenes generated before SPEC 18 need no regeneration.
+        /// </summary>
+        private Transform MarkerStaging()
         {
-            if (owner != null &&
-                owner.dynamicMarkers.TryGetValue(token, out DynamicMarker current) &&
-                ReferenceEquals(current, marker))
+            if (markerStaging == null)
             {
-                owner.dynamicMarkers.Remove(token);
+                var staging = new GameObject("DynamicMarkerStaging", typeof(RectTransform));
+                staging.SetActive(false);
+                staging.transform.SetParent(transform, false);
+                markerStaging = staging.transform;
             }
 
-            DestroyMarkerInstance(marker.instance);
+            return markerStaging;
         }
 
         private static void DestroyMarkerInstance(RectTransform instance)
@@ -327,7 +321,8 @@ namespace CityGenerator.Runtime
         {
             bool canRender = TryGetDynamicMarkerPlayerPosition(out Vector3 playerPosition);
             UpdateDynamicMarkers(playerPosition, canRender);
-            if (!canRender)
+            // A marker's OnEnable, run while showing it, may have destroyed this HUD.
+            if (!canRender || isTearingDown)
                 return;
 
             UpdateMapWindow(playerPosition);

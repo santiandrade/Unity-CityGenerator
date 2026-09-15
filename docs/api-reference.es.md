@@ -178,6 +178,13 @@ autorado con anchors de stretch toma por tanto su tamaño del `sizeDelta` al ins
 los prefabs de marcador a tamaño fijo para obtener lo que diseñaste. El asset original nunca se
 modifica.
 
+Ningún callback de los componentes del prefab se ejecuta dentro de `AddMarker`: el clon se crea
+inactivo, y su `Awake`/`OnEnable` corren la primera vez que el HUD lo muestra. El rect raíz además
+se mide antes de que el layout del Canvas haya pasado por él, así que una raíz dimensionada por un
+`ContentSizeFitter` o `LayoutElement` mide cero en el frame en que se muestra por primera vez y
+puede quedar pegada al borde durante ese frame; da a la raíz un tamaño fijo que abarque su
+contenido.
+
 ## `CityGeneratorCity.Audio`
 
 Solo lectura.

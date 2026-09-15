@@ -228,9 +228,17 @@ namespace CityGenerator.Tests.PlayMode
 
             Assert.IsTrue(fixedHandle.IsValid);
             Assert.IsTrue(trackedHandle.IsValid);
+            Assert.AreEqual(2, containerGo.transform.childCount);
             city.Minimap.RemoveMarker(fixedHandle);
             Assert.IsFalse(fixedHandle.IsValid);
             Assert.IsTrue(trackedHandle.IsValid);
+
+            // Same owner either way: a facade handle is removable through the HUD and vice versa.
+            cityInfo.minimapHUD.RemoveMarker(trackedHandle);
+            Assert.IsFalse(trackedHandle.IsValid);
+            MinimapMarkerHandle hudHandle = cityInfo.minimapHUD.AddMarker(Vector3.one, prefab, false);
+            city.Minimap.RemoveMarker(hudHandle);
+            Assert.IsFalse(hudHandle.IsValid);
 
             Object.DestroyImmediate(prefabGo);
             Object.DestroyImmediate(cityInfo.gameObject);
