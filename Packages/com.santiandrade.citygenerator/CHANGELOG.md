@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- `TrafficObstacle` component: add it to a vehicle of your own (typically the car the player
+  drives) and generated traffic brakes for it and keeps its usual distance, exactly as it does
+  behind another generated car. Works on any layer, with `Enable Physics` on or off, and changes
+  nothing in a scene that has none.
+
+### Fixed
+
+- With `Enable Physics` on, a generated vehicle no longer drags another physics object down the
+  street. If its front is pushing any dynamic Rigidbody that isn't another generated vehicle or a
+  pedestrian, it now stops dead instead of forcing its way through, and pulls away again half a
+  second after the contact ends. This also covers the case where it re-attached to its route
+  while already touching that object, which a fresh impact could never interrupt.
+- With `Enable Physics` on, a vehicle recovering from an impact now pulls away from rest instead
+  of resuming the speed it had before the hit.
 
 ## [3.4.0] - 2026-09-15
 ### Added

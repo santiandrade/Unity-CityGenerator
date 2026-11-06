@@ -41,6 +41,7 @@ already installed.
   - [6.1 Traffic](#61-traffic)
   - [6.2 Physics](#62-physics)
   - [6.3 Vehicles](#63-vehicles)
+  - [6.4 Your own vehicles: TrafficObstacle](#64-your-own-vehicles-trafficobstacle)
 - [7. Pedestrians tab](#7-pedestrians-tab)
   - [7.1 Pedestrian Settings](#71-pedestrian-settings)
   - [7.2 Pedestrians](#72-pedestrians)
@@ -436,6 +437,13 @@ no Rigidbody, so to the physics engine they weigh infinitely much — leaving th
 meant a person could drag a car down the street. The player still collides with vehicles
 normally.
 
+A generated vehicle never drags another physics object along either: if its front ends up
+pushing any dynamic Rigidbody that isn't another generated vehicle or a pedestrian, it stops
+dead and only pulls away again half a second after the contact ends. After recovering from an
+impact it always pulls away from rest, never at the speed it had before the hit. To have traffic
+brake for your own vehicle *before* touching it, add a `TrafficObstacle` to it (see
+[6.4](#64-your-own-vehicles-trafficobstacle)).
+
 ### 6.3 Vehicles
 
 ![Vehicles card](images/manual/card-vehicles.png)
@@ -453,6 +461,21 @@ to add it at 0 %.
 
 Vehicle prefabs need no `Rigidbody` — they are moved by transform every frame — and the tool
 adds the collider each instance needs for sensor detection if the root has none.
+
+### 6.4 Your own vehicles: `TrafficObstacle`
+
+Generated vehicles only see other generated vehicles and pedestrians (the player included). A
+vehicle of your own — typically the car the player drives — is invisible to them unless you add
+a **`TrafficObstacle`** component to it: then every generated vehicle brakes for it and keeps
+its usual distance, exactly as it does behind another car, with Enable Physics on or off.
+
+- It works on **any layer**: you don't have to move your car to the `Vehicle` layer or change
+  your collision matrix.
+- **Colliders**: leave the list empty to use every non-trigger collider in the object's
+  hierarchy (`WheelCollider`s are skipped), or list the body colliders explicitly. The object
+  needs at least one, or the Console warns that traffic can't see it.
+- A `TrafficObstacle` that stops in a lane **holds up the traffic behind it** indefinitely, like
+  a stopped car would — generated vehicles never overtake.
 
 ---
 
@@ -789,6 +812,7 @@ elsewhere first anything you want to keep.
 | **Pedestrians can't cross the street** | The city has no signalled intersection at all (a single block, or a custom shape with no 4-way and no T), so there are no crossings. |
 | **Pedestrians walk through an object** | It has no `Collider` anywhere in its hierarchy. Give it one and rebuild the pedestrian network. |
 | **Vehicles don't detect each other or the pedestrians** | Every layer slot in your project is taken, so the `Vehicle`/`Pedestrian` layers couldn't be created. The Console reports it. Free a layer slot. |
+| **Generated vehicles drive into my own car** | Your car isn't a generated vehicle, so traffic can't see it. Add a `TrafficObstacle` to it (see [6.4](#64-your-own-vehicles-trafficobstacle)). |
 | **Pedestrians foot-slide** | Walk/Run Reference Speed no longer match Player Settings > Walk/Run Speed; the Behaviour card warns about it. |
 | **A pedestrian's animation freezes** | Its rig is not skinned, or its Locomotion clips don't loop. See the pedestrian requirements in the [README](../README.md). |
 | **I want the exact same city again** | Enable **Custom Seed** and keep the seed value. |

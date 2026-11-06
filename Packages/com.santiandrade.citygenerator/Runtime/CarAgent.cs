@@ -64,6 +64,15 @@ namespace CityGenerator.Runtime
         private const int VehicleReattachMaxAttempts = 5;
         private const float VehicleReattachRetryInterval = 0.5f;
 
+        // SPEC 19: bumper of a physics-mode car (see CheckBumperContact).
+        private const float VehicleBumperHoldDuration = 0.5f; // s kept stopped after the contact ends
+        private const float VehicleBumperMaxNormalY = 0.5f; // |normal.y| above this is ground/roof, not a bumper hit
+
+        // SPEC 19: same sensor origin every other forward sensor here measures from (2.2m ahead of
+        // the car's centre, 0.9m up), so minGap means the same thing for a TrafficObstacle.
+        private const float SensorOriginOffset = 2.2f;
+        private const float SensorHeight = 0.9f;
+
         private readonly RaycastHit[] pedestrianHits = new RaycastHit[16];
         // Sized generously above the old SphereCast sensor's 16: VehicleAheadClearance now scans
         // every vehicle within the full sensorRange of this car's own position (see its comment),
@@ -108,6 +117,8 @@ namespace CityGenerator.Runtime
         // Same staggering as lastAheadClearance: refreshed only on frames TrafficManager runs
         // the sensor for this car (see TrafficManager.staggerDistance).
         private float lastPedestrianClearance = float.MaxValue;
+        // Same staggering again, for ObstacleAheadClearance (SPEC 19).
+        private float lastObstacleClearance = float.MaxValue;
         private StopReason stopReason;
         // Previous frame's reason: the current one is still being computed while the
         // forward sensor runs, so the deadlock check has to look at the last known value.
@@ -127,6 +138,12 @@ namespace CityGenerator.Runtime
         private float recoveringSince;
         private int reattachAttempts;
         private float nextReattachAttemptTime;
+        // SPEC 19: Time.time until which the bumper keeps this car stopped, and the local z from
+        // which a contact point counts as being on its front (front quarter of its own collider).
+        private float bumperBlockedUntil;
+        private float bumperFrontZ;
+        // SPEC 19: half the car's own width, for ObstacleAheadClearance's side rays.
+        private float sensorHalfWidth;
 
         /// <summary>Reason the vehicle is braking, useful for debugging jams.</summary>
         public enum StopReason
@@ -184,9 +201,18 @@ namespace CityGenerator.Runtime
             if (ownCollider != null)
                 ColliderRegistry[ownCollider.GetEntityId()] = this;
 
+            BoxCollider ownBox = ownCollider as BoxCollider;
+            sensorHalfWidth = ownBox != null
+                ? Mathf.Max(sensorRadius, ownBox.size.x * 0.5f * Mathf.Abs(transform.lossyScale.x))
+                : sensorRadius;
+
             rb = GetComponent<Rigidbody>();
             if (rb != null)
             {
+                // Front quarter of the root proxy collider, in the same local space
+                // InverseTransformPoint returns (the collider sits on this GameObject).
+                bumperFrontZ = ownBox != null ? ownBox.center.z + ownBox.size.z * 0.25f : 0.5f;
+
                 // Set explicitly here, before Tick ever runs, rather than trusting the builder's
                 // configuration: AddComponent<Rigidbody>() defaults useGravity to true, so without
                 // this the car would fall for the one frame between generation and this component
@@ -297,11 +323,21 @@ namespace CityGenerator.Runtime
             {
                 lastAheadClearance = VehicleAheadClearance();
                 lastPedestrianClearance = PedestrianAheadClearance();
+                lastObstacleClearance = ObstacleAheadClearance();
             }
 
-            // A detected pedestrian is treated exactly like a car ahead: same progressive
-            // braking, no dedicated StopReason or state of its own.
-            float aheadClearance = Mathf.Min(lastAheadClearance, lastPedestrianClearance);
+            // A detected pedestrian or TrafficObstacle is treated exactly like a car ahead: same
+            // progressive braking, no dedicated StopReason or state of its own.
+            float aheadClearance = Mathf.Min(Mathf.Min(lastAheadClearance, lastPedestrianClearance), lastObstacleClearance);
+
+            // SPEC 19: a physics car already pushing a dynamic body with its front stops dead --
+            // see CheckBumperContact. Never true for a kinematic car (no collision callbacks).
+            bool bumperBlocked = rb != null && Time.time < bumperBlockedUntil;
+            if (bumperBlocked)
+            {
+                aheadClearance = 0f;
+            }
+
             if (aheadClearance < clearance)
             {
                 clearance = aheadClearance;
@@ -347,6 +383,11 @@ namespace CityGenerator.Runtime
 
             float rate = targetSpeed > speed ? acceleration : braking;
             speed = Mathf.MoveTowards(speed, targetSpeed, rate * dt);
+            if (bumperBlocked)
+            {
+                // Already in contact: the braking ramp would mean pushing on for most of a second.
+                speed = 0f;
+            }
 
             float step = speed * dt;
             distanceTravelled += step;
@@ -389,6 +430,9 @@ namespace CityGenerator.Runtime
         /// and visibly dragged by whoever walked into it. VehiclePedestrianCollisionFilter already
         /// suppresses the NPC contact entirely; this check covers everything it deliberately leaves
         /// colliding (the player, and any user object on the pedestrian layer).
+        ///
+        /// SPEC 19: a contact below the threshold is not ignored outright any more -- it goes
+        /// through the same bumper check as <see cref="OnCollisionStay"/>.
         /// </summary>
         private void OnCollisionEnter(Collision collision)
         {
@@ -396,12 +440,75 @@ namespace CityGenerator.Runtime
                 return;
 
             if (collision.impulse.magnitude < VehicleImpactImpulseThreshold)
+            {
+                CheckBumperContact(collision);
                 return;
+            }
 
             if (IsPedestrianContact(collision.collider))
                 return;
 
             EnterRecovering();
+        }
+
+        /// <summary>
+        /// SPEC 19: a sustained contact never raises another OnCollisionEnter, so a car that
+        /// re-attached while already touching something -- or simply drove into it below the
+        /// impact threshold -- would otherwise keep imposing its velocity on it every physics
+        /// step and drag it along, whatever its mass. Only a Rigidbody-mode car in Driving cares;
+        /// a kinematic car (no Rigidbody) can still receive this from a user's dynamic body and
+        /// must ignore it.
+        /// </summary>
+        private void OnCollisionStay(Collision collision)
+        {
+            if (rb == null || physicsState != PhysicsState.Driving)
+                return;
+
+            CheckBumperContact(collision);
+        }
+
+        /// <summary>
+        /// Stops this car (see <see cref="bumperBlockedUntil"/>, read by Tick) when its front is
+        /// pushing a dynamic Rigidbody it could drag along. Deliberately narrow:
+        /// - only a non-kinematic Rigidbody counts: static geometry and kinematic bodies cannot be
+        ///   dragged, and stopping for them would leave a car that brushed a wall after Recovering
+        ///   parked against it for good;
+        /// - never another CarAgent: car-versus-car is the sensor's and the deadlock rules' job,
+        ///   and the head-on deadlock break relies on one car pushing through -- two physics cars
+        ///   nose to nose would otherwise stop each other forever;
+        /// - never a pedestrian (VehiclePedestrianCollisionFilter and the pedestrian sensor own
+        ///   that, and a person never changes a car's driving state);
+        /// - only a contact on the front quarter of the car with a roughly horizontal normal, so
+        ///   ground contact, a side scrape or a hit from behind never stops it.
+        /// </summary>
+        private void CheckBumperContact(Collision collision)
+        {
+            Rigidbody other = collision.rigidbody;
+            if (other == null || other.isKinematic || other == rb)
+                return;
+
+            if (other.TryGetComponent(out CarAgent _))
+                return;
+
+            bool frontContact = false;
+            int count = collision.contactCount;
+            for (int i = 0; i < count; i++)
+            {
+                ContactPoint contact = collision.GetContact(i);
+                if (Mathf.Abs(contact.normal.y) > VehicleBumperMaxNormalY)
+                    continue;
+
+                if (transform.InverseTransformPoint(contact.point).z < bumperFrontZ)
+                    continue;
+
+                frontContact = true;
+                break;
+            }
+
+            if (!frontContact || IsPedestrianContact(collision.collider))
+                return;
+
+            bumperBlockedUntil = Time.time + VehicleBumperHoldDuration;
         }
 
         /// <summary>
@@ -447,6 +554,10 @@ namespace CityGenerator.Runtime
         {
             physicsState = PhysicsState.Recovering;
             recoveringSince = Time.time;
+            // SPEC 19: not driving any more, and on re-attach it must pull away from rest -- keeping
+            // the pre-impact speed made it shoot straight back into whatever it had just hit.
+            speed = 0f;
+            bumperBlockedUntil = 0f;
             reattachAttempts = 0;
             nextReattachAttemptTime = 0f;
 
@@ -591,10 +702,7 @@ namespace CityGenerator.Runtime
             // using either car's live heading puts the other one "behind" it, even head-on into its
             // rear bumper. The vector to this car's own target node follows the path, not the lag,
             // so it stays reliable through the turn.
-            TrafficNetwork.Node targetNodeInfo = network.GetNode(targetNode);
-            Vector3 towardTarget = targetNodeInfo.Position - transform.position;
-            towardTarget.y = 0f;
-            towardTarget = towardTarget.sqrMagnitude > 0.0001f ? towardTarget.normalized : transform.forward;
+            Vector3 towardTarget = DirectionToTarget();
 
             if (network.LaneOccupancy != null && network.LaneOccupancy.TryGetCarAhead(this, fromNode, targetNode, towardTarget, out CarAgent laneAhead))
             {
@@ -692,6 +800,93 @@ namespace CityGenerator.Runtime
 
             float gap = distance <= 0.001f ? 0f : distance - minGap;
             return Mathf.Min(clearance, gap);
+        }
+
+        /// <summary>
+        /// Flat direction from this car to its target node, falling back to its own forward when
+        /// it is standing on the node. See VehicleAheadClearance for why this, rather than
+        /// transform.forward, is what "ahead" means for the sensors.
+        /// </summary>
+        private Vector3 DirectionToTarget()
+        {
+            TrafficNetwork.Node targetNodeInfo = network.GetNode(targetNode);
+            Vector3 towardTarget = targetNodeInfo.Position - transform.position;
+            towardTarget.y = 0f;
+            return towardTarget.sqrMagnitude > 0.0001f ? towardTarget.normalized : transform.forward;
+        }
+
+        /// <summary>
+        /// SPEC 19: clear distance to the nearest <see cref="TrafficObstacle"/> in this car's path,
+        /// minus the minimum gap -- the same meaning as the vehicle and pedestrian sensors, so an
+        /// obstacle is braked for exactly like a car ahead. Free (an empty-list check) when no
+        /// TrafficObstacle is enabled, which keeps a scene without one identical to before.
+        ///
+        /// Tests each registered collider on its own with Collider.Raycast instead of a scene
+        /// query: that ignores layers by construction (the user's car lives on whatever layer its
+        /// own game needs) and never shares a hit buffer with the rest of the scene. Three parallel
+        /// rays -- centre and both sides of the car -- catch an obstacle that only partly blocks
+        /// the lane, and the rays run at a height inside the vertical overlap between this car's
+        /// body and the obstacle, so a low obstacle isn't missed by a fixed-height ray.
+        /// </summary>
+        private float ObstacleAheadClearance()
+        {
+            IReadOnlyList<Collider> obstacles = TrafficObstacle.RegisteredColliders;
+            if (obstacles.Count == 0)
+                return float.MaxValue;
+
+            Vector3 egoPosition = transform.position;
+            Vector3 towardTarget = DirectionToTarget();
+            Vector3 side = Vector3.Cross(Vector3.up, towardTarget);
+            float reach = SensorOriginOffset + sensorRange;
+
+            float bodyBottom = egoPosition.y;
+            float bodyTop = egoPosition.y + 2f;
+            if (ownCollider != null)
+            {
+                Bounds ownBounds = ownCollider.bounds;
+                bodyBottom = ownBounds.min.y;
+                bodyTop = ownBounds.max.y;
+            }
+
+            float clearance = float.MaxValue;
+            for (int i = 0; i < obstacles.Count; i++)
+            {
+                Collider obstacle = obstacles[i];
+                if (obstacle == null || !obstacle.enabled || !obstacle.gameObject.activeInHierarchy)
+                    continue;
+
+                // Never this car itself, should someone put a TrafficObstacle on a generated vehicle.
+                if (obstacle.transform.IsChildOf(transform))
+                    continue;
+
+                Bounds bounds = obstacle.bounds;
+                if (bounds.SqrDistance(egoPosition) > reach * reach)
+                    continue;
+
+                float low = Mathf.Max(bounds.min.y, bodyBottom);
+                float high = Mathf.Min(bounds.max.y, bodyTop);
+                if (high <= low)
+                    continue;
+
+                float rayY = high - low > 0.1f
+                    ? Mathf.Clamp(egoPosition.y + SensorHeight, low + 0.05f, high - 0.05f)
+                    : (low + high) * 0.5f;
+                Vector3 centre = new Vector3(egoPosition.x, rayY, egoPosition.z);
+
+                for (int lane = -1; lane <= 1; lane++)
+                {
+                    var ray = new Ray(centre + side * (lane * sensorHalfWidth), towardTarget);
+                    if (!obstacle.Raycast(ray, out RaycastHit hit, reach))
+                        continue;
+
+                    // Measured from the shared sensor origin, not the car's centre.
+                    float distance = Mathf.Max(0f, hit.distance - SensorOriginOffset);
+                    float gap = distance <= 0.001f ? 0f : distance - minGap;
+                    clearance = Mathf.Min(clearance, gap);
+                }
+            }
+
+            return clearance;
         }
 
         /// <summary>
