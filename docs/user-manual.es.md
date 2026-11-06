@@ -40,6 +40,7 @@ documento da por hecho que el paquete ya está instalado.
   - [6.1 Traffic](#61-traffic)
   - [6.2 Physics](#62-physics)
   - [6.3 Vehicles](#63-vehicles)
+  - [6.4 Tus propios vehículos: TrafficObstacle](#64-tus-propios-vehículos-trafficobstacle)
 - [7. Pestaña Pedestrians](#7-pestaña-pedestrians)
   - [7.1 Pedestrian Settings](#71-pedestrian-settings)
   - [7.2 Pedestrians](#72-pedestrians)
@@ -442,6 +443,13 @@ tienen Rigidbody, así que para el motor de física pesan infinito — dejar ese
 que una persona pudiera arrastrar un coche calle abajo. El jugador sí sigue chocando con los
 vehículos con normalidad.
 
+Un vehículo generado tampoco arrastra nunca a otro objeto con física: si su frontal acaba
+empujando cualquier Rigidbody dinámico que no sea otro vehículo generado ni un peatón, se detiene
+en seco y no vuelve a arrancar hasta medio segundo después de que termine el contacto. Tras
+recuperarse de un impacto siempre arranca desde parado, nunca a la velocidad que llevaba antes
+del golpe. Para que el tráfico frene ante tu propio vehículo *antes* de tocarlo, añádele un
+`TrafficObstacle` (ver [6.4](#64-tus-propios-vehículos-trafficobstacle)).
+
 ### 6.3 Vehicles
 
 ![Card Vehicles](images/manual/card-vehicles.png)
@@ -460,6 +468,23 @@ para añadirlo al 0 %.
 Los prefabs de vehículo no necesitan `Rigidbody` (se mueven por transform cada frame), y la
 herramienta añade el collider que cada instancia necesita para la detección por sensores si la
 raíz no tiene ninguno.
+
+### 6.4 Tus propios vehículos: `TrafficObstacle`
+
+Los vehículos generados solo ven a otros vehículos generados y a los peatones (incluido el
+jugador). Un vehículo tuyo — normalmente el coche que conduce el jugador — es invisible para
+ellos salvo que le añadas un componente **`TrafficObstacle`**: entonces todos los vehículos
+generados frenan ante él y mantienen su distancia habitual, igual que detrás de otro coche, con
+Enable Physics activado o desactivado.
+
+- Funciona en **cualquier capa**: no hace falta mover tu coche a la capa `Vehicle` ni tocar la
+  matriz de colisiones.
+- **Colliders**: deja la lista vacía para usar todos los colliders que no sean trigger de la
+  jerarquía del objeto (los `WheelCollider` se ignoran), o indica explícitamente los de la
+  carrocería. El objeto necesita al menos uno; si no, la consola avisa de que el tráfico no
+  puede verlo.
+- Un `TrafficObstacle` parado en un carril **retiene al tráfico que viene detrás** de forma
+  indefinida, como haría un coche parado: los vehículos generados nunca adelantan.
 
 ---
 
@@ -804,6 +829,7 @@ otro sitio antes lo que quieras conservar.
 | **Los peatones no pueden cruzar la calle** | La ciudad no tiene ningún cruce semaforizado (una sola manzana, o una forma personalizada sin cruces en X ni en T), y por tanto no tiene pasos de cebra. |
 | **Los peatones atraviesan un objeto** | No tiene `Collider` en ninguna parte de su jerarquía. Dale uno y reconstruye la red de peatones. |
 | **Los vehículos no se detectan entre sí ni a los peatones** | Todas las capas de tu proyecto están ocupadas y no se han podido crear las capas `Vehicle`/`Pedestrian`. La consola lo indica. Libera una capa. |
+| **Los vehículos generados chocan contra mi propio coche** | Tu coche no es un vehículo generado, así que el tráfico no lo ve. Añádele un `TrafficObstacle` (ver [6.4](#64-tus-propios-vehículos-trafficobstacle)). |
 | **Los peatones patinan al andar** | Walk/Run Reference Speed ya no coinciden con Player Settings > Walk/Run Speed; la card Behaviour lo avisa. |
 | **La animación de un peatón se queda congelada** | Su rig no está skinneado, o sus clips de locomoción no están en bucle. Consulta los requisitos de peatones en el [README](../README.es.md). |
 | **Quiero exactamente la misma ciudad otra vez** | Activa **Custom Seed** y conserva el valor de la semilla. |
