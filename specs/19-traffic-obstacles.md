@@ -121,6 +121,16 @@ Las constantes son copias propias de `CarAgent`, igual que las de SPEC 17 (`City
 
 - **`speed = 0` en `EnterRecovering`, no solo en el reenganche.** Durante `Recovering` el coche no conduce, así que `Speed` (público, de diagnóstico) no debe seguir mostrando la velocidad previa al choque; y al reengancharse arranca desde parado sin un caso especial en `TryReattach`.
 
+**Salida de `Recovering` (añadido durante QA manual en City Races, tras publicar v3.5.0)**
+
+- **Síntoma:** al chocar con el taxi, el coche generado se quedaba "muy rígido": salía despedido, pero medio segundo después se paraba en seco, y si el taxi seguía empujándolo se comportaba como un muro.
+- **Causa:** la condición de calma de SPEC 17 solo mira la velocidad angular y la verticalidad. Como el builder congela la rotación X/Z, el coche está siempre derecho y su giro se amortigua enseguida, así que se reenganchaba en cuanto pasaba `VehicleRecoveryMinDuration`, aún deslizando a varios m/s. `Driving` impone la velocidad (ahora 0, por esta misma spec) y lo frenaba al instante; con el taxi empujando, el parachoques lo retenía a velocidad 0.
+- **Solución:** dos condiciones más para darse por calmado — velocidad horizontal bajo `VehicleRecoverySpeedSettle` (0,5 m/s) y `VehicleRecoveryContactGrace` (0,5 s) sin contacto con un cuerpo arrastrable (mismo filtro `IsDraggableBody` que el parachoques, más la exclusión de peatones) — y el tope `VehicleRecoveryMaxDuration` contado desde el último empujón. Al reengancharse, `speed` se toma de la velocidad real hacia delante del coche en ese momento (acotada a `[0, maxSpeed]`) en lugar de 0, para que `Driving` continúe el movimiento sin frenazo.
+- **Otro `CarAgent` nunca cuenta como empujón:** dos coches accidentados apoyados el uno en el otro se mantendrían mutuamente en `Recovering` para siempre.
+- **Parachoques y roce lateral (encontrado en la misma ronda de QA):** el criterio "contacto frontal = cuarto delantero del collider" solo comprobaba la posición del punto de contacto, y el cuarto delantero incluye también el primer metro de cada lateral. Un roce suave por el costado cerca del morro paraba el coche en seco, contradiciendo el criterio de aceptación "un contacto lateral no activa el parachoques". Se añade que la normal del contacto vaya aproximadamente a lo largo del coche (`|Dot(normal, forward)| >= VehicleBumperMinNormalForwardDot`, 0,5: hasta unos 60° del choque de frente, así que un golpe en la esquina delantera sigue contando).
+- **Descartado (por decisión del usuario): liberar la rotación X/Z durante `Recovering`** para que el coche cabecee o se balancee con el golpe. Más natural, pero un golpe fuerte podría volcarlo y el enderezado de `TryReattach` es instantáneo, un salto visible.
+- **Descartado (por decisión del usuario): frenar con fuerza finita mientras el parachoques retiene** (que un coche parado se pueda empujar con esfuerzo en vez de ser un muro). Queda junto al punto 4 aparcado de esta spec.
+
 ## Riesgos identificados
 
 - **Un `TrafficObstacle` parado puede bloquear el tráfico indefinidamente**, igual que un coche detenido. Es el comportamiento esperado (la alternativa, atravesarlo o arrastrarlo, es precisamente el fallo), pero se documenta en el manual.

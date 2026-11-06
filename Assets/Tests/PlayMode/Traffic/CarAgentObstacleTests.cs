@@ -203,6 +203,32 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         }
 
         [UnityTest]
+        public IEnumerator PhysicsCar_SideScrapeNearTheNose_NeverEngagesTheBumper()
+        {
+            (CarAgent agent, float laneX) = BuildCarOnStraightLane(new Vector3(160000f, 0f, 0f), physics: true);
+            yield return null;
+
+            // A dynamic body alongside the car's right flank, spanning its front quarter (the
+            // car's collider is 4m long, so that quarter starts 1m ahead of its centre): contact
+            // points there sit on the side, with a sideways normal -- a scrape, not a push.
+            Vector3 carPosition = carGo.transform.position;
+            BuildObstacle(new Vector3(laneX + 0.9f + 0.7f, 0f, carPosition.z + 1.4f), trafficObstacle: false, dynamicBody: true);
+            var obstacleBody = obstacleGo.GetComponent<Rigidbody>();
+
+            float until = Time.time + 1.5f;
+            while (Time.time < until)
+            {
+                // Lean on the car gently -- far below the impact threshold.
+                obstacleBody.linearVelocity = Vector3.left * 0.2f;
+                yield return new WaitForFixedUpdate();
+            }
+
+            Assert.AreEqual("Driving", GetPrivate(agent, "physicsState").ToString(), "Setup sanity: a gentle lean must never become an impact.");
+            Assert.AreEqual(0f, (float)GetPrivate(agent, "bumperBlockedUntil"), "A side scrape must never stop the car, even along its front quarter.");
+            Assert.Greater(agent.Speed, 0.5f, "The car must keep driving past a body scraping its side.");
+        }
+
+        [UnityTest]
         public IEnumerator EnteringRecovering_DropsSpeedToZero()
         {
             (CarAgent agent, _) = BuildCarOnStraightLane(new Vector3(150000f, 0f, 0f), physics: true);

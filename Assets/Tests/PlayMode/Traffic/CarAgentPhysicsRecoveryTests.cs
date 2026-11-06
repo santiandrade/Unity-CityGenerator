@@ -24,6 +24,8 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         private GameObject projectileGo;
         private GameObject pedestrianNetworkGo;
         private GameObject pedestrianGo;
+        private GameObject groundGo;
+        private GameObject pusherGo;
         private float previousTimeScale;
 
         [SetUp]
@@ -40,6 +42,8 @@ namespace CityGenerator.Tests.PlayMode.Traffic
             if (projectileGo != null) Object.Destroy(projectileGo);
             if (pedestrianGo != null) Object.Destroy(pedestrianGo);
             if (pedestrianNetworkGo != null) Object.Destroy(pedestrianNetworkGo);
+            if (groundGo != null) Object.Destroy(groundGo);
+            if (pusherGo != null) Object.Destroy(pusherGo);
             if (networkGo != null) Object.Destroy(networkGo);
         }
 
@@ -268,6 +272,11 @@ namespace CityGenerator.Tests.PlayMode.Traffic
                 yield return new WaitForFixedUpdate();
             Assert.AreEqual("Recovering", PhysicsStateName(agent), "Setup sanity: the car must enter Recovering before it can exit it.");
 
+            // With no ground and no drag, the projectile would otherwise keep resting against the
+            // car forever, and a body still pushing it deliberately keeps it in Recovering (see
+            // Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt).
+            projectileGo.SetActive(false);
+
             // Speed up simulated time so this test doesn't have to wait out the full real-time
             // VehicleRecoveryMaxDuration (8s) safety cap.
             Time.timeScale = 8f;
@@ -279,6 +288,122 @@ namespace CityGenerator.Tests.PlayMode.Traffic
             Assert.AreEqual("Driving", PhysicsStateName(agent), "The car must eventually settle and return to Driving.");
             Assert.GreaterOrEqual(agent.TargetNode, 0, "Re-attaching must resolve a valid node ahead.");
             Assert.IsTrue(agent.enabled, "A network this small always has a node ahead, so the car must never give up and disable itself.");
+        }
+
+        /// <summary>A static floor just under a BuildDrivingCar car (whose default 1m BoxCollider
+        /// reaches 0.5m below its pivot), so a Recovering car rests and slides on friction instead
+        /// of falling forever. Left 5cm below the collider: flush with it, the depenetration
+        /// contact alone already clears the impact threshold while the car is still Driving.</summary>
+        private void BuildGround(Vector3 carPosition, bool slippery = false)
+        {
+            groundGo = new GameObject("Ground");
+            groundGo.transform.position = carPosition + Vector3.down * 1.05f;
+            BoxCollider ground = groundGo.AddComponent<BoxCollider>();
+            ground.size = new Vector3(400f, 1f, 400f);
+
+            if (slippery)
+            {
+                // At the default friction a knocked car stops in well under the 0.5s minimum
+                // Recovering duration; a slippery floor keeps it sliding for seconds.
+                ground.sharedMaterial = new PhysicsMaterial("Slippery")
+                {
+                    dynamicFriction = 0.1f,
+                    staticFriction = 0.1f,
+                    frictionCombine = PhysicsMaterialCombine.Minimum,
+                };
+            }
+        }
+
+        /// <summary>Knocks the car sideways into Recovering with a moderate hit, then takes the
+        /// projectile out of the scene so nothing keeps pushing the car afterwards.</summary>
+        private IEnumerator KnockIntoRecovering(CarAgent agent)
+        {
+            projectileGo = new GameObject("Projectile");
+            projectileGo.transform.position = carGo.transform.position + Vector3.right * 4f;
+            var prb = projectileGo.AddComponent<Rigidbody>();
+            prb.mass = 1500f;
+            prb.useGravity = false;
+            prb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            projectileGo.AddComponent<SphereCollider>().radius = 1f;
+            prb.linearVelocity = Vector3.left * 8f;
+
+            float timeout = Time.time + 5f;
+            while (PhysicsStateName(agent) != "Recovering" && Time.time < timeout)
+                yield return new WaitForFixedUpdate();
+            Assert.AreEqual("Recovering", PhysicsStateName(agent), "Setup sanity: the hit must trigger Recovering.");
+
+            projectileGo.SetActive(false);
+        }
+
+        private float FlatSpeed(CarAgent agent)
+        {
+            Vector3 velocity = agent.GetComponent<Rigidbody>().linearVelocity;
+            velocity.y = 0f;
+            return velocity.magnitude;
+        }
+
+        [UnityTest]
+        public IEnumerator Recovering_WaitsUntilTheCarStopsSliding()
+        {
+            (_, CarAgent agent) = BuildDrivingCar(new Vector3(160000f, 0f, 0f));
+            BuildGround(carGo.transform.position, slippery: true);
+            yield return null;
+
+            yield return KnockIntoRecovering(agent);
+            float recoveringSince = Time.time;
+
+            float speedAfterMinimum = 0f;
+            float lastRecoveringSpeed = float.MaxValue;
+            float timeout = Time.time + 9f;
+            while (PhysicsStateName(agent) == "Recovering" && Time.time < timeout)
+            {
+                lastRecoveringSpeed = FlatSpeed(agent);
+                if (Time.time - recoveringSince >= 0.5f)
+                    speedAfterMinimum = Mathf.Max(speedAfterMinimum, lastRecoveringSpeed);
+                yield return new WaitForFixedUpdate();
+            }
+
+            Assert.Greater(speedAfterMinimum, 0.5f, "Setup sanity: the car must still be sliding once the minimum Recovering duration is up, or this test proves nothing.");
+            Assert.AreEqual("Driving", PhysicsStateName(agent), "The car must re-attach once it has stopped sliding.");
+            Assert.Less(lastRecoveringSpeed, 0.6f, "Re-attaching while still sliding stops the car dead on the spot; it must wait until it has slowed down.");
+        }
+
+        [UnityTest]
+        public IEnumerator Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt()
+        {
+            (_, CarAgent agent) = BuildDrivingCar(new Vector3(170000f, 0f, 0f));
+            BuildGround(carGo.transform.position);
+            yield return null;
+
+            yield return KnockIntoRecovering(agent);
+
+            // The car slides off to the left; put the pusher right there, so the car runs into
+            // it, stops (on this default-friction floor it would stop within the minimum
+            // Recovering duration anyway) and is then shoved slowly back -- well under the sliding
+            // threshold, so only the push can be what keeps it in Recovering below.
+            pusherGo = new GameObject("Pusher");
+            pusherGo.transform.position = carGo.transform.position + Vector3.left * 1.1f;
+            var prb = pusherGo.AddComponent<Rigidbody>();
+            prb.mass = 1500f;
+            prb.useGravity = false;
+            prb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
+            // Kept clear of the floor so only its contact with the car matters.
+            pusherGo.AddComponent<BoxCollider>().size = new Vector3(1f, 0.8f, 1f);
+
+            float pushUntil = Time.time + 3f;
+            while (Time.time < pushUntil)
+            {
+                prb.linearVelocity = Vector3.right * 0.3f;
+                yield return new WaitForFixedUpdate();
+                Assert.AreEqual("Recovering", PhysicsStateName(agent), "A car still being pushed must stay free instead of turning into a wall.");
+            }
+
+            pusherGo.SetActive(false);
+            float exitTimeout = Time.time + 9f;
+            while (PhysicsStateName(agent) != "Driving" && Time.time < exitTimeout)
+                yield return new WaitForFixedUpdate();
+
+            Assert.AreEqual("Driving", PhysicsStateName(agent), "Once the push stops, the car must re-attach.");
         }
     }
 }
