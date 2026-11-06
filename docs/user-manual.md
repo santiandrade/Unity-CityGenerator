@@ -424,8 +424,10 @@ With Enable Physics on, a vehicle drives exactly as before (velocity/rotation im
 physics step, no engine forces) until it takes a hard enough impact, at which point it lets go
 of the Rigidbody entirely — free to tumble, get pushed, or bounce off static geometry — and
 gives up its crossing reservation and lane so it never blocks other traffic while out of
-control. Once it settles (upright, low angular velocity), it straightens up and rejoins the
-network from wherever it ended up, not from where it was hit. A light roll — like a queue of
+control. It stays free until it has actually come to rest — upright, no longer spinning,
+sliding at under 0.5 m/s, and with nothing pushing it for half a second (so a car you keep
+shoving with your own stays pushable for as long as you shove it) — and then straightens up and
+rejoins the network from wherever it ended up, not from where it was hit. A light roll — like a queue of
 cars touching bumper-to-bumper at a red light — never triggers this. Mass/Drag/Angular Drag
 are shared by every generated vehicle instance, not configurable per vehicle type; the mass in
 particular decides whether an external Rigidbody (e.g. the player's) can push a generated
@@ -440,7 +442,8 @@ normally.
 A generated vehicle never drags another physics object along either: if its front ends up
 pushing any dynamic Rigidbody that isn't another generated vehicle or a pedestrian, it stops
 dead and only pulls away again half a second after the contact ends. After recovering from an
-impact it always pulls away from rest, never at the speed it had before the hit. To have traffic
+impact it carries on from however it is moving at that moment, never at the speed it had before
+the hit. To have traffic
 brake for your own vehicle *before* touching it, add a `TrafficObstacle` to it (see
 [6.4](#64-your-own-vehicles-trafficobstacle)).
 

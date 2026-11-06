@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+
+- With `Enable Physics` on, a vehicle knocked out of control by an impact no longer stops dead
+  half a second later while still sliding. It now stays free until it has actually come to rest,
+  and while something keeps pushing it (such as the player's car) it can be pushed around for as
+  long as the push lasts, instead of turning into an immovable wall. When it rejoins traffic it
+  carries on from its actual motion at that moment.
+- With `Enable Physics` on, a gentle scrape along a vehicle's side near its nose no longer stops
+  it dead. Only a contact against its front, head-on or on a front corner, does.
 
 ## [3.5.0] - 2026-11-06
 ### Added

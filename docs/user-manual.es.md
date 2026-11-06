@@ -430,8 +430,10 @@ Con Enable Physics activado, un vehículo conduce exactamente igual que antes (v
 impuestas en cada paso de física, sin fuerzas de motor) hasta que recibe un impacto lo bastante
 fuerte: entonces suelta el Rigidbody por completo — libre para volcar, ser empujado o rebotar
 contra geometría estática — y renuncia a su reserva de cruce y a su carril, de modo que nunca
-bloquea al resto del tráfico mientras está fuera de control. Al asentarse (en posición vertical,
-con poca velocidad angular), se endereza y se reengancha a la red desde donde haya quedado, no
+bloquea al resto del tráfico mientras está fuera de control. Sigue libre hasta que se ha detenido
+de verdad — en posición vertical, sin girar, deslizando a menos de 0,5 m/s y sin que nada lo
+empuje durante medio segundo (así, un coche al que sigues empujando con el tuyo se deja empujar
+mientras lo hagas) — y entonces se endereza y se reengancha a la red desde donde haya quedado, no
 desde donde fue golpeado. Un roce leve — como una cola de coches tocándose en un semáforo — nunca
 dispara esto. Mass/Drag/Angular Drag son compartidos por todos los vehículos generados, no
 configurables por tipo de vehículo; la masa en particular decide si un Rigidbody externo (p. ej.
@@ -446,8 +448,8 @@ vehículos con normalidad.
 Un vehículo generado tampoco arrastra nunca a otro objeto con física: si su frontal acaba
 empujando cualquier Rigidbody dinámico que no sea otro vehículo generado ni un peatón, se detiene
 en seco y no vuelve a arrancar hasta medio segundo después de que termine el contacto. Tras
-recuperarse de un impacto siempre arranca desde parado, nunca a la velocidad que llevaba antes
-del golpe. Para que el tráfico frene ante tu propio vehículo *antes* de tocarlo, añádele un
+recuperarse de un impacto continúa desde como se esté moviendo en ese momento, nunca a la
+velocidad que llevaba antes del golpe. Para que el tráfico frene ante tu propio vehículo *antes* de tocarlo, añádele un
 `TrafficObstacle` (ver [6.4](#64-tus-propios-vehículos-trafficobstacle)).
 
 ### 6.3 Vehicles

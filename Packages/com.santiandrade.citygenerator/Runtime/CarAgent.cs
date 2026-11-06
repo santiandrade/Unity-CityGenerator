@@ -61,12 +61,20 @@ namespace CityGenerator.Runtime
         private const float VehicleRecoveryUprightDot = 0.98f; // Vector3.Dot(transform.up, Vector3.up)
         private const float VehicleRecoveryMinDuration = 0.5f;
         private const float VehicleRecoveryMaxDuration = 8f;
+        // Horizontal speed (m/s) below which a Recovering car counts as having stopped sliding.
+        private const float VehicleRecoverySpeedSettle = 0.5f;
+        // Seconds a Recovering car stays free after the last time a dynamic body (the player's
+        // car, typically) pushed it.
+        private const float VehicleRecoveryContactGrace = 0.5f;
         private const int VehicleReattachMaxAttempts = 5;
         private const float VehicleReattachRetryInterval = 0.5f;
 
         // SPEC 19: bumper of a physics-mode car (see CheckBumperContact).
         private const float VehicleBumperHoldDuration = 0.5f; // s kept stopped after the contact ends
         private const float VehicleBumperMaxNormalY = 0.5f; // |normal.y| above this is ground/roof, not a bumper hit
+        // |Dot(normal, forward)| below this is a side contact (within ~60 degrees of straight on
+        // still counts, so a hit on the front corner does).
+        private const float VehicleBumperMinNormalForwardDot = 0.5f;
 
         // SPEC 19: same sensor origin every other forward sensor here measures from (2.2m ahead of
         // the car's centre, 0.9m up), so minGap means the same thing for a TrafficObstacle.
@@ -136,6 +144,8 @@ namespace CityGenerator.Runtime
         private Rigidbody rb;
         private PhysicsState physicsState;
         private float recoveringSince;
+        // Last Time.time a dynamic, non-CarAgent body touched this car while Recovering.
+        private float lastPushedTime = float.NegativeInfinity;
         private int reattachAttempts;
         private float nextReattachAttemptTime;
         // SPEC 19: Time.time until which the bumper keeps this car stopped, and the local z from
@@ -436,8 +446,14 @@ namespace CityGenerator.Runtime
         /// </summary>
         private void OnCollisionEnter(Collision collision)
         {
-            if (rb == null || physicsState != PhysicsState.Driving)
+            if (rb == null)
                 return;
+
+            if (physicsState == PhysicsState.Recovering)
+            {
+                RecordRecoveryPush(collision);
+                return;
+            }
 
             if (collision.impulse.magnitude < VehicleImpactImpulseThreshold)
             {
@@ -457,14 +473,49 @@ namespace CityGenerator.Runtime
         /// impact threshold -- would otherwise keep imposing its velocity on it every physics
         /// step and drag it along, whatever its mass. Only a Rigidbody-mode car in Driving cares;
         /// a kinematic car (no Rigidbody) can still receive this from a user's dynamic body and
-        /// must ignore it.
+        /// must ignore it. While Recovering, a sustained push only postpones re-attaching (see
+        /// <see cref="RecordRecoveryPush"/>).
         /// </summary>
         private void OnCollisionStay(Collision collision)
         {
-            if (rb == null || physicsState != PhysicsState.Driving)
+            if (rb == null)
                 return;
 
+            if (physicsState == PhysicsState.Recovering)
+            {
+                RecordRecoveryPush(collision);
+                return;
+            }
+
             CheckBumperContact(collision);
+        }
+
+        /// <summary>
+        /// Whether the other side of a contact is a body this car could drag along: a
+        /// non-kinematic Rigidbody that isn't this car or another CarAgent. Static geometry and
+        /// kinematic bodies can't be dragged, and car-versus-car belongs to the sensor and the
+        /// deadlock rules (see CheckBumperContact).
+        /// </summary>
+        private bool IsDraggableBody(Collision collision)
+        {
+            Rigidbody other = collision.rigidbody;
+            if (other == null || other.isKinematic || other == rb)
+                return false;
+
+            return !other.TryGetComponent(out CarAgent _);
+        }
+
+        /// <summary>
+        /// While Recovering, a dynamic body still pushing this car (the player's car, typically)
+        /// keeps it free: re-attaching mid-push turned it straight into a wall, since Driving
+        /// imposes its velocity and the bumper then holds it at zero. Another CarAgent never
+        /// counts -- two wrecked cars resting against each other would otherwise keep each other
+        /// in Recovering for good.
+        /// </summary>
+        private void RecordRecoveryPush(Collision collision)
+        {
+            if (IsDraggableBody(collision) && !IsPedestrianContact(collision.collider))
+                lastPushedTime = Time.time;
         }
 
         /// <summary>
@@ -478,16 +529,13 @@ namespace CityGenerator.Runtime
         ///   nose to nose would otherwise stop each other forever;
         /// - never a pedestrian (VehiclePedestrianCollisionFilter and the pedestrian sensor own
         ///   that, and a person never changes a car's driving state);
-        /// - only a contact on the front quarter of the car with a roughly horizontal normal, so
-        ///   ground contact, a side scrape or a hit from behind never stops it.
+        /// - only a contact on the front quarter of the car whose normal is roughly horizontal and
+        ///   roughly along the car's length, so ground contact, a hit from behind or a side scrape
+        ///   -- even one along the flank right next to the nose -- never stops it.
         /// </summary>
         private void CheckBumperContact(Collision collision)
         {
-            Rigidbody other = collision.rigidbody;
-            if (other == null || other.isKinematic || other == rb)
-                return;
-
-            if (other.TryGetComponent(out CarAgent _))
+            if (!IsDraggableBody(collision))
                 return;
 
             bool frontContact = false;
@@ -499,6 +547,11 @@ namespace CityGenerator.Runtime
                     continue;
 
                 if (transform.InverseTransformPoint(contact.point).z < bumperFrontZ)
+                    continue;
+
+                // The front quarter also includes the first metre or so of each flank: without
+                // this, a gentle scrape along the side near the nose stopped the car dead.
+                if (Mathf.Abs(Vector3.Dot(contact.normal, transform.forward)) < VehicleBumperMinNormalForwardDot)
                     continue;
 
                 frontContact = true;
@@ -517,7 +570,8 @@ namespace CityGenerator.Runtime
         /// generated pedestrian and the player) and only then walks the hierarchy, for a user
         /// pedestrian prefab whose own deeper collider -- left untouched by the tool's collider
         /// policy, so never on that layer -- is what actually made contact. The walk is reached
-        /// only on a contact already above the impulse threshold, so it never runs on the routine
+        /// only on a contact already above the impulse threshold, or one with a dynamic
+        /// non-CarAgent body (bumper, Recovering push), so it never runs on the routine
         /// bumper-to-bumper touching of a queue.
         /// </summary>
         private bool IsPedestrianContact(Collider other)
@@ -554,8 +608,10 @@ namespace CityGenerator.Runtime
         {
             physicsState = PhysicsState.Recovering;
             recoveringSince = Time.time;
-            // SPEC 19: not driving any more, and on re-attach it must pull away from rest -- keeping
-            // the pre-impact speed made it shoot straight back into whatever it had just hit.
+            lastPushedTime = float.NegativeInfinity;
+            // SPEC 19: not driving any more. On re-attach the driving speed is taken from how the
+            // car is actually moving by then (see TryReattach) -- keeping the pre-impact speed made
+            // it shoot straight back into whatever it had just hit.
             speed = 0f;
             bumperBlockedUntil = 0f;
             reattachAttempts = 0;
@@ -574,21 +630,35 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
-        /// While Recovering, waits for the Rigidbody to settle (low angular velocity, close to
-        /// upright) before re-attaching to the network, with a minimum and a maximum safety
-        /// duration so it neither exits mid-tumble nor waits forever. Ticked from FixedUpdate via
-        /// TrafficManager, same as the Driving path, since a physics vehicle's motion is only
-        /// meaningful there.
+        /// While Recovering, waits for the Rigidbody to settle before re-attaching to the network,
+        /// with a minimum and a maximum safety duration so it neither exits mid-tumble nor waits
+        /// forever. Ticked from FixedUpdate via TrafficManager, same as the Driving path, since a
+        /// physics vehicle's motion is only meaningful there.
+        ///
+        /// Settled means low angular velocity, close to upright, sliding below
+        /// VehicleRecoverySpeedSettle, and no dynamic body pushing it for VehicleRecoveryContactGrace.
+        /// The linear-speed and push conditions were added after QA in a consuming project: the
+        /// builder freezes X/Z rotation, so a car is always upright and usually spins slowly --
+        /// with only the first two conditions it re-attached as soon as the minimum duration was
+        /// up, still sliding at several m/s, and Driving stopped it dead on the spot (or held it
+        /// as a wall while the player kept pushing). The maximum duration counts from the last
+        /// push, so a car the player keeps shoving stays free for as long as the shoving lasts.
         /// </summary>
         private void TickRecovering(float dt)
         {
             float elapsed = Time.time - recoveringSince;
+            Vector3 velocity = rb.linearVelocity;
+            velocity.y = 0f;
+            bool pushedRecently = Time.time - lastPushedTime < VehicleRecoveryContactGrace;
             bool settled = rb.angularVelocity.magnitude < VehicleRecoveryAngularVelocitySettle
-                            && Vector3.Dot(transform.up, Vector3.up) > VehicleRecoveryUprightDot;
+                            && Vector3.Dot(transform.up, Vector3.up) > VehicleRecoveryUprightDot
+                            && velocity.sqrMagnitude < VehicleRecoverySpeedSettle * VehicleRecoverySpeedSettle
+                            && !pushedRecently;
 
             if (elapsed < VehicleRecoveryMinDuration)
                 return;
-            if (!settled && elapsed < VehicleRecoveryMaxDuration)
+            float sinceLastDisturbance = Time.time - Mathf.Max(recoveringSince, lastPushedTime);
+            if (!settled && sinceLastDisturbance < VehicleRecoveryMaxDuration)
                 return;
 
             TryReattach();
@@ -629,6 +699,13 @@ namespace CityGenerator.Runtime
             targetNode = node;
             fromNode = -1;
             network.LaneOccupancy?.Enter(this, fromNode, targetNode);
+
+            // Carry on from the car's actual forward motion instead of snapping it to a halt (or to
+            // its pre-impact speed): Driving imposes this speed from the next tick on and ramps it
+            // with the usual acceleration/braking. A car sliding backwards starts from rest.
+            Vector3 flatVelocity = rb.linearVelocity;
+            flatVelocity.y = 0f;
+            speed = Mathf.Clamp(Vector3.Dot(flatVelocity, uprightRotation * Vector3.forward), 0f, maxSpeed);
 
             physicsState = PhysicsState.Driving;
             EnterDrivingPhysics();
