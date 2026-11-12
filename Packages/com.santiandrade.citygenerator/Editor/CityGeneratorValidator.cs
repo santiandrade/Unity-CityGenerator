@@ -53,6 +53,30 @@ namespace CityGenerator.Editor
             if (settings.ground.crosswalkLinePrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("ground.crosswalkLinePrefab", "Ground: Crosswalk Line prefab is required."));
 
+            // The sliders only clamp what they display: a size saved by an earlier version with a
+            // larger MaxGridSize (or set from code) would otherwise still be generated as-is, and
+            // a custom cell outside the canvas would be placed off the networks' fixed axes.
+            int minGrid = CityGeneratorConstants.MinGridSize;
+            int maxGrid = CityGeneratorConstants.MaxGridSize;
+            if (settings.general.useCustomGrid)
+            {
+                foreach (Vector2Int cell in settings.general.customBlockCells)
+                {
+                    if (cell.x < 0 || cell.y < 0 || cell.x >= maxGrid || cell.y >= maxGrid)
+                    {
+                        issues.Add(new CityGeneratorValidationIssue("general.customBlockCells", $"Grid: the custom shape has blocks outside the {maxGrid}x{maxGrid} canvas. Re-enter Customize mode to draw it again."));
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                if (settings.general.gridWidth < minGrid || settings.general.gridWidth > maxGrid)
+                    issues.Add(new CityGeneratorValidationIssue("general.gridWidth", $"Grid: Grid Width must be between {minGrid} and {maxGrid}."));
+                if (settings.general.gridHeight < minGrid || settings.general.gridHeight > maxGrid)
+                    issues.Add(new CityGeneratorValidationIssue("general.gridHeight", $"Grid: Grid Height must be between {minGrid} and {maxGrid}."));
+            }
+
             if (settings.general.useCustomGrid && settings.ground.emptyBlockPrefab == null)
                 issues.Add(new CityGeneratorValidationIssue("ground.emptyBlockPrefab", "Ground: Empty Block prefab is required while Customize mode is on (it fills the gaps of the custom shape)."));
 

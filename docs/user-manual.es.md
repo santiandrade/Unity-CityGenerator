@@ -164,7 +164,7 @@ Aparecen dos submodos sobre la vista previa:
 | **Define City Area** | Dibujar la forma. Haz clic en un **+** para añadir una manzana adyacente a la forma actual; haz clic en un **−** para quitar una manzana, siempre que quitarla no parta la forma en dos ni la vacíe. |
 | **Define Plazas** | El mismo clic para marcar plazas que en la retícula rectangular, pero limitado a las manzanas que existen en tu forma. |
 
-La forma se dibuja siempre sobre un lienzo fijo de 20 × 20, y la posición en el mundo de una
+La forma se dibuja siempre sobre un lienzo fijo de 15 × 15, y la posición en el mundo de una
 manzana nunca se desplaza aunque la forma crezca o se encoja a su alrededor.
 
 **El resultado sigue siendo un rectángulo.** Todos los huecos dentro del rectángulo envolvente

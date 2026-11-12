@@ -47,7 +47,7 @@ namespace CityGenerator.Runtime
         // script in the tool already keeps its own copy of the numbers it needs -- see
         // PedestrianNetwork's equivalent comment).
         private const float CellPitch = 56f;
-        private const int MaxGridSize = 20;
+        private const int MaxGridSize = 15;
 
         // Set by BuildFromBlockCells; gates Neighbour()'s extra shape-adjacency check so the
         // rectangular SetAxes/Build() path (useCustomShape == false) is completely unaffected.

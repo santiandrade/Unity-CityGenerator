@@ -116,7 +116,7 @@ namespace CityGenerator.Runtime
         // Own copies of the geometry needed by BuildFromBlockCells, same reasoning as the comment
         // above (CityGeneratorConstants is Editor-only) and matching TrafficNetwork's equivalent copies.
         private const float CellPitch = 56f;
-        private const int MaxGridSize = 20;
+        private const int MaxGridSize = 15;
 
         // Set by BuildFromBlockCells; gates Build()'s block loop so the rectangular
         // SetAxes/Build() path (useCustomShape == false) is completely unaffected.

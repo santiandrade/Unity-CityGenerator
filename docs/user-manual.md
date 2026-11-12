@@ -163,7 +163,7 @@ Two sub-modes appear above the preview:
 | **Define City Area** | Draw the shape. Click a **+** to add a block adjacent to the current shape; click a **−** to remove a block, as long as removing it wouldn't split the shape in two or empty it. |
 | **Define Plazas** | Same click-to-toggle plaza behaviour as the rectangular grid, but restricted to the blocks that exist in your shape. |
 
-The shape is always drawn on a fixed 20 × 20 canvas, and a block's world position never
+The shape is always drawn on a fixed 15 × 15 canvas, and a block's world position never
 shifts as the shape grows or shrinks around it.
 
 **The result is still a rectangle.** Every gap inside the shape's bounding box is filled with
