@@ -14,10 +14,10 @@ namespace CityGenerator.Tests.EditMode
         private GameObject go;
         private TrafficNetwork network;
 
-        // MaxGridSize (20) + 1 street axes -- TrafficNetwork.BuildFromBlockCells always builds
+        // MaxGridSize (15) + 1 street axes -- TrafficNetwork.BuildFromBlockCells always builds
         // over this fixed canvas, matching CityGeneratorConstants.MaxGridSize (Editor-only, so
         // duplicated here the same way TrafficNetwork itself keeps its own copy).
-        private const int AxisCount = 21;
+        private const int AxisCount = 16;
 
         [SetUp]
         public void SetUp()
@@ -103,10 +103,10 @@ namespace CityGenerator.Tests.EditMode
             return count;
         }
 
-        // Centre of a Custom Grid cell on the fixed MaxGridSize (20) canvas, mirroring
+        // Centre of a Custom Grid cell on the fixed MaxGridSize (15) canvas, mirroring
         // CityGeneratorGrid.GetBlockCenter (Editor-only, so not callable from here).
         private static Vector3 CellCentre(Vector2Int cell)
-            => new((cell.x - 9.5f) * 56f, 0f, (cell.y - 9.5f) * 56f);
+            => new((cell.x - 7f) * 56f, 0f, (cell.y - 7f) * 56f);
 
         // Ring covers both a block's own 8-node ring and the walkway along the city's perimeter
         // sidewalk, which sits a whole street away from any block centre. Only the former is

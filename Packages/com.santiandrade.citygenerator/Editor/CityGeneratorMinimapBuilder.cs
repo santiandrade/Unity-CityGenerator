@@ -568,6 +568,14 @@ namespace CityGenerator.Editor
             RenderTexture renderTexture = null;
             RenderTexture previousActive = RenderTexture.active;
 
+            // The scene's fog is switched off for the capture: the camera sits SnapshotCameraHeight
+            // above the ground, so any fog that ends closer than that (a typical linear fog for a
+            // street-level game camera) washes the whole snapshot out into the fog colour. Like
+            // the neutral light, it is a global setting read at render time, so a same-call
+            // change takes effect on the manual Render() below.
+            bool previousFog = RenderSettings.fog;
+            RenderSettings.fog = false;
+
             try
             {
                 cameraGO.transform.position = new Vector3(worldCenter.x, worldCenter.y + SnapshotCameraHeight, worldCenter.z);
@@ -606,6 +614,7 @@ namespace CityGenerator.Editor
             }
             finally
             {
+                RenderSettings.fog = previousFog;
                 RenderTexture.active = previousActive;
                 if (renderTexture != null)
                 {

@@ -505,6 +505,33 @@ namespace CityGenerator.Tests.EditMode
         }
 
         [Test]
+        public void ValidateDetailed_GridLargerThanMaxGridSize_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.gridWidth = CityGeneratorConstants.MaxGridSize + 1;
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "general.gridWidth" && !i.isWarning));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "general.gridHeight"));
+        }
+
+        [Test]
+        public void ValidateDetailed_CustomGridCellOutsideCanvas_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.useCustomGrid = true;
+            settings.general.customBlockCells = new List<Vector2Int> { new(5, 5), new(5, CityGeneratorConstants.MaxGridSize) };
+            settings.ground.emptyBlockPrefab = MakePrefabLike("EmptyBlock");
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "general.customBlockCells" && !i.isWarning));
+        }
+
+        [Test]
         public void ValidateDetailed_ValidCustomPlace_HasNoBlockingIssues()
         {
             CityGeneratorSettings settings = MakeMinimalValidSettings();

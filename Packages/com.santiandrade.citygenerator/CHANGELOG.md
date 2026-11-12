@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+
+- The grid can now be up to 15 × 15 blocks (was 20 × 20): Grid Width and Grid Height go up to
+  15, and Custom Grid shapes are drawn on a 15 × 15 canvas. A size or custom shape saved in the
+  window beyond that limit is now a blocking validation error instead of being generated.
+- Because the Custom Grid canvas is smaller, its centre moved: a custom shape still open in the
+  window from a previous version is placed about 140 m away from where it was, relative to the
+  city root, the next time it is rebuilt. Cities already generated in a scene are unaffected.
+
+### Fixed
+
+- The minimap snapshot is captured with the scene's fog switched off. A scene with fog enabled
+  (for example a linear fog ending closer than the capture camera's height) used to produce a
+  washed-out, almost blank minimap.
 
 ## [3.6.0] - 2026-11-12
 ### Changed
