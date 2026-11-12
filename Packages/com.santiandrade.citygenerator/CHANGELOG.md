@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-11-12
+### Changed
+
+- The grid can now be up to 20 × 20 blocks (was 10 × 10): Grid Width and Grid Height go up to
+  20, and Custom Grid shapes are drawn on a 20 × 20 canvas.
+- Because the Custom Grid canvas is larger, its centre moved: a custom shape still open in the
+  window from a previous version is placed about 280 m away from where it was, relative to the
+  city root, the next time it is rebuilt. Cities already generated in a scene are unaffected.
+
 ## [3.5.1] - 2026-11-06
 ### Fixed
 
