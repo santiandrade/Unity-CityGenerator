@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [3.6.0] - 2026-11-12
 ### Changed
 
 - The grid can now be up to 20 × 20 blocks (was 10 × 10): Grid Width and Grid Height go up to
