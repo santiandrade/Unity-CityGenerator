@@ -178,7 +178,7 @@ namespace CityGenerator.Tests.EditMode.Generation
 
             var centres = new List<Vector3>();
             foreach (Vector2Int cell in shape)
-                centres.Add(new Vector3((cell.x - 4.5f) * CellPitch, 0f, (cell.y - 4.5f) * CellPitch));
+                centres.Add(new Vector3((cell.x - 9.5f) * CellPitch, 0f, (cell.y - 9.5f) * CellPitch)); // MaxGridSize (20) / 2 - 0.5
 
             AssertPerimeterBandIsExact(root, centres);
         }

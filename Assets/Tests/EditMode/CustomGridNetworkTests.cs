@@ -14,10 +14,10 @@ namespace CityGenerator.Tests.EditMode
         private GameObject go;
         private TrafficNetwork network;
 
-        // MaxGridSize (10) + 1 street axes -- TrafficNetwork.BuildFromBlockCells always builds
+        // MaxGridSize (20) + 1 street axes -- TrafficNetwork.BuildFromBlockCells always builds
         // over this fixed canvas, matching CityGeneratorConstants.MaxGridSize (Editor-only, so
         // duplicated here the same way TrafficNetwork itself keeps its own copy).
-        private const int AxisCount = 11;
+        private const int AxisCount = 21;
 
         [SetUp]
         public void SetUp()
@@ -25,7 +25,7 @@ namespace CityGenerator.Tests.EditMode
             go = new GameObject("TrafficNetwork");
             network = go.AddComponent<TrafficNetwork>();
 
-            // L-triomino near canvas centre: (5,5)-(6,5)-(5,6). No island, orthogonally contiguous.
+            // L-triomino inside the canvas: (5,5)-(6,5)-(5,6). No island, orthogonally contiguous.
             var shape = new List<Vector2Int> { new(5, 5), new(6, 5), new(5, 6) };
             network.BuildFromBlockCells(shape);
         }
@@ -103,10 +103,10 @@ namespace CityGenerator.Tests.EditMode
             return count;
         }
 
-        // Centre of a Custom Grid cell on the fixed MaxGridSize (10) canvas, mirroring
+        // Centre of a Custom Grid cell on the fixed MaxGridSize (20) canvas, mirroring
         // CityGeneratorGrid.GetBlockCenter (Editor-only, so not callable from here).
         private static Vector3 CellCentre(Vector2Int cell)
-            => new((cell.x - 4.5f) * 56f, 0f, (cell.y - 4.5f) * 56f);
+            => new((cell.x - 9.5f) * 56f, 0f, (cell.y - 9.5f) * 56f);
 
         // Ring covers both a block's own 8-node ring and the walkway along the city's perimeter
         // sidewalk, which sits a whole street away from any block centre. Only the former is

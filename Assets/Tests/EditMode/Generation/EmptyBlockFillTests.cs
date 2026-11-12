@@ -21,7 +21,7 @@ namespace CityGenerator.Tests.EditMode.Generation
         private const float CellPitch = 56f;
         private const float BlockRadius = CellPitch / 2f;      // 28: half a cell pitch
         private const float GroundRadius = BlockRadius + 11f;  // 39: far edge of the paved ground
-        private const float CanvasCentreIndex = 4.5f;          // MaxGridSize (10) / 2 - 0.5
+        private const float CanvasCentreIndex = 9.5f;          // MaxGridSize (20) / 2 - 0.5
 
         private readonly List<GameObject> spawnedRoots = new();
         private float nextOffset;

@@ -113,7 +113,7 @@ namespace CityGenerator.Editor
         // "Customize" mode (SPEC 11) -- a custom shape is always edited on a MaxGridSize x
         // MaxGridSize canvas regardless of the previous gridWidth/gridHeight.
         public const int MinGridSize = 1;
-        public const int MaxGridSize = 10;
+        public const int MaxGridSize = 20;
 
         // SPEC 17: only used when a vehicle carries a dynamic Rigidbody (Enable Physics on).
         // Filters the constant contact of a queue of cars touching bumper-to-bumper at a red
