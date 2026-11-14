@@ -126,8 +126,102 @@ namespace CityGenerator.Runtime
         /// <summary>Total distance walked so far, for diagnosing stuck/jammed agents — mirrors CarAgent.DistanceTravelled.</summary>
         public float DistanceTravelled => distanceTravelled;
 
+        // SPEC 20: first renderer of the hierarchy, for PedestrianManager's visibility staggering.
+        private Renderer visibilityRenderer;
+
+        /// <summary>SPEC 20: whether any camera renders this pedestrian. True without a renderer.</summary>
+        public bool IsVisible => visibilityRenderer == null || visibilityRenderer.isVisible;
+
+        /// <summary>SPEC 20: whether its root collider is on (PedestrianManager's collider LOD
+        /// switches it off far from the focus). True without a collider.</summary>
+        public bool IsColliderActive => ownCollider == null || colliderActive;
+
+        // Cached, so the collider LOD never asks the engine for every agent every frame.
+        private bool colliderActive = true;
+
+        /// <summary>
+        /// SPEC 20, called by PedestrianManager's collider LOD: switches the root proxy collider on
+        /// or off. Switching it back on pairs it again with every physics vehicle, since Unity drops
+        /// a disabled collider's ignored pairs -- including any a user's own code had set on it.
+        /// </summary>
+        internal void SetColliderActive(bool active)
+        {
+            if (ownCollider == null || colliderActive == active)
+                return;
+
+            colliderActive = active;
+            ownCollider.enabled = active;
+            if (active)
+                VehiclePedestrianCollisionFilter.RepairPedestrian(ownCollider);
+        }
+
+        // SPEC 20: false while an external renderer draws this pedestrian (see SetAnimatorDriven).
+        private bool animatorDriven = true;
+
+        /// <summary>
+        /// SPEC 20: the Locomotion blend tree's Speed this pedestrian is walking at (0 while
+        /// waiting or idling), for a renderer that draws it without its Animator.
+        /// </summary>
+        public float AnimationSpeed => state == PedestrianState.Walking ? normalizedSpeed : 0f;
+
+        /// <summary>
+        /// SPEC 20: with false, this agent stops writing its Animator's parameters and disables the
+        /// Animator, for a project that draws far pedestrians itself (e.g. with baked animation);
+        /// with true, it enables it again and writes the current parameters at once.
+        /// </summary>
+        public void SetAnimatorDriven(bool driven)
+        {
+            if (animatorDriven == driven)
+                return;
+
+            animatorDriven = driven;
+            if (animator == null)
+                return;
+
+            animator.enabled = driven;
+            if (driven && hasAnimatorController)
+            {
+                animator.SetFloat(SpeedHash, AnimationSpeed);
+                animator.SetBool(GroundedHash, true);
+            }
+        }
+
+        /// <summary>
+        /// SPEC 20: puts this pedestrian on node <paramref name="node"/> of its network (on the
+        /// ground under it), facing its current way, and has it pick a new destination after a short
+        /// pause -- as if it had just walked there. Returns false, changing nothing, for a node that
+        /// is out of range, blocked, a Crossing (the middle of a road), or outside a Custom
+        /// Pedestrian's allowed nodes. Works before its first Start too.
+        /// </summary>
+        public bool Relocate(int node)
+        {
+            if (network == null)
+                network = FindAnyObjectByType<PedestrianNetwork>();
+            if (network == null || node < 0 || node >= network.NodeCount)
+                return false;
+
+            PedestrianNode target = network.GetNode(node);
+            if (target.Blocked || target.Kind == PedestrianNodeKind.Crossing)
+                return false;
+            if (allowedNodes != null && allowedNodes.Count > 0 && !allowedNodes.Contains(node))
+                return false;
+
+            Vector3 position = target.Position;
+            position.y = ResolveGroundY(position, position.y);
+            transform.position = position;
+
+            currentNode = node;
+            pathLength = 0;
+            pathIndex = 0;
+            StartIdling(0.1f, 0.5f);
+            if (hasAnimatorController && animatorDriven)
+                animator.SetFloat(SpeedHash, 0f);
+            return true;
+        }
+
         private void Awake()
         {
+            visibilityRenderer = GetComponentInChildren<Renderer>();
             animator = GetComponent<Animator>();
             hasAnimatorController = animator.runtimeAnimatorController != null;
         }
@@ -141,6 +235,7 @@ namespace CityGenerator.Runtime
             // ignore state whenever it is disabled and re-enabled. Costs nothing while no vehicle
             // is registered, which is every city generated with Enable Physics off.
             ownCollider = GetComponent<Collider>();
+            colliderActive = ownCollider == null || ownCollider.enabled;
             VehiclePedestrianCollisionFilter.RegisterPedestrian(ownCollider);
 
             if (network == null)
@@ -229,7 +324,7 @@ namespace CityGenerator.Runtime
                     TickWalking(dt, runLogic);
                     break;
                 case PedestrianState.WaitingToCross:
-                    if (hasAnimatorController)
+                    if (hasAnimatorController && animatorDriven)
                     {
                         animator.SetFloat(SpeedHash, 0f);
                     }
@@ -239,7 +334,7 @@ namespace CityGenerator.Runtime
                     }
                     break;
                 case PedestrianState.Idling:
-                    if (hasAnimatorController)
+                    if (hasAnimatorController && animatorDriven)
                     {
                         animator.SetFloat(SpeedHash, 0f);
                     }
@@ -250,7 +345,7 @@ namespace CityGenerator.Runtime
                     break;
             }
 
-            if (hasAnimatorController)
+            if (hasAnimatorController && animatorDriven)
             {
                 animator.SetBool(GroundedHash, true);
             }
@@ -260,7 +355,7 @@ namespace CityGenerator.Runtime
         {
             Vector3 targetPosition = AimPoint(pathIndex);
             MoveTowards(targetPosition, dt);
-            if (hasAnimatorController)
+            if (hasAnimatorController && animatorDriven)
             {
                 animator.SetFloat(SpeedHash, normalizedSpeed);
             }

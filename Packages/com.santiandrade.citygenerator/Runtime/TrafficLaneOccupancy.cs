@@ -56,6 +56,34 @@ namespace CityGenerator.Runtime
         }
 
         /// <summary>
+        /// SPEC 20: free distance, centre to centre along <paramref name="forward"/>, from
+        /// <paramref name="position"/> to the nearest car ahead and the nearest car behind among
+        /// every car heading to <paramref name="toNode"/> (any segment key). float.MaxValue when
+        /// there is none. Meant for choosing where a relocated car fits on a street segment; cars
+        /// still inside the crossing behind the segment (heading to its from node) are not counted.
+        /// </summary>
+        public void GetGap(int toNode, Vector3 position, Vector3 forward, out float ahead, out float behind)
+        {
+            ahead = float.MaxValue;
+            behind = float.MaxValue;
+            if (!byTarget.TryGetValue(toNode, out List<CarAgent> heading))
+                return;
+
+            for (int i = 0; i < heading.Count; i++)
+            {
+                CarAgent other = heading[i];
+                if (other == null)
+                    continue;
+
+                float along = Vector3.Dot(other.transform.position - position, forward);
+                if (along >= 0f)
+                    ahead = Mathf.Min(ahead, along);
+                else
+                    behind = Mathf.Min(behind, -along);
+            }
+        }
+
+        /// <summary>
         /// SPEC 20 (b): whether any CarAgent other than <paramref name="agent"/> heading to
         /// <paramref name="toNode"/> -- from any node, (-1, toNode) included -- is ahead of it
         /// along <paramref name="forward"/>. Deliberately coarse (no lateral check): a true answer

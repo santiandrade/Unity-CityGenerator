@@ -282,6 +282,7 @@ namespace CityGenerator.Runtime
         {
             int nx = axesX.Length;
             int nz = axesZ.Length;
+            laneSegments = null;
             nodes = new Node[nx * nz * 4 * 2];
 
             for (int i = 0; i < nx; i++)
@@ -490,6 +491,70 @@ namespace CityGenerator.Runtime
 
             // Stays on the same ring: only penalized if that ring is the perimeter.
             return from > 1f ? baseWeight * borderPenalty : baseWeight;
+        }
+
+        // SPEC 20: cached list of street segments (exit node -> next crossing's entry node), the
+        // only places a car can be put with CarAgent.Relocate.
+        private List<(int from, int to)> laneSegments;
+
+        /// <summary>SPEC 20: number of street segments -- from a crossing's exit node to the next
+        /// crossing's entry node, i.e. the straight lane between two crossings.</summary>
+        public int LaneSegmentCount
+        {
+            get
+            {
+                EnsureLaneSegments();
+                return laneSegments.Count;
+            }
+        }
+
+        /// <summary>SPEC 20: the <paramref name="index"/>-th street segment (see
+        /// <see cref="LaneSegmentCount"/>), as its from/to node indices.</summary>
+        public void GetLaneSegment(int index, out int from, out int to)
+        {
+            EnsureLaneSegments();
+            (from, to) = laneSegments[index];
+        }
+
+        /// <summary>SPEC 20: whether (<paramref name="from"/>, <paramref name="to"/>) is a street
+        /// segment: an exit node linked to an entry node.</summary>
+        public bool IsLaneSegment(int from, int to)
+        {
+            EnsureBuilt();
+            if (from < 0 || to < 0 || from >= nodes.Length || to >= nodes.Length)
+                return false;
+            if (nodes[from].IsEntry || !nodes[to].IsEntry)
+                return false;
+
+            List<Exit> exits = nodes[from].Exits;
+            for (int i = 0; i < exits.Count; i++)
+            {
+                if (exits[i].Node == to)
+                    return true;
+            }
+            return false;
+        }
+
+        private void EnsureLaneSegments()
+        {
+            EnsureBuilt();
+            if (laneSegments != null)
+                return;
+
+            laneSegments = new List<(int from, int to)>();
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                Node node = nodes[i];
+                if (node == null || node.IsEntry)
+                    continue;
+
+                for (int e = 0; e < node.Exits.Count; e++)
+                {
+                    int to = node.Exits[e].Node;
+                    if (nodes[to].IsEntry)
+                        laneSegments.Add((i, to));
+                }
+            }
         }
 
         /// <summary>Randomly picks the next node to travel to, weighting the exits.</summary>

@@ -38,6 +38,34 @@ namespace CityGenerator.Runtime
         private static readonly List<Collider> VehicleColliders = new();
         private static readonly List<Collider> PedestrianColliders = new();
 
+        // SPEC 20: whether pairs are actually ignored. Registration keeps tracking both sides
+        // either way, so switching it back on can pair every collider that is active right now.
+        private static bool enabled = true;
+
+        /// <summary>
+        /// SPEC 20: on by default. Off, no pair is ignored and every pair ignored so far is restored,
+        /// for a project that keeps vehicles and pedestrians apart by its own means (typically its
+        /// layer collision matrix, which this package never writes). Exposed as
+        /// <see cref="CityGeneratorAPI.VehiclePedestrianPairFiltering"/>.
+        /// </summary>
+        public static bool Enabled
+        {
+            get => enabled;
+            set
+            {
+                if (enabled == value)
+                    return;
+
+                // Off: restore the pairs while they are still flagged as ignored, then stop.
+                // On: flag first, so SetAllPairs actually ignores them.
+                if (!value)
+                    SetAllPairs(false);
+                enabled = value;
+                if (value)
+                    SetAllPairs(true);
+            }
+        }
+
         // Same reason as CarAgent.ResetCarIdCounter: with Domain Reload disabled these static lists
         // would otherwise carry destroyed colliders from the previous Play session into the next.
         // The -= before the += is there for the same reason: the subscription itself would survive
@@ -47,6 +75,7 @@ namespace CityGenerator.Runtime
         {
             VehicleColliders.Clear();
             PedestrianColliders.Clear();
+            enabled = true;
 
             Application.quitting -= ClearAllPairs;
             Application.quitting += ClearAllPairs;
@@ -73,6 +102,17 @@ namespace CityGenerator.Runtime
         /// </summary>
         private static void ClearAllPairs()
         {
+            if (enabled)
+                SetAllPairs(false);
+
+            VehicleColliders.Clear();
+            PedestrianColliders.Clear();
+        }
+
+        /// <summary>Ignores (or restores) every registered vehicle x pedestrian pair that
+        /// <see cref="Physics.IgnoreCollision(Collider, Collider, bool)"/> still accepts.</summary>
+        private static void SetAllPairs(bool ignore)
+        {
             for (int v = VehicleColliders.Count - 1; v >= 0; v--)
             {
                 Collider vehicleCollider = VehicleColliders[v];
@@ -85,12 +125,9 @@ namespace CityGenerator.Runtime
                     if (!CanIgnore(pedestrianCollider))
                         continue;
 
-                    Physics.IgnoreCollision(vehicleCollider, pedestrianCollider, false);
+                    Physics.IgnoreCollision(vehicleCollider, pedestrianCollider, ignore);
                 }
             }
-
-            VehicleColliders.Clear();
-            PedestrianColliders.Clear();
         }
 
         /// <summary>
@@ -128,12 +165,26 @@ namespace CityGenerator.Runtime
             => PedestrianColliders.Remove(pedestrianCollider);
 
         /// <summary>
+        /// SPEC 20: pairs a registered pedestrian collider again with every vehicle after it was
+        /// switched off and on (PedestrianManager's collider LOD), since Unity drops a disabled
+        /// collider's ignored pairs. Registration itself is untouched.
+        /// </summary>
+        public static void RepairPedestrian(Collider pedestrianCollider)
+        {
+            if (pedestrianCollider != null && PedestrianColliders.Contains(pedestrianCollider))
+                IgnoreAgainst(pedestrianCollider, VehicleColliders);
+        }
+
+        /// <summary>
         /// Ignores <paramref name="collider"/> against every collider in <paramref name="others"/>,
         /// dropping any entry whose GameObject was destroyed without going through OnDisable
         /// (Physics.IgnoreCollision throws on a destroyed collider).
         /// </summary>
         private static void IgnoreAgainst(Collider collider, List<Collider> others)
         {
+            if (!enabled)
+                return;
+
             for (int i = others.Count - 1; i >= 0; i--)
             {
                 Collider other = others[i];

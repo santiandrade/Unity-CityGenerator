@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Runtime options for big crowds, all off by default (SPEC 20): a simulation focus (the
+  player's car, say) instead of the main camera for every distance below; staggering of agents no
+  camera renders; physics-mode cars beyond a radius of the focus driven as kinematic bodies; and
+  pedestrian colliders switched off beyond a radius while cars use the proximity grid. Set them
+  through `city.Traffic.SetSimulationFocus`/`SetStagger`/`SetPhysicsRadius` and
+  `city.Pedestrians.SetSimulationFocus`/`SetStagger`/`SetColliderRadius`.
+- `CityGeneratorAPI.VehiclePedestrianPairFiltering`: switch the per-pair vehicle/pedestrian
+  collision filter off for a project that keeps them apart with its own layer matrix.
+- `CarAgent.Relocate` and `PedestrianAgent.Relocate`, with `TrafficNetwork.LaneSegmentCount`/
+  `GetLaneSegment`/`IsLaneSegment` and `TrafficLaneOccupancy.GetGap`, to move generated agents
+  around (e.g. a pool kept around the player).
+- `PedestrianAgent.AnimationSpeed` and `SetAnimatorDriven`, to draw far pedestrians with your own
+  renderer.
+- Profiler markers for traffic and pedestrians (`CityGenerator.Traffic.*`,
+  `CityGenerator.Pedestrians.*`).
+
+### Changed
+
+- Traffic sensors cost far less in busy cities: in physics mode they run once per rendered frame
+  instead of on every physics step; a car in the middle of a block with an empty lane ahead skips
+  its physics query; and the pedestrian sensor only looks at pedestrians on a crosswalk. Measured
+  with 1000 cars and 1000 pedestrians on a 15 × 15 grid: sensors from 188 ms to 9 ms per frame.
+  Cars no longer brake for pedestrians standing on the sidewalk while turning.
+
+### Fixed
+
+- A car disabled and enabled again was invisible to the lane index until its next node.
+- A city without pedestrians, or without the package's player, searched the whole scene every
+  frame (once per car, for the former).
 
 ## [3.6.1] - 2026-11-12
 ### Changed

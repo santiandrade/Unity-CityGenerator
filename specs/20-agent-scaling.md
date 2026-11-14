@@ -78,7 +78,7 @@ La revisión técnica (`docs/technical-review.md`, F.4) ya concluyó que el cami
    - **Solo actúa mientras `PedestrianRoadProximityGrid.HasEnoughAgents`:** por debajo del umbral, el sensor de peatones de `CarAgent` vuelve al `SphereCast` y necesita los colliders.
    - Al volver a encenderlo se registra otra vez en el filtro, porque Unity borra los pares ignorados de un collider que se apaga y se enciende.
    - API: `city.Pedestrians.SetColliderRadius(float)`.
-6. **Suelo de los peatones por lotes:**
+6. **Suelo de los peatones por lotes** *(implementado y retirado en el paso 5: no mejoraba; ver *Notas de implementación*)*:
    - por encima de `staggerMinAgentCount`, `PedestrianManager` calcula primero la siguiente posición XZ de todos los peatones que caminan;
    - después lanza un único lote de `RaycastCommand` (`QueryParameters` con `groundMask` y triggers ignorados), lo completa en el mismo frame y aplica las alturas;
    - por debajo del umbral se queda el `Physics.Raycast` actual, idéntico bit a bit;
@@ -211,7 +211,7 @@ public bool Relocate(int node);                              // false if the nod
      - un peatón reubicado camina y cruza por los pasos;
      - reactivar un coche lo vuelve a poner en la ocupación de su tramo.
 7. **Gancho de animación** (`AnimationSpeed`, `SetAnimatorDriven`) con su test.
-8. **Experimento *Optimize Game Objects*:** medir y adoptar o descartar (se anota en las dos opciones).
+8. **Experimento *Optimize Game Objects*:** aplazado a la fase 0 de City Races (ver *Notas de implementación*).
 9. **Medición final** del caso 1000 + 1000 con todo apagado y con todo encendido, **documentación** y **versión 3.7.0** con la ventana de release.
 
 ## Criterios de aceptación
@@ -268,7 +268,7 @@ public bool Relocate(int node);                              // false if the nod
 - **Sí: LOD de física por radio desde un foco, no por visibilidad.** La física importa donde puede haber contacto con el jugador, no donde mira la cámara.
 - **Sí: cinemático con `MovePosition` fuera del radio, no sin `Rigidbody`.** Quitar y poner el componente cambiaría el modo detectado por `GetComponent<Rigidbody>()` (invariante de SPEC 17) y sería más caro.
 - **Sí: escalonar sensores y lógica, nunca el movimiento.** Mover a saltos lo que podría estar en pantalla se ve; el movimiento es barato.
-- **Sí: `RaycastCommand` para el suelo, manteniendo el raycast.** Conserva el criterio de SPEC 03 (la altura sale del collider real bajo los pies) y lo reparte entre hilos. Descartada una rejilla de alturas precalculada: tendría que reproducir plazas y lugares personalizados y se desincronizaría con cualquier collider del usuario.
+- **Probado y descartado: `RaycastCommand` para el suelo** (paso 5: con 1000 peatones costaba lo mismo que el raycast por agente). Se mantiene el raycast individual, que conserva el criterio de SPEC 03 (la altura sale del collider real bajo los pies). Descartada también una rejilla de alturas precalculada: tendría que reproducir plazas y lugares personalizados y se desincronizaría con cualquier collider del usuario.
 - **Sí: reubicar en lugar de instanciar.** Un pool de agentes generados evita destruir colliders (con la tabla de pares, carísimo) y la configuración por instancia que hace el generador (capas, máscaras).
 - **Descartado: la burbuja de población dentro del paquete.** Su política depende de cámaras, cinemáticas y teletransportes del juego. Si un segundo consumidor la necesita, se generaliza entonces.
 - **Descartado (por ahora): Jobs + Burst y ECS.** Sigue valiendo el veredicto de la revisión técnica: sin dependencias nuevas mientras el perfilado no lo pida.
@@ -384,3 +384,64 @@ public bool Relocate(int node);                              // false if the nod
   - **Cumplido:** `Traffic.Sensors` baja un 95 %, por encima del 60 % pedido.
   - **No cumplido:** `Sensors.VehicleOverlap` sigue siendo la mayor parte de `Sensors.Vehicles` (61 %), porque el atajo seguro solo cubre el centro de cada manzana con el carril vacío. **Queda abierto** como posible mejora: usar el índice por objetivo como búsqueda principal del coche de delante (con filtro lateral) en vez de solo como guarda del atajo.
 - **Suite:** EditMode 139/139 y PlayMode 98/98 en verde con la versión del *Scope*, y PlayMode 98/98 otra vez con la versión final (los tests `[Explicit]` no cuentan).
+
+### Pasos 2–7 — opciones de escalado, reubicación y gancho de animación (2026-11-14)
+
+- **Implementado** como en el *Scope* (puntos 2–5, 7–9), salvo lo que se indica aquí.
+- **Filtro delegable (2):** `VehiclePedestrianCollisionFilter.Enabled` mantiene el registro de los dos lados aunque esté apagado. Así, volver a encenderlo empareja a todos los agentes activos en ese momento, y apagarlo restaura los pares ya ignorados. El paquete sigue sin escribir la matriz: el invariante de `CLAUDE.md` se matiza, no se elimina.
+- **Foco y escalonado (3):** `TrafficManager`/`PedestrianManager.SimulationFocus` y `SetStagger(distance, frames, invisibleDistance)`.
+  - La visibilidad se lee del primer `Renderer` de la jerarquía (`IsVisible`), cacheado en `OnEnable`/`Awake`.
+  - El escalonado por visibilidad solo se aplica más allá de `invisibleDistance`. Así no se escalona un coche invisible pegado al jugador, por ejemplo el que va detrás del taxi en la vista de tercera persona.
+- **LOD de física (4):**
+  - un coche cinemático se mueve con `MovePosition`;
+  - un impacto mientras es cinemático lo libera (`EnterRecovering` lo vuelve dinámico);
+  - el modo se cachea en `CarAgent` (`kinematicByLod`), y el LOD se decide una vez por frame con paso de física, cada coche uno de cada 4 frames. La histéresis de 10 m absorbe ese retraso.
+
+  En la primera versión, que miraba todos los coches en cada paso de física y le preguntaba al motor `rb.isKinematic`, el marcador costaba 0,31 ms apagado y 0,85 ms encendido; ahora cuesta 0 y 0,32 ms.
+- **LOD de colliders de peatones (4):**
+  - mismo criterio de coste: estado cacheado en `PedestrianAgent` y cada peatón comprobado uno de cada 4 frames;
+  - un collider que se vuelve a encender se empareja de nuevo con los coches con físicas (`VehiclePedestrianCollisionFilter.RepairPedestrian`);
+  - solo actúa mientras la rejilla de proximidad responde al sensor de los coches.
+- **Suelo de los peatones por lotes (5): implementado, medido y retirado.**
+  - Con 1000 peatones, `Pedestrians.Tick` + `Grounding` costaban lo mismo con el lote de `RaycastCommand` que con el raycast por agente: 5,4 ms frente a 5,3 ms, y 5,4 ms frente a 5,1 ms en una segunda medición, incluso después de escribir la altura solo cuando cambiaba.
+  - Programar y completar el lote en el hilo principal y volver a escribir la altura se comen la ganancia del reparto entre hilos.
+  - Siguiendo el criterio de aceptación («cada opción que no mejore su subsistema se retira»), el código y su test se quitaron.
+- **Reubicación (6):**
+  - **Tramos de calle:** `TrafficNetwork.LaneSegmentCount`/`GetLaneSegment`/`IsLaneSegment`, es decir, los pares salida → entrada del siguiente cruce, cacheados y reiniciados en cada `Build`.
+  - **Firma de `GetGap` distinta a la del *Scope*:** queda `GetGap(toNode, position, forward, out ahead, out behind)` y no `GetGap(from, to, position, …)`. El índice no conoce las posiciones de los nodos, y lo que importa es el carril físico, que se identifica por el nodo objetivo con cualquier clave.
+  - **`CarAgent.Relocate(from, to, t)`:**
+    - funciona también con el coche inactivo: la ocupación se registra en su `OnEnable`;
+    - si se llama antes de su primer `Start`, este ya no busca nodo, porque el coche ya lo sabe.
+  - **`PedestrianAgent.Relocate(node)`** rechaza los nodos `Crossing`, los bloqueados y los que quedan fuera de los nodos permitidos de un Custom Pedestrian.
+- **Gancho de animación (7):** `PedestrianAgent.AnimationSpeed` y `SetAnimatorDriven(bool)`.
+- **Experimento *Optimize Game Objects* (8): aplazado.**
+  - Los tests de rendimiento del paquete no tienen cámara, así que todos los `Animator` de los peatones están en `Cull Completely`, no se ven y su coste no aparece: no hay con qué medirlo.
+  - Se medirá en la fase 0 de City Races, que tiene cámara y peatones en pantalla. Si `Animation` pesa allí, se hará como cambio aparte del paquete.
+- **Tests nuevos** (`Traffic/AgentScalingTests`, 10, en verde):
+  - filtro delegable;
+  - foco que sustituye a la cámara;
+  - escalonado por invisibilidad;
+  - LOD de física (cambio de modo sin salto de velocidad, y un coche en `Recovering` no cambia);
+  - LOD de colliders con re-emparejado;
+  - reubicación de coche (tramo, ocupación vieja y nueva, sigue circulando) y de coche en `Recovering`;
+  - reubicación de peatón (nodo, rechazo de `Crossing`, vuelve a andar);
+  - `SetAnimatorDriven`.
+- **Suite:** EditMode 139/139 y PlayMode 108/108 en verde.
+- **Medición** de 1000 + 1000 (15 × 15, modo físico), mediana por frame en ms. Columna «con opciones»: foco en el centro de la ciudad, física a 80 m, colliders a 40 m, escalonado de lo invisible más allá de 25 m. El test no tiene cámara, así que nada es visible, como todo lo que queda fuera de pantalla en un juego. El filtro por pares sigue encendido, porque la matriz de este proyecto no separa coches y peatones.
+
+  | Marcador | Opciones apagadas | Con opciones |
+  | --- | --- | --- |
+  | Frame | 37,4 | 21,8 |
+  | `Traffic.Tick` | 12,4 | 4,2 |
+  | `Traffic.Sensors` | 7,8 | 2,0 |
+  | `Traffic.CollisionCallbacks` | 0,26 | 0 |
+  | `Traffic.PhysicsLod` | 0 | 0,32 |
+  | `Pedestrians.Tick` (con `Grounding`) | 4,9 (1,1) | 4,7 (0,9) |
+  | `Pedestrians.Separation` | 2,0 | 1,8 |
+  | `Pedestrians.ColliderLod` | 0 | 0,32 |
+  | `Physics.Simulate` | 3,7 | 1,0 |
+
+  Respecto al paso 1 (318 ms de frame con 1000 + 1000), el frame queda en 37 ms solo con lo que va activo por defecto y en 22 ms con las opciones. Lo que más pesa ahora son los peatones (`Tick` + `Separation`, ~6,5 ms), y el resto del frame es el propio Editor y el render. Lo siguiente se mide en el juego real (fase 0 de City Races).
+- **Pendiente para cerrar la spec:**
+  - publicar la versión 3.7.0 (necesita el visto bueno de Santi);
+  - verificar en un consumidor real (City Races) que las opciones funcionan juntas con su burbuja.

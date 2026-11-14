@@ -1,5 +1,6 @@
 using System.Collections;
 using CityGenerator.Editor;
+using CityGenerator.Runtime;
 using NUnit.Framework;
 using Unity.PerformanceTesting;
 using UnityEngine;
@@ -20,9 +21,13 @@ namespace CityGenerator.Tests.Performance
     {
         private GameObject root;
 
+        private GameObject focusGo;
+
         [TearDown]
         public void TearDown()
         {
+            if (focusGo != null)
+                Object.DestroyImmediate(focusGo);
             if (root != null)
                 Object.DestroyImmediate(root);
         }
@@ -43,6 +48,8 @@ namespace CityGenerator.Tests.Performance
             "CityGenerator.Pedestrians.Grounding",
             "CityGenerator.Pedestrians.Separation",
             "CityGenerator.Pedestrians.ProximityGrid",
+            "CityGenerator.Pedestrians.ColliderLod",
+            "CityGenerator.Traffic.PhysicsLod",
             "Physics.Simulate"
         };
 
@@ -109,6 +116,31 @@ namespace CityGenerator.Tests.Performance
         public IEnumerator PerFrameCost_1000Agents_15x15_Physics()
         {
             yield return BuildCityWithAgents(1000, 1000, 15, enablePhysics: true);
+            yield return new WaitForSeconds(1000 * 0.01f + 1f);
+            yield return Measure.Frames().WarmupCount(30).MeasurementCount(120).ProfilerMarkers(AgentMarkers).Run();
+        }
+
+        // SPEC 20: the same city with the optional scaling features on, focused on the centre of the
+        // city as a player's car would be: physics LOD at 80 m, pedestrian colliders at 40 m, and
+        // visibility staggering beyond 25 m (the test has no camera, so nothing is visible -- like
+        // everything off-screen in a game). The vehicle/pedestrian pair filter stays on: this
+        // project's layer matrix doesn't keep them apart.
+        [UnityTest, Performance]
+        public IEnumerator PerFrameCost_1000Agents_15x15_Physics_ScalingOptions()
+        {
+            yield return BuildCityWithAgents(1000, 1000, 15, enablePhysics: true);
+
+            focusGo = new GameObject("SimulationFocus");
+            focusGo.transform.position = root.transform.position;
+            TrafficManager traffic = root.GetComponentInChildren<TrafficManager>();
+            PedestrianManager pedestrians = root.GetComponentInChildren<PedestrianManager>();
+            traffic.SimulationFocus = focusGo.transform;
+            traffic.SetStagger(60f, 4, 25f);
+            traffic.PhysicsRadius = 80f;
+            pedestrians.SimulationFocus = focusGo.transform;
+            pedestrians.SetStagger(60f, 4, 25f);
+            pedestrians.ColliderRadius = 40f;
+
             yield return new WaitForSeconds(1000 * 0.01f + 1f);
             yield return Measure.Frames().WarmupCount(30).MeasurementCount(120).ProfilerMarkers(AgentMarkers).Run();
         }

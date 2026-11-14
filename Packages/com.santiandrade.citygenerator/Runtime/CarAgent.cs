@@ -96,6 +96,7 @@ namespace CityGenerator.Runtime
         // vehicles are built first. By the time Play actually starts and the sensor first runs, the
         // full scene (including this) exists.
         private PedestrianRoadProximityGrid pedestrianRoadProximity;
+        private Renderer visibilityRenderer;
         // SPEC 20 (d): a city without pedestrians has no grid, and searching the whole scene for it
         // on every sensor run was a per-car, per-step FindAnyObjectByType.
         private float nextProximityLookupTime;
@@ -215,6 +216,10 @@ namespace CityGenerator.Runtime
         /// <summary>Identifier used for crossing reservations and to break ties in deadlocks.</summary>
         public int CarId => carId;
         public int TargetNode => targetNode;
+        /// <summary>Node the car last departed from, -1 until it reaches its first node (or after
+        /// re-attaching from Recovering). Together with <see cref="TargetNode"/>, its lane segment.</summary>
+        public int FromNode => fromNode;
+        public float MaxSpeed => maxSpeed;
         public int ReservedIntersection => reservedIntersection;
         public float DistanceTravelled => distanceTravelled;
         /// <summary>Seconds it has been continuously stopped for.</summary>
@@ -228,6 +233,21 @@ namespace CityGenerator.Runtime
         /// Rigidbody sits on this GameObject). Read by TrafficManager to route it to FixedUpdate
         /// instead of Update.</summary>
         public bool HasPhysics => rb != null;
+
+        /// <summary>
+        /// SPEC 20: whether this physics-mode car is a dynamic body right now. False while
+        /// TrafficManager's physics LOD keeps it kinematic (beyond its physicsRadius from the
+        /// focus); always false for a kinematic-mode car (no Rigidbody).
+        /// </summary>
+        public bool IsPhysicsSimulated => rb != null && !kinematicByLod;
+
+        // SPEC 20: cached mirror of rb.isKinematic, which only the physics LOD sets, so neither the
+        // LOD loop nor Tick asks the engine for it.
+        private bool kinematicByLod;
+
+        /// <summary>SPEC 20: whether any camera renders this car (its first renderer), for
+        /// TrafficManager's visibility staggering. True when it has no renderer at all.</summary>
+        public bool IsVisible => visibilityRenderer == null || visibilityRenderer.isVisible;
 
         // Counter reset for Play sessions with Domain Reload disabled, where a static field
         // otherwise keeps growing across sessions and breaks the carId tie-break in IsDeadlockedWith.
@@ -246,6 +266,8 @@ namespace CityGenerator.Runtime
         private void OnEnable()
         {
             ownCollider = GetComponent<Collider>();
+            if (visibilityRenderer == null)
+                visibilityRenderer = GetComponentInChildren<Renderer>();
             if (ownCollider != null)
                 ColliderRegistry[ownCollider.GetEntityId()] = this;
 
@@ -335,7 +357,9 @@ namespace CityGenerator.Runtime
             }
 
             carId = nextCarId++;
-            targetNode = network.FindNodeAhead(transform.position, transform.forward);
+            // SPEC 20: a car relocated before its first Start already knows its segment.
+            if (targetNode < 0)
+                targetNode = network.FindNodeAhead(transform.position, transform.forward);
             if (targetNode < 0)
             {
                 Debug.LogError($"{name}: no network node found ahead of the vehicle.", this);
@@ -462,8 +486,18 @@ namespace CityGenerator.Runtime
                 // Y position is already frozen by the Rigidbody's constraints (see
                 // EnterDrivingPhysics), so unlike the kinematic path below there's no y = 0f to
                 // apply by hand.
-                rb.MoveRotation(rotation);
-                rb.linearVelocity = (rotation * Vector3.forward) * speed;
+                if (kinematicByLod)
+                {
+                    // SPEC 20 physics LOD: a kinematic body is moved, not driven by velocity. Y is
+                    // left as it is, like the frozen Y of the dynamic case.
+                    rb.MovePosition(rb.position + (rotation * Vector3.forward) * step);
+                    rb.MoveRotation(rotation);
+                }
+                else
+                {
+                    rb.MoveRotation(rotation);
+                    rb.linearVelocity = (rotation * Vector3.forward) * speed;
+                }
             }
             else
             {
@@ -662,8 +696,113 @@ namespace CityGenerator.Runtime
         /// an accident that kept either would block that crossing/lane indefinitely, reproducing
         /// the five-minute deadlock CLAUDE.md documents, by another path.
         /// </summary>
+        /// <summary>
+        /// SPEC 20: puts this car on the street segment (<paramref name="from"/>,
+        /// <paramref name="to"/>) -- see <see cref="TrafficNetwork.GetLaneSegment"/> -- at fraction
+        /// <paramref name="t"/> of its length, facing along it, as if it had just driven there:
+        /// leaves the occupancy of the segment it was on and enters the new one, gives up any
+        /// crossing reservation, and starts again from a moderate speed (maxSpeed x
+        /// cornerSpeedFactor) with no stop, deadlock or bumper state left over. A Recovering car
+        /// goes back to Driving. Works on an inactive car too (the occupancy is entered when it is
+        /// enabled). Returns false, changing nothing, when the pair is not a street segment. Placing
+        /// it where it does not overlap another car is the caller's job (see
+        /// <see cref="TrafficLaneOccupancy.GetGap"/>).
+        /// </summary>
+        public bool Relocate(int from, int to, float t)
+        {
+            if (network == null)
+                network = FindAnyObjectByType<TrafficNetwork>();
+            if (network == null || !network.IsLaneSegment(from, to))
+                return false;
+
+            bool registered = isActiveAndEnabled && targetNode >= 0 && physicsState == PhysicsState.Driving;
+            if (registered)
+                network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+            if (reservedIntersection >= 0)
+            {
+                network.Release(reservedIntersection, carId);
+                reservedIntersection = -1;
+            }
+            RecoveringCars.Remove(this);
+
+            Vector3 start = network.GetNode(from).Position;
+            Vector3 end = network.GetNode(to).Position;
+            Vector3 direction = end - start;
+            direction.y = 0f;
+            Quaternion rotation = Quaternion.LookRotation(direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward, Vector3.up);
+            Vector3 position = Vector3.Lerp(start, end, Mathf.Clamp01(t));
+            position.y = 0f;
+
+            fromNode = from;
+            targetNode = to;
+            speed = maxSpeed * cornerSpeedFactor;
+            stoppedTime = 0f;
+            breakingDeadlockUntil = 0f;
+            bumperBlockedUntil = 0f;
+            stopReason = StopReason.None;
+            lastStopReason = StopReason.None;
+            approachingUnsignalled = false;
+            lastAheadClearance = float.MaxValue;
+            lastPedestrianClearance = float.MaxValue;
+            lastObstacleClearance = float.MaxValue;
+            reattachAttempts = 0;
+
+            transform.SetPositionAndRotation(position, rotation);
+            if (rb != null)
+            {
+                if (physicsState == PhysicsState.Recovering)
+                {
+                    physicsState = PhysicsState.Driving;
+                    EnterDrivingPhysics();
+                }
+                rb.position = position;
+                rb.rotation = rotation;
+                rb.angularVelocity = Vector3.zero;
+                if (!kinematicByLod)
+                    rb.linearVelocity = rotation * Vector3.forward * speed;
+            }
+            physicsState = PhysicsState.Driving;
+
+            if (isActiveAndEnabled)
+                network.LaneOccupancy?.Enter(this, fromNode, targetNode);
+            return true;
+        }
+
+        /// <summary>
+        /// SPEC 20, called by TrafficManager's physics LOD: switches this physics-mode car between
+        /// a dynamic body (normal SPEC 17 driving) and a kinematic one moved with MovePosition.
+        /// Kinematic bodies generate no contacts with each other or with static geometry, so a far
+        /// queue stops costing anything in the solver. Going back to dynamic carries the current
+        /// driving speed over as velocity, so the car never jumps. Ignored without a Rigidbody and
+        /// while Recovering (a knocked car must stay free until it re-attaches).
+        /// </summary>
+        public void SetPhysicsSimulated(bool simulated)
+        {
+            if (rb == null || physicsState != PhysicsState.Driving || kinematicByLod == !simulated)
+                return;
+
+            kinematicByLod = !simulated;
+            if (simulated)
+            {
+                rb.isKinematic = false;
+                rb.linearVelocity = transform.forward * speed;
+                rb.angularVelocity = Vector3.zero;
+            }
+            else
+            {
+                rb.isKinematic = true;
+            }
+        }
+
         private void EnterRecovering()
         {
+            // SPEC 20: an impact always frees the car, even if the physics LOD had it kinematic.
+            if (kinematicByLod)
+            {
+                kinematicByLod = false;
+                rb.isKinematic = false;
+            }
+
             physicsState = PhysicsState.Recovering;
             recoveringSince = Time.time;
             lastPushedTime = float.NegativeInfinity;
