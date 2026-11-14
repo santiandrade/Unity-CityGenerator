@@ -157,6 +157,15 @@ namespace CityGenerator.Runtime
             if (info != null && info.pedestrianManager != null)
                 info.pedestrianManager.ColliderRadius = meters;
         }
+
+        /// <summary>SPEC 20: pedestrians beyond <paramref name="meters"/> of the focus skip their
+        /// ground raycast while walking a stretch that lies on one flat surface, and cast it only on
+        /// their logic frames while staggered; 0 turns it off. No-op without pedestrians.</summary>
+        public void SetGroundingShortcutDistance(float meters)
+        {
+            if (info != null && info.pedestrianManager != null)
+                info.pedestrianManager.GroundingShortcutDistance = meters;
+        }
     }
 
     public readonly struct MinimapModule

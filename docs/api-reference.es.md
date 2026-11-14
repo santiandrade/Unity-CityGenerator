@@ -135,6 +135,7 @@ siempre que el Player estuviera deshabilitado en el momento de la generación.
 | `SetSimulationFocus(Transform focus)` | Mide las distancias del escalonado de la lógica y del LOD de colliders desde `focus` en lugar de desde la cámara principal. `null` vuelve a la cámara. |
 | `SetStagger(float distance, int frames, float invisibleDistance = 0f)` | Como en `Traffic`, para la lógica de decisión de los peatones (el movimiento sigue siendo en cada frame). |
 | `SetColliderRadius(float meters)` | Los peatones a más de `meters` del foco tienen el collider raíz apagado mientras los coches los encuentran por la rejilla de proximidad (ciudades concurridas). Un collider que se vuelve a encender se empareja de nuevo con los vehículos con físicas, pero pierde cualquier par ignorado que hubiera puesto tu propio código. `0` (por defecto) lo apaga. |
+| `SetGroundingShortcutDistance(float meters)` | Los peatones a más de `meters` del foco no lanzan el rayo al suelo mientras recorren un tramo entre dos nodos que está sobre una sola superficie plana (se comprueba con dos rayos al empezar el tramo; nunca a través de un bordillo), y mientras están escalonados solo lo lanzan en sus frames de lógica. `0` (por defecto) lo apaga. |
 
 ## `CityGeneratorCity.Minimap`
 

@@ -131,6 +131,7 @@ Player was disabled at generation time.
 | `SetSimulationFocus(Transform focus)` | Measures decision-logic staggering and collider LOD distances from `focus` instead of the main camera. `null` restores the camera. |
 | `SetStagger(float distance, int frames, float invisibleDistance = 0f)` | As for `Traffic`, for the pedestrians' decision logic (they always move every frame). |
 | `SetColliderRadius(float meters)` | Pedestrians beyond `meters` from the focus have their root collider off while cars find them through the proximity grid (busy cities). A collider switched back on is paired again with the physics vehicles, but loses any ignore pair your own code had set on it. `0` (the default) turns it off. |
+| `SetGroundingShortcutDistance(float meters)` | Pedestrians beyond `meters` from the focus skip their ground raycast while they walk a stretch between two nodes that lies on one flat surface (checked with two raycasts when the stretch starts; never across a kerb), and while staggered cast it only on their logic frames. `0` (the default) turns it off. |
 
 ## `CityGeneratorCity.Minimap`
 

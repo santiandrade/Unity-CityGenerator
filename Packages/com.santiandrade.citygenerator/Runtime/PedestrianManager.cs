@@ -57,6 +57,9 @@ namespace CityGenerator.Runtime
         [Tooltip("Extra distance beyond Collider Radius before a collider is switched off again.")]
         [SerializeField] private float colliderRadiusHysteresis = 5f;
 
+        [Tooltip("Agents farther than this from the focus skip their ground raycast while they walk between two nodes on the same flat surface, and staggered ones only cast it on the frames their logic runs. 0 = off: every walking agent raycasts every frame.")]
+        [SerializeField] private float groundingShortcutDistance;
+
         [Tooltip("This manager's PedestrianRoadProximityGrid, on the same GameObject. Set by CityGeneratorPedestrianBuilder.AddManagerComponent. Rebuilt once per frame here so CarAgent can query nearby pedestrians without a SphereCast (item 8, stage 4).")]
         [SerializeField] private PedestrianRoadProximityGrid roadProximityGrid;
 
@@ -157,6 +160,15 @@ namespace CityGenerator.Runtime
             set => colliderRadius = Mathf.Max(0f, value);
         }
 
+        /// <summary>SPEC 20: agents beyond this distance from the focus skip the ground raycast on
+        /// flat stretches and, while staggered, between their logic frames. 0 (the default) keeps
+        /// one raycast per walking agent per frame.</summary>
+        public float GroundingShortcutDistance
+        {
+            get => groundingShortcutDistance;
+            set => groundingShortcutDistance = Mathf.Max(0f, value);
+        }
+
         /// <summary>SPEC 20: sets the staggering parameters at runtime. <paramref name="invisibleDistance"/>
         /// = 0 keeps visibility out of it (the default).</summary>
         public void SetStagger(float distance, int frames, float invisibleDistance = 0f)
@@ -231,6 +243,8 @@ namespace CityGenerator.Runtime
             bool hasFocus = TryGetFocusPosition(out Vector3 focus);
             float sqrStaggerDistance = staggerDistance * staggerDistance;
             float sqrInvisibleDistance = invisibleStaggerDistance * invisibleStaggerDistance;
+            bool groundingShortcut = groundingShortcutDistance > 0f && hasFocus;
+            float sqrGroundingDistance = groundingShortcutDistance * groundingShortcutDistance;
 
             if (activeThisFrame.Length < agents.Count)
                 activeThisFrame = new bool[agents.Count];
@@ -241,10 +255,10 @@ namespace CityGenerator.Runtime
                 {
                     PedestrianAgent agent = agents[i];
                     bool runLogic = true;
+                    float sqrDistance = hasFocus ? (agent.transform.position - focus).sqrMagnitude : 0f;
 
                     if (staggeringActive && hasFocus)
                     {
-                        float sqrDistance = (agent.transform.position - focus).sqrMagnitude;
                         bool staggered = sqrDistance > sqrStaggerDistance
                                          || (invisibleStaggerDistance > 0f && sqrDistance > sqrInvisibleDistance && !agent.IsVisible);
                         if (staggered)
@@ -252,7 +266,7 @@ namespace CityGenerator.Runtime
                     }
 
                     activeThisFrame[i] = runLogic;
-                    agent.Tick(dt, runLogic);
+                    agent.Tick(dt, runLogic, exactGrounding: !groundingShortcut || sqrDistance <= sqrGroundingDistance);
                 }
             }
 

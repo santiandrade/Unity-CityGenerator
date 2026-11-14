@@ -316,8 +316,17 @@ namespace CityGenerator.Runtime
         /// back up next time it's true — PedestrianManager only does this for agents far from the
         /// camera, same convention as TrafficManager staggering CarAgent's sensor.
         /// </summary>
-        public void Tick(float dt, bool runLogic)
+        public void Tick(float dt, bool runLogic) => Tick(dt, runLogic, exactGrounding: true);
+
+        /// <summary>
+        /// SPEC 20: as <see cref="Tick(float, bool)"/>; with <paramref name="exactGrounding"/> false
+        /// the agent skips its ground raycast while it walks between two nodes on the same flat
+        /// surface, and on the other ticks casts it only when <paramref name="runLogic"/> is true.
+        /// </summary>
+        internal void Tick(float dt, bool runLogic, bool exactGrounding)
         {
+            groundEveryTick = exactGrounding;
+            groundThisTick = exactGrounding || runLogic;
             switch (state)
             {
                 case PedestrianState.Walking:
@@ -566,6 +575,20 @@ namespace CityGenerator.Runtime
         private const float GroundRayUpOffset = 1f;
         private const float GroundRayDownDistance = 3f;
 
+        // SPEC 20, grounding shortcut: set by each Tick from PedestrianManager. Two raycasts at
+        // the start of a stretch (the agent's position and its aim point) tell whether the whole
+        // stretch is on one flat surface: same collider, both normals straight up, same height. A
+        // box's top face is convex, so a straight walk between two points on it stays on it. Any
+        // stretch that touches a Curb or Crossing node has the kerb step in it and is never flat.
+        private const float FlatNormalY = 0.999f;
+        private const float FlatHeightTolerance = 0.005f;
+        private bool groundEveryTick = true;
+        private bool groundThisTick = true;
+        private int flatStretchFrom = -1;
+        private int flatStretchTo = -1;
+        private bool flatStretch;
+        private float flatStretchY;
+
         private void MoveTowards(Vector3 targetPosition, float dt)
         {
             Vector3 flatDir = targetPosition - transform.position;
@@ -581,11 +604,58 @@ namespace CityGenerator.Runtime
             Vector3 targetXZ = new(targetPosition.x, 0f, targetPosition.z);
             Vector3 nextXZ = Vector3.MoveTowards(currentXZ, targetXZ, effectiveSpeed * dt);
 
-            float nextY = ResolveGroundY(nextXZ, currentPosition.y);
+            float nextY = ResolveWalkingGroundY(nextXZ, targetPosition, currentPosition.y);
             Vector3 nextPosition = new(nextXZ.x, nextY, nextXZ.z);
 
             distanceTravelled += Vector3.Distance(currentPosition, nextPosition);
             transform.position = nextPosition;
+        }
+
+        private float ResolveWalkingGroundY(Vector3 nextXZ, Vector3 targetPosition, float currentY)
+        {
+            if (groundEveryTick)
+                return ResolveGroundY(nextXZ, currentY);
+            if (IsOnFlatStretch(targetPosition, currentY))
+                return flatStretchY;
+            return groundThisTick ? ResolveGroundY(nextXZ, currentY) : currentY;
+        }
+
+        private bool IsOnFlatStretch(Vector3 targetPosition, float currentY)
+        {
+            int to = pathIndex < pathLength ? path[pathIndex] : -1;
+            if (currentNode == flatStretchFrom && to == flatStretchTo)
+                return flatStretch;
+
+            flatStretchFrom = currentNode;
+            flatStretchTo = to;
+            flatStretch = false;
+            if (currentNode < 0 || to < 0 || IsKerbNode(currentNode) || IsKerbNode(to))
+                return false;
+
+            using var _ = PedestrianManager.GroundingMarker.Auto();
+            Vector3 here = transform.position;
+            if (!CastGround(new Vector3(here.x, currentY, here.z), out RaycastHit start)
+                || !CastGround(targetPosition, out RaycastHit end))
+                return false;
+
+            flatStretch = start.collider == end.collider
+                          && start.normal.y >= FlatNormalY
+                          && end.normal.y >= FlatNormalY
+                          && Mathf.Abs(start.point.y - end.point.y) <= FlatHeightTolerance;
+            flatStretchY = start.point.y;
+            return flatStretch;
+        }
+
+        private bool IsKerbNode(int node)
+        {
+            PedestrianNodeKind kind = network.GetNode(node).Kind;
+            return kind == PedestrianNodeKind.Curb || kind == PedestrianNodeKind.Crossing;
+        }
+
+        private bool CastGround(Vector3 position, out RaycastHit hit)
+        {
+            Vector3 origin = new(position.x, position.y + GroundRayUpOffset, position.z);
+            return Physics.Raycast(origin, Vector3.down, out hit, GroundRayUpOffset + GroundRayDownDistance, groundMask, QueryTriggerInteraction.Ignore);
         }
 
         private float ResolveGroundY(Vector3 xz, float fallbackY)

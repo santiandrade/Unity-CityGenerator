@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pedestrian colliders switched off beyond a radius while cars use the proximity grid. Set them
   through `city.Traffic.SetSimulationFocus`/`SetStagger`/`SetPhysicsRadius` and
   `city.Pedestrians.SetSimulationFocus`/`SetStagger`/`SetColliderRadius`.
+- Grounding shortcut for far pedestrians, off by default: beyond a distance of the simulation
+  focus, a pedestrian walking a flat stretch (one collider, level, no kerb or crossing at either
+  end) reuses its height instead of raycasting every frame, and elsewhere raycasts only on its
+  logic frames. Set it through `city.Pedestrians.SetGroundingShortcutDistance`.
 - `CityGeneratorAPI.VehiclePedestrianPairFiltering`: switch the per-pair vehicle/pedestrian
   collision filter off for a project that keeps them apart with its own layer matrix.
 - `CarAgent.Relocate` and `PedestrianAgent.Relocate`, with `TrafficNetwork.LaneSegmentCount`/

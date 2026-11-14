@@ -78,7 +78,7 @@ La revisión técnica (`docs/technical-review.md`, F.4) ya concluyó que el cami
    - **Solo actúa mientras `PedestrianRoadProximityGrid.HasEnoughAgents`:** por debajo del umbral, el sensor de peatones de `CarAgent` vuelve al `SphereCast` y necesita los colliders.
    - Al volver a encenderlo se registra otra vez en el filtro, porque Unity borra los pares ignorados de un collider que se apaga y se enciende.
    - API: `city.Pedestrians.SetColliderRadius(float)`.
-6. **Suelo de los peatones por lotes** *(implementado y retirado en el paso 5: no mejoraba; ver *Notas de implementación*)*:
+6. **Suelo de los peatones por lotes** *(implementado y retirado en el paso 5: no mejoraba; ver *Notas de implementación*. Lo sustituye el atajo del suelo, añadido tras la fase 0 de City Races: ver *Notas de implementación*)*:
    - por encima de `staggerMinAgentCount`, `PedestrianManager` calcula primero la siguiente posición XZ de todos los peatones que caminan;
    - después lanza un único lote de `RaycastCommand` (`QueryParameters` con `groundMask` y triggers ignorados), lo completa en el mismo frame y aplica las alturas;
    - por debajo del umbral se queda el `Physics.Raycast` actual, idéntico bit a bit;
@@ -138,6 +138,7 @@ public void SetSimulationFocus(Transform focus);        // both
 public void SetStagger(float distance, int frames);     // both
 public void SetPhysicsRadius(float meters);             // Traffic; 0 = off
 public void SetColliderRadius(float meters);            // Pedestrians; 0 = off
+public void SetGroundingShortcutDistance(float meters); // Pedestrians; 0 = off (added after phase 0 of City Races)
 ```
 
 ### `TrafficManager`
@@ -154,6 +155,7 @@ public void SetColliderRadius(float meters);            // Pedestrians; 0 = off
 [SerializeField] private Transform simulationFocus;          // null = Camera.main
 [SerializeField] private float colliderRadius;               // 0 = off (default)
 [SerializeField] private float colliderRadiusHysteresis = 5f;
+[SerializeField] private float groundingShortcutDistance;    // 0 = off (default)
 ```
 
 ### `CarAgent` — estado y API nuevos
@@ -445,3 +447,34 @@ public bool Relocate(int node);                              // false if the nod
 - **Pendiente para cerrar la spec:**
   - publicar la versión 3.7.0 (necesita el visto bueno de Santi);
   - verificar en un consumidor real (City Races) que las opciones funcionan juntas con su burbuja.
+
+### Atajo del suelo de los peatones (2026-11-14, tras la fase 0 de City Races)
+
+- **Por qué:** en la fase 0 de City Races (SPEC 53), con la ciudad de 1000 + 1000 en pantalla, el raycast de suelo de cada peatón en cada frame seguía siendo de lo que más pesaba en `Pedestrians.Tick`. El lote de `RaycastCommand` del punto 6 ya se había descartado, así que se probó a lanzar menos rayos en vez de lanzarlos más baratos.
+- **Opción nueva, apagada por defecto:** `PedestrianManager.GroundingShortcutDistance` (`0` = apagado) y `city.Pedestrians.SetGroundingShortcutDistance(float)`. Solo actúa con foco de simulación (`SimulationFocus` o la cámara principal).
+- **Cerca del foco** (a esa distancia o menos), nada cambia: un raycast por peatón y frame.
+- **Más lejos:**
+  - **En un tramo plano** el peatón no lanza rayos: reutiliza la altura del tramo.
+    - El tramo se identifica por el par (nodo actual, siguiente nodo del camino) y se evalúa una vez al empezarlo, con dos rayos: en la posición del peatón y en el punto al que apunta.
+    - Es plano si los dos rayos dan en el mismo collider, las dos normales tienen `y ≥ 0,999` y la diferencia de altura es como mucho de 5 mm.
+    - Un tramo que empieza o acaba en un nodo `Curb` o `Crossing` nunca es plano: los bordillos y los pasos de cebra siempre usan el raycast.
+  - **Fuera de un tramo plano** el raycast solo se lanza en los frames en los que corre la lógica del peatón (con escalonado, 1 de cada `staggerFrames`); entre medias conserva la altura anterior.
+- **API interna:** `PedestrianAgent.Tick(dt, runLogic)` sigue igual y delega en `Tick(dt, runLogic, exactGrounding)`, que decide el manager.
+- **Test nuevo** (`PlayMode/PedestrianGroundingShortcutTests`): ciudad de 3 × 3 con 100 peatones y el foco a 2 km. Con el atajo, las llamadas a `Grounding` deben quedar por debajo del 35 % de las del modo exacto; menos del 5 % de las muestras pueden estar a más de 2 cm del suelo, y ninguna a más de 35 cm (un peatón escalonado puede ir unos frames tarde en un bordillo).
+- **Medición en la suite de rendimiento** (1000 + 1000, 15 × 15, modo físico, mediana en ms). La variante con opciones usa ahora también el atajo a 30 m:
+
+  | Marcador | Con opciones, sin atajo (pasos 2–7) | Con opciones y atajo |
+  | --- | --- | --- |
+  | Frame | 21,8 | 18,5 |
+  | `Pedestrians.Tick` | 4,7 | 3,2 |
+  | `Pedestrians.Grounding` | 0,9 | 0,14 |
+  | `Pedestrians.Separation` | 1,8 | 1,7 |
+
+  En el benchmark de City Races (`CityStress`, 1000 + 1000, development build en High), `Grounding` baja de 1,0–1,2 ms a 0,17–0,19 ms; las cifras completas están en la SPEC 53 de City Races. Lo siguiente que más pesa en los peatones es `Separation`.
+- **Suite:**
+  - EditMode 139/139, en verde.
+  - PlayMode en el Editor: 118/119.
+  - Hay dos tests que dependen del ritmo de frames y fallan igual sin este cambio (comprobado guardando los cambios con `git stash`):
+    - `CarAgentPhysicsRecoveryTests.Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt` falla en el Editor con la ventana sin foco (el Editor se mantiene ejecutando con `set_autotick` de la CLI), y pasa en batch mode.
+    - `AgentScalingTests.CarRelocate_PutsItOnTheSegment_LeavesTheOldOne_AndDrivesOn` y `PedestrianRelocate_PutsItOnTheNode_AndItWalksOn` hacen lo contrario: pasan en el Editor y fallan en batch mode, porque el coche o el peatón reubicado no llega a moverse.
+  - Pendiente: hacerlos independientes del ritmo de frames antes de publicar la 3.7.0.

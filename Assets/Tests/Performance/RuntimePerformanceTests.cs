@@ -140,6 +140,7 @@ namespace CityGenerator.Tests.Performance
             pedestrians.SimulationFocus = focusGo.transform;
             pedestrians.SetStagger(60f, 4, 25f);
             pedestrians.ColliderRadius = 40f;
+            pedestrians.GroundingShortcutDistance = 30f;
 
             yield return new WaitForSeconds(1000 * 0.01f + 1f);
             yield return Measure.Frames().WarmupCount(30).MeasurementCount(120).ProfilerMarkers(AgentMarkers).Run();
