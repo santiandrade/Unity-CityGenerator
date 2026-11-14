@@ -36,8 +36,15 @@ namespace CityGenerator.Runtime
             foreach (List<PedestrianAgent> bucket in cells.Values)
                 bucket.Clear();
 
+            // SPEC 20 (c): with the sensor shortcuts on, only pedestrians that can actually be on the
+            // road are indexed -- the ones on a crosswalk arm (see PedestrianAgent.IsOnCrossingArm).
+            // Everyone else is on a sidewalk, which CarAgent's lateral cutoff already excludes.
+            bool roadOnly = CarAgent.PedestrianSensorShortcut;
             for (int i = 0; i < agents.Count; i++)
             {
+                if (roadOnly && !agents[i].IsOnCrossingArm)
+                    continue;
+
                 var cell = CellOf(agents[i].transform.position);
                 if (!cells.TryGetValue(cell, out List<PedestrianAgent> bucket))
                 {
@@ -83,6 +90,39 @@ namespace CityGenerator.Runtime
                     {
                         PedestrianAgent agent = bucket[i];
                         if (agent != null && (agent.transform.position - position).sqrMagnitude <= sqrRadius)
+                            results.Add(agent);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// SPEC 20 (c): appends every indexed pedestrian inside the XZ box
+        /// [<paramref name="min"/>, <paramref name="max"/>] to <paramref name="results"/> (cleared
+        /// first). Visits only the cells the box overlaps -- a car's sensor corridor touches a
+        /// handful, where <see cref="QueryNear"/> visits the whole square around a circle.
+        /// </summary>
+        public void QueryBox(Vector3 min, Vector3 max, List<PedestrianAgent> results)
+        {
+            results.Clear();
+            (int minX, int minZ) = CellOf(min);
+            (int maxX, int maxZ) = CellOf(max);
+
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    if (!cells.TryGetValue((x, z), out List<PedestrianAgent> bucket))
+                        continue;
+
+                    for (int i = 0; i < bucket.Count; i++)
+                    {
+                        PedestrianAgent agent = bucket[i];
+                        if (agent == null)
+                            continue;
+
+                        Vector3 position = agent.transform.position;
+                        if (position.x >= min.x && position.x <= max.x && position.z >= min.z && position.z <= max.z)
                             results.Add(agent);
                     }
                 }

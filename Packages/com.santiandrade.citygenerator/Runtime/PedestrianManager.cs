@@ -96,6 +96,9 @@ namespace CityGenerator.Runtime
         // CityGeneratorSceneBuilder after PedestrianManager already exists, so an eager lookup
         // would find nothing. Cached once found since it never changes afterwards.
         private Transform playerTransform;
+        // SPEC 20 (d): without a player in the scene the lookup used to run every frame.
+        private float nextPlayerLookupTime;
+        private const float PlayerLookupRetryInterval = 1f;
 
         // Contains-guarded rather than an unconditional Add: Register is called from
         // PedestrianAgent.OnEnable, so a re-enabled agent that was never Unregister-ed (SetActive
@@ -159,6 +162,10 @@ namespace CityGenerator.Runtime
         {
             if (playerTransform == null)
             {
+                if (Time.time < nextPlayerLookupTime)
+                    return;
+
+                nextPlayerLookupTime = Time.time + PlayerLookupRetryInterval;
                 PlayerController player = FindAnyObjectByType<PlayerController>();
                 if (player == null)
                 {

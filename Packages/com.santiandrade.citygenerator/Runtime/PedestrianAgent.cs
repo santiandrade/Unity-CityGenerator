@@ -103,6 +103,26 @@ namespace CityGenerator.Runtime
 
         public PedestrianState State => state;
         public int CurrentNode => currentNode;
+
+        /// <summary>
+        /// SPEC 20 (c): true while this pedestrian walks, or waits to start, a crosswalk arm (one
+        /// end of its current path segment is a Crossing node) -- the only place a generated
+        /// pedestrian ever sets foot on the road. Read by PedestrianRoadProximityGrid.
+        /// </summary>
+        public bool IsOnCrossingArm
+        {
+            get
+            {
+                if (network == null || path == null || pathIndex >= pathLength)
+                    return false;
+                if (state != PedestrianState.Walking && state != PedestrianState.WaitingToCross)
+                    return false;
+
+                if (currentNode >= 0 && network.GetNode(currentNode).Kind == PedestrianNodeKind.Crossing)
+                    return true;
+                return network.GetNode(path[pathIndex]).Kind == PedestrianNodeKind.Crossing;
+            }
+        }
         /// <summary>Total distance walked so far, for diagnosing stuck/jammed agents — mirrors CarAgent.DistanceTravelled.</summary>
         public float DistanceTravelled => distanceTravelled;
 

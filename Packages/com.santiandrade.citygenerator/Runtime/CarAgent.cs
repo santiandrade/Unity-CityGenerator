@@ -76,6 +76,10 @@ namespace CityGenerator.Runtime
         // still counts, so a hit on the front corner does).
         private const float VehicleBumperMinNormalForwardDot = 0.5f;
 
+        // Lateral distance from this car's heading beyond which a pedestrian is never in its path
+        // (see PedestrianAheadClearanceFromGrid); SPEC 20 (c) also sizes the grid query with it.
+        private const float PedestrianLateralCutoff = 1.6f;
+
         // SPEC 19: same sensor origin every other forward sensor here measures from (2.2m ahead of
         // the car's centre, 0.9m up), so minGap means the same thing for a TrafficObstacle.
         private const float SensorOriginOffset = 2.2f;
@@ -92,7 +96,36 @@ namespace CityGenerator.Runtime
         // vehicles are built first. By the time Play actually starts and the sensor first runs, the
         // full scene (including this) exists.
         private PedestrianRoadProximityGrid pedestrianRoadProximity;
+        // SPEC 20 (d): a city without pedestrians has no grid, and searching the whole scene for it
+        // on every sensor run was a per-car, per-step FindAnyObjectByType.
+        private float nextProximityLookupTime;
+        private const float ProximityLookupRetryInterval = 1f;
         private readonly List<PedestrianAgent> pedestrianQueryResults = new();
+
+        // SPEC 20 (b)/(c): sensor shortcuts that skip work which cannot change the result. On by
+        // default; internal so the tests can compare the same city with and without them.
+        internal static bool VehicleSensorShortcut = true;
+        internal static bool PedestrianSensorShortcut = true;
+
+        // SPEC 20 (b), tests only: when set, every skipped OverlapSphere is still run (without side
+        // effects) and any car it would have braked for is described in ShortcutMisses.
+        internal static bool VerifyVehicleShortcut;
+        internal static readonly List<string> ShortcutMisses = new();
+
+        // SPEC 20 (b): distance beyond sensorRange from its target node at which nothing but its
+        // own lane segment can be within a car's forward sensor -- covers the overhang of a long
+        // vehicle on the next segment (the overlap test uses its collider surface, the "ahead"
+        // test its centre) and arriveRadius.
+        private const float MidBlockMargin = 8f;
+
+        // SPEC 20 (b): distance from the centre of the crossing a car has just left beyond which no
+        // car still inside that crossing (half the 10 m street) can have its centre ahead of this
+        // one, even a long vehicle (half-length up to ~5 m), with a margin.
+        private const float CrossingClearDistance = 12f;
+
+        // SPEC 20 (b): cars that left TrafficLaneOccupancy without being disabled (Recovering),
+        // the only ones the mid-block shortcut could otherwise miss. Normally empty.
+        private static readonly List<CarAgent> RecoveringCars = new();
 
         // Own identifier for crossing reservations; 0 means "crossing free".
         private static int nextCarId = 1;
@@ -203,6 +236,11 @@ namespace CityGenerator.Runtime
         {
             nextCarId = 1;
             ColliderRegistry.Clear();
+            RecoveringCars.Clear();
+            VehicleSensorShortcut = true;
+            PedestrianSensorShortcut = true;
+            VerifyVehicleShortcut = false;
+            ShortcutMisses.Clear();
         }
 
         private void OnEnable()
@@ -256,6 +294,15 @@ namespace CityGenerator.Runtime
                 trafficManager = new GameObject("TrafficManager").AddComponent<TrafficManager>();
             }
             trafficManager.Register(this);
+
+            // SPEC 20: a car that was disabled (OnDisable left its segment) and is enabled again
+            // goes straight back into its segment's occupancy instead of waiting for its next
+            // node: until then the cars behind it would only see it through the physics fallback,
+            // which the mid-block shortcut skips. Start does the first Enter (targetNode < 0 here).
+            if (network != null && network.LaneOccupancy != null && targetNode >= 0 && physicsState == PhysicsState.Driving)
+                network.LaneOccupancy.Enter(this, fromNode, targetNode);
+            else if (rb != null && physicsState == PhysicsState.Recovering && !RecoveringCars.Contains(this))
+                RecoveringCars.Add(this);
         }
 
         private void OnDisable()
@@ -270,6 +317,7 @@ namespace CityGenerator.Runtime
             }
             if (network != null && network.LaneOccupancy != null && targetNode >= 0)
                 network.LaneOccupancy.Leave(this, fromNode, targetNode);
+            RecoveringCars.Remove(this);
         }
 
         private void Start()
@@ -634,6 +682,8 @@ namespace CityGenerator.Runtime
             }
             if (targetNode >= 0)
                 network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+            if (!RecoveringCars.Contains(this))
+                RecoveringCars.Add(this);
 
             rb.useGravity = true;
             rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
@@ -709,6 +759,7 @@ namespace CityGenerator.Runtime
             targetNode = node;
             fromNode = -1;
             network.LaneOccupancy?.Enter(this, fromNode, targetNode);
+            RecoveringCars.Remove(this);
 
             // Carry on from the car's actual forward motion instead of snapping it to a halt (or to
             // its pre-impact speed): Driving imposes this speed from the next tick on and ramps it
@@ -808,6 +859,15 @@ namespace CityGenerator.Runtime
                 return laneDistance <= 0.001f ? 0f : laneDistance - minGap;
             }
 
+            // SPEC 20 (b): mid-block, with nobody ahead on its own segment, the physics fallback
+            // below has nothing left to find -- see CanSkipVehicleOverlap.
+            if (VehicleSensorShortcut && CanSkipVehicleOverlap(towardTarget))
+            {
+                if (VerifyVehicleShortcut)
+                    RecordShortcutMiss(towardTarget);
+                return float.MaxValue;
+            }
+
             // OverlapSphere centred on this car's own position, not on a point offset ahead of it --
             // a SphereCast (or an OverlapSphere at that offset point) has a blind spot for any
             // vehicle whose body spans past the offset point without its surface actually touching
@@ -850,6 +910,109 @@ namespace CityGenerator.Runtime
             }
 
             return clearance;
+        }
+
+        /// <summary>
+        /// SPEC 20 (b): true when the OverlapSphere fallback of <see cref="VehicleAheadClearance"/>
+        /// cannot find a car the lane index has not already ruled out. Called only after
+        /// TrafficLaneOccupancy found no car ahead on this car's own segment. It requires:
+        /// - a proper segment (fromNode known): a freshly spawned or re-attached car registers as
+        ///   (-1, target) and does not know which physical segment it shares;
+        /// - this car farther than sensorRange + MidBlockMargin from its target node, so neither
+        ///   the crossing nor the next segment is within reach;
+        /// - no other car heading to the same target node ahead of it, under any key: one physical
+        ///   lane holds cars registered under different from-nodes (straight through a crossing as
+        ///   (previous entry, next entry), after a turn as (exit, next entry), spawned or re-attached
+        ///   as (-1, target)), and the lane index above only looked at this car's own key. Found by
+        ///   the exact verification test (SPEC 20, step 1b);
+        /// - this car farther than CrossingClearDistance from the centre of the crossing it has just
+        ///   left (fromNode's): until then a car still crossing it -- turning across this car's
+        ///   path, or merging into its lane before reaching the node where it would switch segment
+        ///   -- can be right ahead of it while the lane index has it on another segment. Found by
+        ///   the exact verification test (SPEC 20, step 1b);
+        /// - no car in Recovering within reach (it left the index without being disabled).
+        /// Opposite-lane traffic was never "ahead" (lateral filter), and a disabled car is out of
+        /// ColliderRegistry, so the fallback ignored it too.
+        /// </summary>
+        private bool CanSkipVehicleOverlap(Vector3 towardTarget)
+        {
+            if (fromNode < 0 || targetNode < 0 || network.LaneOccupancy == null)
+                return false;
+
+            float reach = sensorRange + MidBlockMargin;
+            Vector3 toTarget = network.GetNode(targetNode).Position - transform.position;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude <= reach * reach)
+                return false;
+
+            if (network.LaneOccupancy.HasCarAheadHeadingTo(this, targetNode, towardTarget))
+                return false;
+
+            Vector3 fromCrossing = transform.position - network.IntersectionCentre(network.GetNode(fromNode).Intersection);
+            fromCrossing.y = 0f;
+            if (fromCrossing.sqrMagnitude <= CrossingClearDistance * CrossingClearDistance)
+                return false;
+
+            Vector3 egoPosition = transform.position;
+            for (int i = 0; i < RecoveringCars.Count; i++)
+            {
+                CarAgent other = RecoveringCars[i];
+                if (other != null && other != this && (other.transform.position - egoPosition).sqrMagnitude <= reach * reach)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// SPEC 20 (b), tests only: runs the OverlapSphere scan the shortcut skipped, without
+        /// ProcessVehicleCollider's deadlock side effects, and records the closest car it would
+        /// have braked for (within brakeDistance of clearance), with both cars' graph state.
+        /// </summary>
+        private void RecordShortcutMiss(Vector3 towardTarget)
+        {
+            Vector3 egoPosition = transform.position;
+            Vector3 origin = egoPosition + Vector3.up * 0.9f + towardTarget * 2.2f;
+            var hits = new Collider[32];
+            int count = Physics.OverlapSphereNonAlloc(egoPosition + Vector3.up * 0.9f, sensorRange, hits,
+                vehicleMask, QueryTriggerInteraction.Ignore);
+
+            CarAgent blocker = null;
+            float best = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                Collider collider = hits[i];
+                if (!ColliderRegistry.TryGetValue(collider.GetEntityId(), out CarAgent other) || other == this)
+                    continue;
+
+                Vector3 offset = collider.transform.position - egoPosition;
+                float along = Vector3.Dot(offset, towardTarget);
+                if (along <= 0f)
+                    continue;
+                Vector3 lateral = offset - along * towardTarget;
+                if (lateral.sqrMagnitude > sensorRadius * sensorRadius)
+                    continue;
+
+                float distance = Vector3.Distance(origin, collider.ClosestPoint(origin));
+                float gap = distance <= 0.001f ? 0f : distance - minGap;
+                if (gap < best)
+                {
+                    best = gap;
+                    blocker = other;
+                }
+            }
+
+            if (blocker == null || best >= brakeDistance || ShortcutMisses.Count >= 500)
+                return;
+
+            Vector3 toTarget = network.GetNode(targetNode).Position - egoPosition;
+            Vector3 fromFrom = egoPosition - network.GetNode(fromNode).Position;
+            toTarget.y = 0f;
+            fromFrom.y = 0f;
+            ShortcutMisses.Add(
+                $"self(from={fromNode}, to={targetNode}, toTarget={toTarget.magnitude:0.0}, fromFrom={fromFrom.magnitude:0.0}, speed={speed:0.0}) " +
+                $"blocker(from={blocker.fromNode}, to={blocker.targetNode}, state={blocker.physicsState}, enabled={blocker.enabled}, speed={blocker.speed:0.0}, " +
+                $"sameKey={(blocker.fromNode == fromNode && blocker.targetNode == targetNode)}, toMyFrom={blocker.targetNode == fromNode}, toMyTarget={blocker.targetNode == targetNode}) gap={best:0.0}");
         }
 
         /// <summary>
@@ -986,8 +1149,11 @@ namespace CityGenerator.Runtime
         /// </summary>
         private float PedestrianAheadClearance()
         {
-            if (pedestrianRoadProximity == null)
+            if (pedestrianRoadProximity == null && Time.time >= nextProximityLookupTime)
+            {
                 pedestrianRoadProximity = FindAnyObjectByType<PedestrianRoadProximityGrid>();
+                nextProximityLookupTime = Time.time + ProximityLookupRetryInterval;
+            }
 
             // Item 8, stage 4: once the pedestrian count justifies it, query the shared proximity
             // grid instead of casting -- falls back to the SphereCast below whenever the grid
@@ -1035,7 +1201,21 @@ namespace CityGenerator.Runtime
         private float PedestrianAheadClearanceFromGrid()
         {
             Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
-            pedestrianRoadProximity.QueryNear(origin, sensorRange, pedestrianQueryResults);
+            if (PedestrianSensorShortcut)
+            {
+                // SPEC 20 (c): only the cells the sensor's own corridor touches -- from the car's
+                // centre (a pedestrian at the bumper still counts, see below) to the end of its
+                // range, widened by the lateral cutoff -- instead of the whole square around origin.
+                Vector3 corridorEnd = origin + transform.forward * sensorRange;
+                Vector3 centre = transform.position;
+                var widen = new Vector3(PedestrianLateralCutoff, 0f, PedestrianLateralCutoff);
+                pedestrianRoadProximity.QueryBox(Vector3.Min(centre, corridorEnd) - widen,
+                    Vector3.Max(centre, corridorEnd) + widen, pedestrianQueryResults);
+            }
+            else
+            {
+                pedestrianRoadProximity.QueryNear(origin, sensorRange, pedestrianQueryResults);
+            }
 
             // The "ahead" cone is measured from this car's own centre, not from `origin`: origin
             // already sits 2.2m ahead of centre, so a pedestrian closer than that to the car (the
@@ -1081,7 +1261,7 @@ namespace CityGenerator.Runtime
                         return false;
 
                     Vector3 lateral = fromCar - Vector3.Dot(fromCar, transform.forward) * transform.forward;
-                    if (lateral.sqrMagnitude > 1.6f * 1.6f)
+                    if (lateral.sqrMagnitude > PedestrianLateralCutoff * PedestrianLateralCutoff)
                         return false;
                 }
 

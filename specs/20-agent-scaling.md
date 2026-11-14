@@ -34,6 +34,26 @@ La revisión técnica (`docs/technical-review.md`, F.4) ya concluyó que el cami
 
 **Dentro:**
 
+0. **Coste de los sensores de los coches** (añadido tras la medición del paso 1, decidido por Santi: activo por defecto para todos los usuarios). Con 1000 coches, los sensores son el ~80 % del coste del tráfico (ver *Notas de implementación*):
+   - **(a) Sensores una vez por frame en modo físico:**
+     - `TrafficManager.FixedUpdate` solo pide los sensores en el primer paso de física de cada frame renderizado; en los demás pasos del mismo frame se reutilizan los valores cacheados, como ya hace el escalonado;
+     - el escalonado de los coches lejanos se cuenta en frames con paso de física, no en pasos, para que un coche nunca caiga siempre en un paso sin sensores;
+     - a 50 fps o más no cambia nada (hay como mucho un paso por frame); por debajo, los sensores van al ritmo del frame, igual que los de un coche cinemático;
+     - corta la espiral en la que un frame lento trae más pasos de física y cada paso vuelve a pagar los sensores.
+   - **(b) Sin `OverlapSphere` a mitad de manzana:**
+     - si `TrafficLaneOccupancy` no encuentra coche delante en el tramo del coche y este está en el centro de su manzana (a más de `sensorRange + 8 m` de su nodo objetivo y a más de 12 m del centro del cruce que acaba de dejar), el `OverlapSphere` solo podría encontrar coches de su propio carril que el índice tenga bajo otra clave, o coches en `Recovering`. Los 8 m cubren el saliente de un vehículo largo y `arriveRadius`; los 12 m, media calle más medio vehículo largo;
+     - esos dos casos se comprueban explícitamente: un índice nuevo por nodo objetivo (`TrafficLaneOccupancy.HasCarAheadHeadingTo`, cualquier clave, `(-1, objetivo)` incluida) y un registro de los coches en `Recovering` (`CarAgent.RecoveringCars`, normalmente vacío). Si hay alguno, se hace el `OverlapSphere` como hoy;
+     - en cualquier otro caso todo sigue igual que hoy;
+     - depende de que todo coche activo esté en el índice, así que el arreglo de re-entrada en `TrafficLaneOccupancy` al reactivar un coche (punto 8) se adelanta aquí;
+     - la forma final salió de la verificación exacta del paso 1b (ver *Notas de implementación*).
+   - **(c) Solo los peatones que pisan la calzada en el sensor de peatones:**
+     - un peatón generado solo pisa la calzada en los tramos de paso de peatones (`Curb` ↔ `Crossing`). En la acera ya queda fuera del sensor, que descarta lo que esté a más de 1,6 m del centro del carril (la acera empieza a 2,4 m);
+     - `PedestrianRoadProximityGrid` indexa solo esos peatones, con la posición cacheada al reconstruir (`PedestrianAgent.IsOnCrossingArm`);
+     - la consulta de `CarAgent` recorre solo las celdas que cruza el rayo del sensor, unas 3–6, en vez del cuadrado de 5 × 5 celdas alrededor del origen;
+     - el jugador a pie del paquete se sigue comprobando aparte, esté donde esté.
+   - **(d) Sin búsquedas de escena por frame:**
+     - `PedestrianManager.ApplyPlayerAvoidance` reintenta `FindAnyObjectByType<PlayerController>()` como mucho una vez por segundo mientras no lo encuentra;
+     - lo mismo `CarAgent` con `FindAnyObjectByType<PedestrianRoadProximityGrid>()` en una ciudad sin peatones, donde hoy se buscaba en cada ejecución del sensor de cada coche.
 1. **Instrumentación:**
    - `ProfilerMarker`s en `TrafficManager` (`CityGenerator.Traffic.Tick`, `.Sensors`) y `PedestrianManager` (`CityGenerator.Pedestrians.Tick`, `.Separation`, `.ProximityGrid`, `.Grounding`), y el marcador de la transición de LOD de física;
    - `RuntimePerformanceTests` gana un caso de 15 × 15 con 1000 + 1000 agentes en modo físico, con todas las opciones nuevas apagadas y encendidas;
@@ -79,7 +99,7 @@ La revisión técnica (`docs/technical-review.md`, F.4) ya concluyó que el cami
    - **Consultas nuevas de red y ocupación para elegir dónde aparecer:**
      - `TrafficNetwork.LaneSegmentCount` / `GetLaneSegment(int index, out int from, out int to)`: los tramos rectos entre la salida de un cruce y la entrada del siguiente, que son los únicos válidos para aparecer;
      - `TrafficLaneOccupancy.GetGap(int from, int to, Vector3 position, out float ahead, out float behind)`.
-   - **Arreglo:** `CarAgent.OnEnable` vuelve a entrar en `TrafficLaneOccupancy` si ya tenía tramo (`targetNode >= 0`).
+   - **Arreglo:** `CarAgent.OnEnable` vuelve a entrar en `TrafficLaneOccupancy` si ya tenía tramo (`targetNode >= 0`). Adelantado al paso 1b, porque el atajo (b) depende de él.
    - **Visibilidad:** `CarAgent.MaxSpeed`, `CarAgent.TargetNode`/`FromNode` y `PedestrianAgent.CurrentNode` públicos de solo lectura (`TargetNode` y `CurrentNode` ya lo son).
 9. **Gancho de animación para un render externo** (lo usa la fase 3 de City Races; no tiene coste si no se usa):
    - `PedestrianAgent.AnimationSpeed`: el `normalizedSpeed` del blend tree, o 0 si está parado;
@@ -160,6 +180,14 @@ public bool Relocate(int node);                              // false if the nod
    - marcadores;
    - caso 1000 + 1000 (15 × 15, `Enable Physics` ON) en `RuntimePerformanceTests`;
    - tabla de partida en las notas.
+1b. **Coste de los sensores** (punto 0 del *Scope*, en este orden: d, a, c, b):
+   - dos interruptores internos, solo para los tests (`CarAgent.VehicleSensorShortcut` y `CarAgent.PedestrianSensorShortcut`, `internal`), permiten comparar el comportamiento con y sin (b) y (c) en la misma ciudad, y `CarAgent.VerifyVehicleShortcut` ejecuta igualmente cada `OverlapSphere` que (b) se salta y anota lo que habría encontrado;
+   - tests PlayMode (`Traffic/SensorCostTests`):
+     - un coche a mitad de manzana frena detrás de un coche en `Recovering` parado en su carril, y detrás de uno reenganchado con `fromNode = -1`;
+     - un coche se detiene ante un peatón en el paso de peatones, con el semáforo de los coches en verde y el peatón ya cruzando;
+     - en modo físico, con varios pasos de física por frame, cada coche ejecuta los sensores como mucho una vez por frame, y un coche lejano los ejecuta alguna vez aunque siempre haya 2 pasos por frame;
+   - **equivalencia** (`Traffic/SensorShortcutEquivalenceTests`, `[Explicit]` por su duración): en una ciudad de 15 × 15 con 1000 coches cinemáticos y 1000 peatones, 60 s con los atajos apagados y 60 s encendidos, se cuentan cada medio segundo los pares de coches cuyos colliders se solapan más de 0,3 m (`Physics.ComputePenetration`) y los peatones de un paso de peatones con un coche a menos de 1 m. En modo cinemático un coche solo frena por lo que ven sus sensores, así que un coche que no ve a otro acaba dentro de él. Con los atajos no puede haber más que sin ellos (con un margen de ruido de 2 o del 20 %);
+   - se repite la medición del paso 1 y va a las notas.
 2. **Filtro delegable:**
    - `VehiclePedestrianPairFiltering`;
    - tests PlayMode: con `false` no hay pares y un coche físico sigue sin poder ser empujado por un peatón si la matriz lo impide; con `true`, todo idéntico a SPEC 17.
@@ -193,6 +221,15 @@ public bool Relocate(int node);                              // false if the nod
 - [ ] Con todas las opciones por defecto (filtro `true`, radios `0`, foco `null`), la suite completa (EditMode, PlayMode, Performance) pasa sin cambios y una ciudad de demo se comporta igual que en 3.6.1.
 - [ ] Con `Enable Physics` OFF sigue sin haber `Rigidbody`, pares ni actividad en `FixedUpdate` (invariante de SPEC 17).
 
+**Coste de los sensores**
+
+- [ ] En la medición de 1000 + 1000, `CityGenerator.Traffic.Sensors` baja al menos un 60 % respecto al paso 1, y `Sensors.VehicleOverlap` deja de ser la mayor parte de `Sensors.Vehicles`.
+- [ ] En modo físico, los sensores de un coche se ejecutan como mucho una vez por frame renderizado.
+- [ ] Un coche a mitad de manzana sigue frenando detrás de un coche en `Recovering` o reenganchado que tenga delante.
+- [ ] Un coche se sigue deteniendo ante un peatón que cruza por el paso de peatones.
+- [ ] El test de equivalencia no da más solapes entre coches ni más peatones rozados con los atajos que sin ellos.
+- [ ] `PedestrianManager` y `CarAgent` no llaman a `FindAnyObjectByType` más de una vez por segundo cuando no hay jugador a pie o no hay peatones.
+
 **Filtro delegable**
 
 - [ ] Con `VehiclePedestrianPairFiltering = false` antes de cargar la escena no se registra ningún par de `IgnoreCollision`.
@@ -224,7 +261,9 @@ public bool Relocate(int node);                              // false if the nod
 
 ## Decisiones tomadas y descartadas
 
-- **Sí: todo opcional y apagado por defecto.** Los invariantes de SPEC 17 (modo cinemático idéntico, filtro por pares) y de SPEC 05 (`staggerMinAgentCount`) se mantienen para quien no active nada.
+- **Sí: los atajos de los sensores (punto 0) activos por defecto** (decidido por Santi tras la medición del paso 1). Son optimizaciones que no deberían cambiar el resultado de los sensores, demostrado con el test de equivalencia, y cualquier usuario del paquete gana con ellas, no solo quien tiene 1000 coches. Descartado ponerlas detrás de una opción: nadie la activaría, y la regla 3 de los sensores se matiza en la documentación en lugar de quedar intacta.
+- **Sí: indexar solo los peatones que pisan la calzada, en lugar de consultar solo cerca de los cruces.** Las dos ideas dicen lo mismo (solo importan los peatones de los pasos de peatones), pero filtrar por distancia a los nodos de tráfico dependería de `crossingArmOffset` y de `laneOffset`, que son configurables. El tramo del propio peatón lo sabe sin geometría.
+- **Sí: todo lo demás, opcional y apagado por defecto.** Los invariantes de SPEC 17 (modo cinemático idéntico, filtro por pares) y de SPEC 05 (`staggerMinAgentCount`) se mantienen para quien no active nada.
 - **Sí: el filtro coche↔peatón se puede desactivar, pero el paquete nunca escribe la matriz.** El invariante «el arreglo nunca es una entrada de la matriz» existe porque el jugador a pie del paquete comparte la capa `Pedestrian` y porque el paquete no debe tocar los Project Settings del usuario. Las dos razones siguen en pie para el paquete. Un proyecto sin jugador a pie (City Races conduce un coche) puede usar su propia matriz y ahorrarse un millón de pares, y es él quien decide. El invariante de `CLAUDE.md` se matiza en ese sentido, no se elimina.
 - **Sí: LOD de física por radio desde un foco, no por visibilidad.** La física importa donde puede haber contacto con el jugador, no donde mira la cámara.
 - **Sí: cinemático con `MovePosition` fuera del radio, no sin `Rigidbody`.** Quitar y poner el componente cambiaría el modo detectado por `GetComponent<Rigidbody>()` (invariante de SPEC 17) y sería más caro.
@@ -239,6 +278,8 @@ public bool Relocate(int node);                              // false if the nod
 ## Riesgos identificados
 
 - **El cambio dinámico ↔ cinemático justo cuando el jugador llega a un coche.** Con 135 km/h y un radio de 80 m hay algo más de 2 s de margen, y la histéresis evita el parpadeo. Lo cubren un criterio y un test.
+- **Atajo (c) y peatones empujados a la calzada fuera de un paso:** la evitación del jugador a pie del paquete o la separación entre peatones podrían sacar a un peatón más de 0,8 m hacia la calzada a mitad de manzana, y el sensor ya no lo vería. Riesgo bajo: el empuje es de centímetros y no hay rutas por la calzada. Se documenta.
+- **Atajo (b) y un coche que el índice no conoce por un camino no previsto** (otra forma de quedarse sin tramo). Mitigación: el registro `OffLaneCars` se llena desde los únicos sitios donde un coche deja el índice sin desactivarse, y el test de equivalencia lo vigila.
 - **Un collider de peatón apagado y un `TrafficObstacle` o código del usuario que esperaba encontrarlo con una consulta física lejos del foco.** Mitigación: opción apagada por defecto, documentada.
 - **`Relocate` en mitad de un cruce reservado por otro coche.** Mitigación: solo se admiten tramos rectos (`GetLaneSegment`); `Relocate` devuelve `false` con un tramo que no lo es.
 - **`RaycastCommand` completado en el mismo frame no sale más barato que N raycasts si hay pocos peatones.** Mitigación: solo por encima del umbral; lo dice la medición.
@@ -281,3 +322,65 @@ public bool Relocate(int node);                              // false if the nod
   - **Espiral de pasos de física:** en modo físico los sensores corren en `FixedUpdate`. Con frames de 200–300 ms hay hasta 16 pasos por frame (`Maximum Allowed Timestep` 0,333 s), y cada paso vuelve a ejecutar los sensores; por eso el frame empeora de una ejecución a otra.
   - La física, las colisiones, el suelo de los peatones y la separación son de segundo orden a esta escala.
 - **Hallazgo aparte:** `PedestrianManager.ApplyPlayerAvoidance` llama a `FindAnyObjectByType<PlayerController>()` en cada frame mientras la escena no tiene el jugador a pie del paquete (el caso de City Races, `playerEnabled = false`).
+
+### Paso 1b — coste de los sensores (2026-11-14)
+
+- **Implementado** como en el punto 0 del *Scope*, con dos interruptores internos en lugar de uno (`CarAgent.VehicleSensorShortcut` para (b), `CarAgent.PedestrianSensorShortcut` para (c)), para poder medir cada atajo por separado.
+- **El atajo (b) final es más estricto que el del *Scope*.** Se saltó el `OverlapSphere` solo si se cumple todo esto:
+  - el coche tiene tramo propio (`fromNode >= 0`);
+  - está a más de `sensorRange + 8 m` de su nodo objetivo;
+  - está a más de 12 m (`CrossingClearDistance`) del centro del cruce que acaba de dejar;
+  - ningún otro coche que vaya hacia **el mismo nodo objetivo**, bajo cualquier clave, está por delante (`TrafficLaneOccupancy.HasCarAheadHeadingTo`, sobre un índice nuevo por nodo objetivo);
+  - no hay ningún coche en `Recovering` a su alcance (`RecoveringCars`).
+- **Cómo se llegó a esas condiciones:** las dos últimas condiciones geométricas salieron de la verificación exacta (ver más abajo), que encontró dos huecos en la versión del *Scope*:
+  1. **Un mismo carril físico tiene coches bajo claves distintas.** Uno que siguió recto por el cruce está registrado como (entrada anterior, entrada siguiente) y uno que giró como (salida, entrada siguiente). «Nadie delante en mi clave» no era «nadie delante en mi carril». El índice de carril original ya tenía este punto ciego y el `OverlapSphere` lo tapaba sin que se notara. La comprobación de `(-1, objetivo)` del *Scope* queda incluida en el índice por objetivo.
+  2. **Justo a la salida de un cruce**, un coche que sigue dentro de él (girando por delante, o incorporándose antes de llegar al nodo donde cambiaría de tramo) puede estar delante en otro tramo.
+- **Lo que deja el atajo:** cubre aproximadamente el 40 % central de cada manzana (de 12 m pasado el cruce a 20 m antes del siguiente), y solo cuando el carril está vacío por delante.
+- **Tests** (`Traffic/SensorCostTests`, 6, en verde):
+  - sin `OverlapSphere` a mitad de manzana sin nadie delante;
+  - frena detrás de un coche en `Recovering`;
+  - frena detrás de un coche `(-1, objetivo)`;
+  - re-entrada en el índice al reactivarse;
+  - en modo físico, sensores como mucho una vez por frame;
+  - un coche escalonado los ejecuta igual con dos pasos por frame.
+
+  **Verificado por mutación** dos veces (con la versión inicial y con la final): quitando las comprobaciones de excepción, los dos tests de frenado fallan (el coche acaba más de 20 m más allá de donde debía pararse).
+- **Verificación exacta** (`Traffic/SensorShortcutEquivalenceTests.VehicleShortcut_NeverSkipsACarTheOverlapWouldSee`, `[Explicit]`):
+  - con `CarAgent.VerifyVehicleShortcut` (solo tests), cada `OverlapSphere` que el atajo se salta se ejecuta igualmente, sin efectos secundarios;
+  - cualquier coche por el que habría frenado (hueco < `brakeDistance`) se anota con el estado de los dos coches en el grafo;
+  - ciudad de 15 × 15, 1000 coches cinemáticos y 1000 peatones, 120 s;
+  - resultados: versión del *Scope*, más de 500 fallos (todos del hueco 1); con el índice por objetivo, 118 (todos del hueco 2); **versión final, 0**.
+- **Equivalencia estadística** (mismo fichero, `[Explicit]`): ventanas alternas de 10 s con el atajo apagado y encendido, contando sucesos nuevos (pares de coches que empiezan a solaparse más de 0,3 m, separados entre mitad de manzana y el resto; peatones de un paso de peatones que empiezan a tener un coche a menos de 1 m), con un control que no cambia nada. Sucesos nuevos en 60 s, primeras → segundas ventanas, **con la versión del *Scope***:
+
+  | Ejecución | Solapes a mitad de manzana | Otros solapes | Peatones |
+  | --- | --- | --- | --- |
+  | Control (nada cambia) | 295 → 307 (+4 %) | 244 → 274 (+12 %) | 481 → 458 (−5 %) |
+  | Solo (b) | 246 → 263 (+7 %) | 153 → 233 | 455 → 410 (−10 %) |
+  | Solo (c) | 255 → 273 (+7 %) | 256 → 224 | 490 → 440 (−10 %) |
+  | (b) + (c), tres ejecuciones | +40 %, +57 %, +48 % | | −7 %, −2 %, −10 % |
+
+  - **Lectura:** con los dos atajos juntos, (b) se notaba porque (c) hace que los coches que giran lleguen más rápido a las incorporaciones (ya no frenan por peatones de la acera), justo el hueco 2.
+  - **Decisión:** el test estadístico se queda como herramienta de diagnóstico, pero la verificación exacta es la prueba que cuenta. La estadística tiene un ruido del orden del 10 % y no distingue entre un atajo que se pierde coches y un tráfico que cambia de ritmo.
+  - **(c) reduce los peatones rozados** en todas las ejecuciones: los coches dejan de frenar por peatones de la acera en los giros (falsos positivos) y llegan menos atascados a los pasos.
+- **Hallazgo:** sin ningún atajo, 1000 coches cinemáticos producen ~250 solapes nuevos por minuto a mitad de manzana y otros tantos en los cruces. Son incorporaciones tras los giros (el punto ciego 1 del índice, que el `OverlapSphere` no siempre tapa a tiempo) y la ruptura de bloqueos, que hace pasar a un coche a propósito. En modo físico los `Rigidbody` lo convierten en empujones. Es una limitación de densidad del tráfico independiente del rendimiento, del mismo tipo que la falta de planificación de rutas (F.4.1).
+- **Medición** de 1000 + 1000 (15 × 15, modo físico, la misma prueba del paso 1), mediana por frame en ms:
+
+  | Marcador | Paso 1 (2.ª) | 1b, versión del *Scope* | 1b final | Cambio total |
+  | --- | --- | --- | --- | --- |
+  | Frame | 318 | 34,1 | 45,5 | −86 % |
+  | `Traffic.Tick` | 229 | 10,8 | 15,5 | −93 % |
+  | `Traffic.Sensors` | 188 | 7,0 | 9,2 | −95 % |
+  | ↳ `.Vehicles` (↳ `.VehicleOverlap`) | 81 (54) | 5,0 (2,9) | 6,9 (4,2) | |
+  | ↳ `.Pedestrians` | 104 | 1,8 | 2,1 | −98 % |
+  | `Traffic.CollisionCallbacks` | 2,1 | 0,2 | 0,35 | |
+  | `Pedestrians.Tick` (con `Grounding`) | 4,2 (0,9) | 4,6 (1,1) | 5,3 (1,3) | |
+  | `Pedestrians.Separation` | 3,5 | 1,9 | 2,4 | |
+  | `Physics.Simulate` | 27,6 | 3,4 | 4,1 | −85 % |
+
+  - La versión del *Scope* era más rápida porque se saltaba consultas que no podía saltarse.
+  - Parte de la bajada de `Traffic.Tick` y de `Physics.Simulate` viene de cortar la espiral (a).
+  - Los marcadores de peatones, que no cambian en este paso, varían un ~15 % entre ejecuciones: es el ruido de medir en el Editor.
+- **Criterios de aceptación:**
+  - **Cumplido:** `Traffic.Sensors` baja un 95 %, por encima del 60 % pedido.
+  - **No cumplido:** `Sensors.VehicleOverlap` sigue siendo la mayor parte de `Sensors.Vehicles` (61 %), porque el atajo seguro solo cubre el centro de cada manzana con el carril vacío. **Queda abierto** como posible mejora: usar el índice por objetivo como búsqueda principal del coche de delante (con filtro lateral) en vez de solo como guarda del atajo.
+- **Suite:** EditMode 139/139 y PlayMode 98/98 en verde con la versión del *Scope*, y PlayMode 98/98 otra vez con la versión final (los tests `[Explicit]` no cuentan).

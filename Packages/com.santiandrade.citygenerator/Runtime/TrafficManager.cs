@@ -58,7 +58,10 @@ namespace CityGenerator.Runtime
         private CarAgent[] kinematicSnapshot = System.Array.Empty<CarAgent>();
         private CarAgent[] physicsSnapshot = System.Array.Empty<CarAgent>();
         private bool agentsSnapshotDirty;
+        // SPEC 20 (a): counts rendered frames that had at least one physics step, not steps, so a
+        // far car's staggered sensor turn always lands on a step that runs sensors.
         private int physicsFrameIndex;
+        private int lastPhysicsSensorFrame = -1;
 
         /// <summary>Live count of currently registered agents — reflects a car that has since
         /// self-disabled (e.g. a Custom Grid dead end), unlike a count frozen at generation time.</summary>
@@ -161,6 +164,19 @@ namespace CityGenerator.Runtime
                 return;
 
             float dt = Time.fixedDeltaTime;
+
+            // SPEC 20 (a): sensors run on the first physics step of each rendered frame only; the
+            // remaining steps of the same frame reuse the cached clearances, exactly like a
+            // staggered car. At 50 fps or more there is at most one step per frame, so nothing
+            // changes; below that, sensors follow the frame rate (as a kinematic car's always
+            // did) instead of paying again for every catch-up step of a slow frame.
+            bool firstStepOfFrame = Time.frameCount != lastPhysicsSensorFrame;
+            if (firstStepOfFrame)
+            {
+                lastPhysicsSensorFrame = Time.frameCount;
+                physicsFrameIndex++;
+            }
+
             bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
             Camera cam = staggeringActive ? Camera.main : null;
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
@@ -170,9 +186,9 @@ namespace CityGenerator.Runtime
             {
                 foreach (CarAgent agent in physicsSnapshot)
                 {
-                    bool runSensor = true;
+                    bool runSensor = firstStepOfFrame;
 
-                    if (cam != null)
+                    if (runSensor && cam != null)
                     {
                         float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
                         if (sqrDistance > sqrStaggerDistance)
@@ -182,8 +198,6 @@ namespace CityGenerator.Runtime
                     agent.Tick(dt, runSensor);
                 }
             }
-
-            physicsFrameIndex++;
         }
     }
 }
