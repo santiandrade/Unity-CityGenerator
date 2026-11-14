@@ -475,6 +475,7 @@ namespace CityGenerator.Runtime
 
         private float ResolveGroundY(Vector3 xz, float fallbackY)
         {
+            using var _ = PedestrianManager.GroundingMarker.Auto();
             Vector3 origin = new(xz.x, fallbackY + GroundRayUpOffset, xz.z);
             if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, GroundRayUpOffset + GroundRayDownDistance, groundMask, QueryTriggerInteraction.Ignore))
             {

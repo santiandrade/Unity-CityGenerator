@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
@@ -42,6 +43,13 @@ namespace CityGenerator.Runtime
         [SerializeField] private PedestrianRoadProximityGrid roadProximityGrid;
 
         private readonly List<PedestrianAgent> agents = new();
+
+        // SPEC 20: same purpose and naming as TrafficManager's markers. Grounding wraps each
+        // agent's ground raycast (PedestrianAgent.ResolveGroundY), so it nests inside Tick.
+        private static readonly ProfilerMarker TickMarker = new("CityGenerator.Pedestrians.Tick");
+        private static readonly ProfilerMarker SeparationMarker = new("CityGenerator.Pedestrians.Separation");
+        private static readonly ProfilerMarker ProximityGridMarker = new("CityGenerator.Pedestrians.ProximityGrid");
+        internal static readonly ProfilerMarker GroundingMarker = new("CityGenerator.Pedestrians.Grounding");
         // Item 9: bucketed by index into `agents`, not by PedestrianAgent reference -- lets
         // ApplyLocalSeparation dedupe pairs by comparing indices instead of doing a second,
         // separate identity lookup.
@@ -116,26 +124,33 @@ namespace CityGenerator.Runtime
             if (activeThisFrame.Length < agents.Count)
                 activeThisFrame = new bool[agents.Count];
 
-            for (int i = 0; i < agents.Count; i++)
+            using (TickMarker.Auto())
             {
-                PedestrianAgent agent = agents[i];
-                bool runLogic = true;
-
-                if (cam != null)
+                for (int i = 0; i < agents.Count; i++)
                 {
-                    float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
-                    if (sqrDistance > sqrStaggerDistance)
-                        runLogic = (frameIndex + i) % staggerFrames == 0;
-                }
+                    PedestrianAgent agent = agents[i];
+                    bool runLogic = true;
 
-                activeThisFrame[i] = runLogic;
-                agent.Tick(dt, runLogic);
+                    if (cam != null)
+                    {
+                        float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
+                        if (sqrDistance > sqrStaggerDistance)
+                            runLogic = (frameIndex + i) % staggerFrames == 0;
+                    }
+
+                    activeThisFrame[i] = runLogic;
+                    agent.Tick(dt, runLogic);
+                }
             }
 
-            ApplyLocalSeparation(dt);
-            ApplyPlayerAvoidance(dt);
+            using (SeparationMarker.Auto())
+            {
+                ApplyLocalSeparation(dt);
+                ApplyPlayerAvoidance(dt);
+            }
 
-            roadProximityGrid?.Rebuild(agents, staggerMinAgentCount, playerTransform);
+            using (ProximityGridMarker.Auto())
+                roadProximityGrid?.Rebuild(agents, staggerMinAgentCount, playerTransform);
 
             frameIndex++;
         }

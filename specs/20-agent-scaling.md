@@ -244,3 +244,40 @@ public bool Relocate(int node);                              // false if the nod
 - **`RaycastCommand` completado en el mismo frame no sale más barato que N raycasts si hay pocos peatones.** Mitigación: solo por encima del umbral; lo dice la medición.
 - **El experimento *Optimize Game Objects* rompe a algún usuario que cuelga objetos de los huesos de los personajes de demo.** Mitigación: solo se adopta con una mejora clara y se avisa en el CHANGELOG.
 - **Desarrollo en paralelo con City Races** (Unity 6000.6 frente a 6000.5 aquí). El paquete declara `unity: 6000.0` y las APIs usadas existen desde mucho antes, pero se prueba en los dos Editores antes de publicar.
+
+## Notas de implementación
+
+### Paso 1 — instrumentación y medición de partida (2026-11-14)
+
+- **Marcadores** (`TrafficManager`, `CarAgent`, `PedestrianManager`, `PedestrianAgent`):
+  - `CityGenerator.Traffic.Tick` y, dentro, `CityGenerator.Traffic.Sensors` con un submarcador por sensor: `.Vehicles` (con `.VehicleOverlap` para el `OverlapSphere` de respaldo), `.Pedestrians` y `.Obstacles`;
+  - `CityGenerator.Traffic.CollisionCallbacks` (`OnCollisionEnter`/`OnCollisionStay`) y `CityGenerator.Traffic.SyncTransforms`;
+  - `CityGenerator.Pedestrians.Tick` (con `CityGenerator.Pedestrians.Grounding` dentro), `.Separation` y `.ProximityGrid`.
+- **Tests nuevos** en `RuntimePerformanceTests`: `PerFrameCost_400Agents_15x15_Physics` y `PerFrameCost_1000Agents_15x15_Physics`.
+  - Graban también los marcadores y `Physics.Simulate`.
+  - Esperan `pedestrianCount × 0,01 + 1` s antes de medir, porque el primer destino de cada peatón se planifica escalonado.
+  - **La ciudad del test no tiene `Main Camera`** (`CityGeneratorContentAssembler` no la crea; la crea `CityGeneratorSceneBuilder`). Sin cámara no hay escalonado de sensores, así que los tests miden el peor caso: todos los coches ejecutan los sensores en cada paso.
+- **Máquina:** ASUS ROG Zephyrus G16, Intel Core Ultra 9 285H, RTX 5060 Laptop, 32 GB. Medido en el Editor (Unity 6000.5.8f1), Play Mode del Test Runner.
+- **Resultados** (mediana por frame, ms):
+
+  | Marcador | 400 + 400 | 1000 + 1000 (1.ª) | 1000 + 1000 (2.ª, con submarcadores) |
+  | --- | --- | --- | --- |
+  | Frame | 13,6 | 196 | 318 |
+  | `Traffic.Tick` | 4,1 | 135 | 229 |
+  | `Traffic.Sensors` | 3,2 | 111 | 188 |
+  | ↳ `.Vehicles` (↳ `.VehicleOverlap`) | — | — | 81 (54) |
+  | ↳ `.Pedestrians` | — | — | 104 |
+  | ↳ `.Obstacles` | — | — | 0,9 |
+  | `Traffic.CollisionCallbacks` | 0,05 | 1,2 | 2,1 |
+  | `Pedestrians.Tick` (con `Grounding`) | 1,5 (0,4) | 4,0 (0,9) | 4,2 (0,9) |
+  | `Pedestrians.Separation` | 1,1 | 3,3 | 3,5 |
+  | `Pedestrians.ProximityGrid` | 0,2 | 0,7 | 0,7 |
+  | `Physics.Simulate` | 0,9 | 16,9 | 27,6 |
+
+- **Lectura:**
+  - **El coste dominante son los sensores de los coches**, no la física: el ~80 % de `Traffic.Tick`.
+  - Dentro de los sensores, el de peatones (consulta a `PedestrianRoadProximityGrid`: 25 celdas por coche con radio 12 m y celdas de 10 m) pesa más que el de vehículos.
+  - En el de vehículos, dos tercios son el `OverlapSphere` de respaldo. Se ejecuta siempre que `TrafficLaneOccupancy` no encuentra coche delante en el mismo tramo, es decir, también en el caso más común: carril libre a mitad de manzana.
+  - **Espiral de pasos de física:** en modo físico los sensores corren en `FixedUpdate`. Con frames de 200–300 ms hay hasta 16 pasos por frame (`Maximum Allowed Timestep` 0,333 s), y cada paso vuelve a ejecutar los sensores; por eso el frame empeora de una ejecución a otra.
+  - La física, las colisiones, el suelo de los peatones y la separación son de segundo orden a esta escala.
+- **Hallazgo aparte:** `PedestrianManager.ApplyPlayerAvoidance` llama a `FindAnyObjectByType<PlayerController>()` en cada frame mientras la escena no tiene el jugador a pie del paquete (el caso de City Races, `playerEnabled = false`).

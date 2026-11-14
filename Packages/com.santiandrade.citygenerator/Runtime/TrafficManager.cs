@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
@@ -31,6 +32,18 @@ namespace CityGenerator.Runtime
         // membership check is what makes Add a no-op on a duplicate call.
         private readonly HashSet<CarAgent> agents = new();
         private int frameIndex;
+
+        // SPEC 20: lets a consuming project split the frame time of a dense city by subsystem in
+        // the Profiler (and in Performance tests through Measure.ProfilerMarkers). Marker names are
+        // part of the package's observable surface: keep them stable.
+        internal static readonly ProfilerMarker TickMarker = new("CityGenerator.Traffic.Tick");
+        internal static readonly ProfilerMarker SensorsMarker = new("CityGenerator.Traffic.Sensors");
+        internal static readonly ProfilerMarker VehicleSensorMarker = new("CityGenerator.Traffic.Sensors.Vehicles");
+        internal static readonly ProfilerMarker VehicleOverlapMarker = new("CityGenerator.Traffic.Sensors.VehicleOverlap");
+        internal static readonly ProfilerMarker PedestrianSensorMarker = new("CityGenerator.Traffic.Sensors.Pedestrians");
+        internal static readonly ProfilerMarker ObstacleSensorMarker = new("CityGenerator.Traffic.Sensors.Obstacles");
+        internal static readonly ProfilerMarker CollisionCallbacksMarker = new("CityGenerator.Traffic.CollisionCallbacks");
+        private static readonly ProfilerMarker SyncTransformsMarker = new("CityGenerator.Traffic.SyncTransforms");
 
         // CarAgent.Tick can synchronously disable its own component (a Custom Grid dead end has
         // nowhere to send the car — see AdvanceToNextNode), which fires OnDisable -> Unregister
@@ -99,18 +112,21 @@ namespace CityGenerator.Runtime
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
             float sqrStaggerDistance = staggerDistance * staggerDistance;
 
-            foreach (CarAgent agent in kinematicSnapshot)
+            using (TickMarker.Auto())
             {
-                bool runSensor = true;
-
-                if (cam != null)
+                foreach (CarAgent agent in kinematicSnapshot)
                 {
-                    float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
-                    if (sqrDistance > sqrStaggerDistance)
-                        runSensor = (frameIndex + agent.CarId) % staggerFrames == 0;
-                }
+                    bool runSensor = true;
 
-                agent.Tick(dt, runSensor);
+                    if (cam != null)
+                    {
+                        float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
+                        if (sqrDistance > sqrStaggerDistance)
+                            runSensor = (frameIndex + agent.CarId) % staggerFrames == 0;
+                    }
+
+                    agent.Tick(dt, runSensor);
+                }
             }
 
             // CarAgent moves every kinematic car by writing transform.position directly (no
@@ -123,7 +139,8 @@ namespace CityGenerator.Runtime
             // per frame). Only called when there's at least one kinematic agent (the early return
             // above): a Rigidbody-mode car's position is already known to the physics engine, so
             // it never needs this sync.
-            Physics.SyncTransforms();
+            using (SyncTransformsMarker.Auto())
+                Physics.SyncTransforms();
 
             frameIndex++;
         }
@@ -149,18 +166,21 @@ namespace CityGenerator.Runtime
             Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
             float sqrStaggerDistance = staggerDistance * staggerDistance;
 
-            foreach (CarAgent agent in physicsSnapshot)
+            using (TickMarker.Auto())
             {
-                bool runSensor = true;
-
-                if (cam != null)
+                foreach (CarAgent agent in physicsSnapshot)
                 {
-                    float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
-                    if (sqrDistance > sqrStaggerDistance)
-                        runSensor = (physicsFrameIndex + agent.CarId) % staggerFrames == 0;
-                }
+                    bool runSensor = true;
 
-                agent.Tick(dt, runSensor);
+                    if (cam != null)
+                    {
+                        float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
+                        if (sqrDistance > sqrStaggerDistance)
+                            runSensor = (physicsFrameIndex + agent.CarId) % staggerFrames == 0;
+                    }
+
+                    agent.Tick(dt, runSensor);
+                }
             }
 
             physicsFrameIndex++;

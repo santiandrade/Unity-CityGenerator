@@ -331,9 +331,15 @@ namespace CityGenerator.Runtime
 
             if (runSensor)
             {
-                lastAheadClearance = VehicleAheadClearance();
-                lastPedestrianClearance = PedestrianAheadClearance();
-                lastObstacleClearance = ObstacleAheadClearance();
+                using (TrafficManager.SensorsMarker.Auto())
+                {
+                    using (TrafficManager.VehicleSensorMarker.Auto())
+                        lastAheadClearance = VehicleAheadClearance();
+                    using (TrafficManager.PedestrianSensorMarker.Auto())
+                        lastPedestrianClearance = PedestrianAheadClearance();
+                    using (TrafficManager.ObstacleSensorMarker.Auto())
+                        lastObstacleClearance = ObstacleAheadClearance();
+                }
             }
 
             // A detected pedestrian or TrafficObstacle is treated exactly like a car ahead: same
@@ -449,6 +455,8 @@ namespace CityGenerator.Runtime
             if (rb == null)
                 return;
 
+            using var _ = TrafficManager.CollisionCallbacksMarker.Auto();
+
             if (physicsState == PhysicsState.Recovering)
             {
                 RecordRecoveryPush(collision);
@@ -480,6 +488,8 @@ namespace CityGenerator.Runtime
         {
             if (rb == null)
                 return;
+
+            using var _ = TrafficManager.CollisionCallbacksMarker.Auto();
 
             if (physicsState == PhysicsState.Recovering)
             {
@@ -807,6 +817,7 @@ namespace CityGenerator.Runtime
             // full sensorRange has no such gap; forward/lateral projection below re-applies the same
             // narrow forward cone a directional cast gave for free, so a car in an adjacent lane
             // still isn't mistaken for one ahead in this one.
+            using var _ = TrafficManager.VehicleOverlapMarker.Auto();
             Vector3 egoPosition = transform.position;
             Vector3 origin = egoPosition + Vector3.up * 0.9f + towardTarget * 2.2f;
             int count = Physics.OverlapSphereNonAlloc(egoPosition + Vector3.up * 0.9f, sensorRange, overlaps,
