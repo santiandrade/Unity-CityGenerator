@@ -38,6 +38,7 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         public void TearDown()
         {
             Time.timeScale = previousTimeScale;
+            Time.captureDeltaTime = 0f;
             if (carGo != null) Object.Destroy(carGo);
             if (projectileGo != null) Object.Destroy(projectileGo);
             if (pedestrianGo != null) Object.Destroy(pedestrianGo);
@@ -371,6 +372,10 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         [UnityTest]
         public IEnumerator Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt()
         {
+            // A fixed 1/60 s of game time per frame: in an unfocused Editor the frames slow down
+            // and each one runs many physics steps, which made this test fail there (it passed in
+            // batch mode). With it the test sees the same frames on any machine.
+            Time.captureDeltaTime = 1f / 60f;
             (_, CarAgent agent) = BuildDrivingCar(new Vector3(170000f, 0f, 0f));
             BuildGround(carGo.transform.position);
             yield return null;

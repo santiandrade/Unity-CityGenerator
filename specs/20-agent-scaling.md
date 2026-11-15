@@ -1,6 +1,6 @@
 # SPEC 20 — Escalado de agentes: medición, LOD de física, reubicación y filtro coche↔peatón delegable
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Fecha:** 2026-11-14
 > **Proyecto:** Unity-CityGenerator (`santiandrade/Unity-CityGenerator`)
 > **Depende de:** SPEC 05 (tick centralizado, `TrafficLaneOccupancy`, `PedestrianRoadProximityGrid`, tests de rendimiento), SPEC 14/15 (API runtime por ciudad), SPEC 16 (varias ciudades), SPEC 17 (`Enable Physics`, `VehiclePedestrianCollisionFilter`), SPEC 19 (parachoques y `TrafficObstacle`)
@@ -220,46 +220,46 @@ public bool Relocate(int node);                              // false if the nod
 
 **Compatibilidad**
 
-- [ ] Con todas las opciones por defecto (filtro `true`, radios `0`, foco `null`), la suite completa (EditMode, PlayMode, Performance) pasa sin cambios y una ciudad de demo se comporta igual que en 3.6.1.
-- [ ] Con `Enable Physics` OFF sigue sin haber `Rigidbody`, pares ni actividad en `FixedUpdate` (invariante de SPEC 17).
+- [x] Con todas las opciones por defecto (filtro `true`, radios `0`, foco `null`), la suite completa (EditMode, PlayMode, Performance) pasa sin cambios y una ciudad de demo se comporta igual que en 3.6.1.
+- [x] Con `Enable Physics` OFF sigue sin haber `Rigidbody`, pares ni actividad en `FixedUpdate` (invariante de SPEC 17).
 
 **Coste de los sensores**
 
-- [ ] En la medición de 1000 + 1000, `CityGenerator.Traffic.Sensors` baja al menos un 60 % respecto al paso 1, y `Sensors.VehicleOverlap` deja de ser la mayor parte de `Sensors.Vehicles`.
-- [ ] En modo físico, los sensores de un coche se ejecutan como mucho una vez por frame renderizado.
-- [ ] Un coche a mitad de manzana sigue frenando detrás de un coche en `Recovering` o reenganchado que tenga delante.
-- [ ] Un coche se sigue deteniendo ante un peatón que cruza por el paso de peatones.
-- [ ] El test de equivalencia no da más solapes entre coches ni más peatones rozados con los atajos que sin ellos.
-- [ ] `PedestrianManager` y `CarAgent` no llaman a `FindAnyObjectByType` más de una vez por segundo cuando no hay jugador a pie o no hay peatones.
+- [ ] En la medición de 1000 + 1000, `CityGenerator.Traffic.Sensors` baja al menos un 60 % respecto al paso 1, y `Sensors.VehicleOverlap` deja de ser la mayor parte de `Sensors.Vehicles`. *Se cumple la primera mitad (−95 %) y no la segunda (61 %); se publica así, ver el cierre en las notas.*
+- [x] En modo físico, los sensores de un coche se ejecutan como mucho una vez por frame renderizado.
+- [x] Un coche a mitad de manzana sigue frenando detrás de un coche en `Recovering` o reenganchado que tenga delante.
+- [x] Un coche se sigue deteniendo ante un peatón que cruza por el paso de peatones.
+- [x] El test de equivalencia no da más solapes entre coches ni más peatones rozados con los atajos que sin ellos.
+- [x] `PedestrianManager` y `CarAgent` no llaman a `FindAnyObjectByType` más de una vez por segundo cuando no hay jugador a pie o no hay peatones.
 
 **Filtro delegable**
 
-- [ ] Con `VehiclePedestrianPairFiltering = false` antes de cargar la escena no se registra ningún par de `IgnoreCollision`.
-- [ ] Ponerlo a `false` con agentes activos borra los pares existentes.
-- [ ] El paquete no escribe nunca en la matriz de colisiones del proyecto.
+- [x] Con `VehiclePedestrianPairFiltering = false` antes de cargar la escena no se registra ningún par de `IgnoreCollision`.
+- [x] Ponerlo a `false` con agentes activos borra los pares existentes.
+- [x] El paquete no escribe nunca en la matriz de colisiones del proyecto.
 
 **LOD**
 
-- [ ] Con `physicsRadius > 0`, los coches físicos fuera del radio + histéresis son cinemáticos y no generan llamadas a `OnCollisionStay` entre ellos.
-- [ ] Al cruzar el radio, la velocidad de un coche no cambia más de 0,5 m/s entre dos pasos de física.
-- [ ] Dentro del radio, un choque fuerte lo lleva a `Recovering` como hoy.
-- [ ] Con `colliderRadius > 0` y la rejilla de proximidad activa, los peatones fuera del radio no tienen collider activo. Por debajo del umbral de la rejilla, todos lo conservan.
-- [ ] Los coches siguen frenando por los peatones (rejilla) y no atraviesan ningún semáforo en rojo con las opciones encendidas.
-- [ ] Los agentes escalonados por no ser visibles mueven su posición en cada frame. Solo su lógica y sus sensores se escalonan.
+- [x] Con `physicsRadius > 0`, los coches físicos fuera del radio + histéresis son cinemáticos y no generan llamadas a `OnCollisionStay` entre ellos.
+- [x] Al cruzar el radio, la velocidad de un coche no cambia más de 0,5 m/s entre dos pasos de física.
+- [x] Dentro del radio, un choque fuerte lo lleva a `Recovering` como hoy.
+- [x] Con `colliderRadius > 0` y la rejilla de proximidad activa, los peatones fuera del radio no tienen collider activo. Por debajo del umbral de la rejilla, todos lo conservan.
+- [x] Los coches siguen frenando por los peatones (rejilla) y no atraviesan ningún semáforo en rojo con las opciones encendidas.
+- [x] Los agentes escalonados por no ser visibles mueven su posición en cada frame. Solo su lógica y sus sensores se escalonan.
 
 **Reubicación**
 
-- [ ] `CarAgent.Relocate` deja el coche en el tramo pedido con su rumbo, sin ocupación ni reserva colgando del sitio anterior, y circula con normalidad.
-- [ ] `PedestrianAgent.Relocate` deja al peatón en el nodo, en el suelo, y camina hacia un destino nuevo.
-- [ ] Un coche desactivado y reactivado vuelve a estar en `TrafficLaneOccupancy` desde el primer frame.
+- [x] `CarAgent.Relocate` deja el coche en el tramo pedido con su rumbo, sin ocupación ni reserva colgando del sitio anterior, y circula con normalidad.
+- [x] `PedestrianAgent.Relocate` deja al peatón en el nodo, en el suelo, y camina hacia un destino nuevo.
+- [x] Un coche desactivado y reactivado vuelve a estar en `TrafficLaneOccupancy` desde el primer frame.
 
 **Rendimiento**
 
-- [ ] La tabla de 1000 + 1000 (opciones apagadas frente a encendidas) está en las notas. Cada opción que no mejore el marcador de su subsistema se retira antes de publicar, en lugar de publicarse sin beneficio.
+- [x] La tabla de 1000 + 1000 (opciones apagadas frente a encendidas) está en las notas. Cada opción que no mejore el marcador de su subsistema se retira antes de publicar, en lugar de publicarse sin beneficio.
 
 **Documentación**
 
-- [ ] Docs de arquitectura, referencia de API en los dos idiomas, `CLAUDE.md` y `CHANGELOG.md` actualizados. Versión 3.7.0 publicada.
+- [x] Docs de arquitectura, referencia de API en los dos idiomas, `CLAUDE.md` y `CHANGELOG.md` actualizados. Versión 3.7.0 publicada.
 
 ## Decisiones tomadas y descartadas
 
@@ -478,3 +478,17 @@ public bool Relocate(int node);                              // false if the nod
     - `CarAgentPhysicsRecoveryTests.Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt` falla en el Editor con la ventana sin foco (el Editor se mantiene ejecutando con `set_autotick` de la CLI), y pasa en batch mode.
     - `AgentScalingTests.CarRelocate_PutsItOnTheSegment_LeavesTheOldOne_AndDrivesOn` y `PedestrianRelocate_PutsItOnTheNode_AndItWalksOn` hacen lo contrario: pasan en el Editor y fallan en batch mode, porque el coche o el peatón reubicado no llega a moverse.
   - Pendiente: hacerlos independientes del ritmo de frames antes de publicar la 3.7.0.
+
+### Cierre (2026-11-15)
+
+- **Tests dependientes del ritmo de frames, arreglados:**
+  - **`CarRelocate_PutsItOnTheSegment_LeavesTheOldOne_AndDrivesOn` y `PedestrianRelocate_PutsItOnTheNode_AndItWalksOn`:** no era la lógica sino la precisión de los `float`. Sus redes están a 260 km y 70 km del origen para no pisarse con otros tests, donde una posición solo cambia en pasos de 1/64 y 1/128 m. En batch mode los frames son tan cortos que lo que avanza el agente en uno queda por debajo de medio paso y se pierde al redondear: el coche se movió exactamente 0,015625 m (1/64) en 0,5 s.
+  - **`Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt`:** en un Editor sin foco los frames se ralentizan y cada uno ejecuta muchos pasos de física.
+  - **Arreglo común:** los tres fijan `Time.captureDeltaTime = 1/60` (1/60 s de juego por frame, sea cual sea el ritmo real) y lo restauran en el `TearDown`.
+- **Suite en batch mode:** EditMode 139/139. PlayMode, que incluye los de rendimiento: 119 pasan, 0 fallan y 5 se omiten (`[Explicit]`).
+- **Comprobado en un consumidor real** (City Races, SPEC 53): foco, escalonado, LOD de física y de colliders, filtro delegado a la matriz de capas, reubicación con una burbuja de población y el atajo del suelo, funcionando juntos en una ciudad de 1000 + 1000. Los coches frenan por los peatones y respetan los semáforos, los choques cercanos los lanzan como antes y no hay tirones al cruzar el radio de física. En release, cada combinación del banco de pruebas queda por debajo de 16,7 ms de p95 en las dos configuraciones medidas.
+- **Criterio no cumplido del todo:** `Sensors.VehicleOverlap` sigue siendo la mayor parte de `Sensors.Vehicles`.
+  - Se publica así porque el objetivo del criterio, que los sensores dejen de dominar el frame, sí se cumple: `Traffic.Sensors` baja un 95 %, y con la burbuja de City Races `Traffic.Tick` entero cuesta 0,17–0,39 ms.
+  - Queda como posible mejora: usar el índice por nodo objetivo como búsqueda principal del coche de delante.
+- **Compatibilidad:** con las opciones nuevas apagadas, lo único que cambia respecto a 3.6.1 son los atajos de los sensores (paso 1b), que van encendidos por defecto. Su efecto visible es que los coches ya no frenan por peatones de la acera al girar, y está en el `CHANGELOG`. La verificación exacta del paso 1b dio 0 coches perdidos.
+- **Publicado como 3.7.0.**

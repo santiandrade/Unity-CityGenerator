@@ -19,12 +19,20 @@ namespace CityGenerator.Tests.PlayMode.Traffic
     {
         private const string SensorsMarker = "CityGenerator.Traffic.Sensors";
 
+        // Game time per frame for the tests that check an agent moves. These networks sit tens of
+        // kilometres from the origin to keep the tests apart, where a float position only changes
+        // in steps of 1/128-1/64 m; at batch-mode frame rates a frame's movement is below half a
+        // step and is rounded away, so the agent never moves. A fixed 1/60 s per frame makes the
+        // movement per frame independent of how fast the machine runs the frames.
+        private const float FixedFrameSeconds = 1f / 60f;
+
         private readonly List<GameObject> spawned = new();
         private GameObject generatedCity;
 
         [TearDown]
         public void TearDown()
         {
+            Time.captureDeltaTime = 0f;
             CityGeneratorAPI.VehiclePedestrianPairFiltering = true;
             foreach (GameObject go in spawned)
             {
@@ -335,6 +343,7 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         [UnityTest]
         public IEnumerator CarRelocate_PutsItOnTheSegment_LeavesTheOldOne_AndDrivesOn()
         {
+            Time.captureDeltaTime = FixedFrameSeconds;
             (TrafficNetwork network, _, float laneX) = BuildNetwork(new Vector3(260000f, 0f, 0f));
             CarAgent car = SpawnCar(network, new Vector3(laneX, 0f, -20f), physics: false);
             yield return null;
@@ -409,6 +418,7 @@ namespace CityGenerator.Tests.PlayMode.Traffic
         [UnityTest]
         public IEnumerator PedestrianRelocate_PutsItOnTheNode_AndItWalksOn()
         {
+            Time.captureDeltaTime = FixedFrameSeconds;
             PedestrianAgent[] pedestrians = GenerateSmallPedestrianCity(new Vector3(70000f, 0f, 70000f));
             yield return new WaitForSeconds(1.5f);
             PedestrianAgent pedestrian = pedestrians[0];
