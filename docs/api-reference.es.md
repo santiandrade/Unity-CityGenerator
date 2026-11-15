@@ -117,22 +117,25 @@ siempre que el Player estuviera deshabilitado en el momento de la generación.
 
 ## `CityGeneratorCity.Traffic`
 
-Solo lectura.
-
-| Miembro | Devuelve |
+| Miembro | Devuelve / hace |
 | --- | --- |
 | `IsEnabled` | `true` si el tráfico (vehículos) está habilitado. |
 | `VehicleCount` | El número **vivo** de `CarAgent`s registrados — no un conteo congelado en el momento de la generación. Un coche puede autodesactivarse (p. ej. un dead-end de Custom Grid), así que puede ser menor que el Vehicle Count configurado. |
+| `SetSimulationFocus(Transform focus)` | Mide las distancias del escalonado de sensores y del LOD de física desde `focus` (p. ej. el coche del jugador) en lugar de desde la cámara principal. `null` vuelve a la cámara. |
+| `SetStagger(float distance, int frames, float invisibleDistance = 0f)` | Los coches a más de `distance` del foco ejecutan el sensor frontal 1 de cada `frames` ticks; con `invisibleDistance` > 0, también los que estén más lejos de esa distancia y no los pinte ninguna cámara. Apagado por defecto (`invisibleDistance` 0). |
+| `SetPhysicsRadius(float meters)` | Con Enable Physics activado, los coches a más de `meters` del foco circulan como cuerpos cinemáticos (sin contactos entre ellos ni callbacks de colisión) y vuelven a ser dinámicos, conservando su velocidad, dentro de ese radio. `0` (por defecto) lo apaga. |
 
 ## `CityGeneratorCity.Pedestrians`
 
-Solo lectura.
-
-| Miembro | Devuelve |
+| Miembro | Devuelve / hace |
 | --- | --- |
 | `IsEnabled` | `true` si los peatones (generales) están habilitados. |
 | `Count` | El número **vivo** de `PedestrianAgent`s registrados (peatones generales y Custom Pedestrians combinados) — no un conteo congelado en el momento de la generación. |
 | `CustomCount` | El número de entradas de Custom Pedestrian configuradas (un presupuesto independiente de `IsEnabled`), no un conteo de agentes vivos. |
+| `SetSimulationFocus(Transform focus)` | Mide las distancias del escalonado de la lógica y del LOD de colliders desde `focus` en lugar de desde la cámara principal. `null` vuelve a la cámara. |
+| `SetStagger(float distance, int frames, float invisibleDistance = 0f)` | Como en `Traffic`, para la lógica de decisión de los peatones (el movimiento sigue siendo en cada frame). |
+| `SetColliderRadius(float meters)` | Los peatones a más de `meters` del foco tienen el collider raíz apagado mientras los coches los encuentran por la rejilla de proximidad (ciudades concurridas). Un collider que se vuelve a encender se empareja de nuevo con los vehículos con físicas, pero pierde cualquier par ignorado que hubiera puesto tu propio código. `0` (por defecto) lo apaga. |
+| `SetGroundingShortcutDistance(float meters)` | Los peatones a más de `meters` del foco no lanzan el rayo al suelo mientras recorren un tramo entre dos nodos que está sobre una sola superficie plana (se comprueba con dos rayos al empezar el tramo; nunca a través de un bordillo), y mientras están escalonados solo lo lanzan en sus frames de lógica. `0` (por defecto) lo apaga. |
 
 ## `CityGeneratorCity.Minimap`
 
@@ -205,6 +208,20 @@ Solo lectura.
 | `Count` | Número de ciudades registradas. |
 | `InScene(Scene scene)` | `CityGeneratorCity?` — la ciudad registrada en esa escena, o `null`. |
 | `For(CityGeneratorInfo info)` | `CityGeneratorCity?` — resuelve incluso una ciudad desactivada; `null` solo si `info` es `null` o está destruido. |
+| `VehiclePedestrianPairFiltering` | `bool`, por defecto `true`: cada vehículo con físicas no choca con ningún peatón generado gracias a `Physics.IgnoreCollision` por pares. Un proyecto sin jugador a pie en la capa de peatones puede ponerlo a `false` —idealmente desde un `RuntimeInitializeOnLoadMethod(BeforeSceneLoad)`— y separarlos con su propia matriz de colisiones, ahorrándose vehículos × peatones pares (un millón con 1000 de cada). Cambiarlo más tarde restaura (o vuelve a crear) los pares de todos los agentes activos. El paquete nunca escribe la matriz. |
+
+## Ganchos a nivel de agente (SPEC 20)
+
+Para un proyecto que gestiona su propia multitud —por ejemplo, un pool de agentes generados que se mueven alrededor del jugador—, los componentes de agente exponen unos pocos métodos fuera de la fachada por ciudad:
+
+| Miembro | Hace |
+| --- | --- |
+| `TrafficNetwork.LaneSegmentCount` / `GetLaneSegment(int i, out int from, out int to)` / `IsLaneSegment(int from, int to)` | Los tramos de calle: del nodo de salida de un cruce al nodo de entrada del siguiente. |
+| `TrafficLaneOccupancy.GetGap(int toNode, Vector3 position, Vector3 forward, out float ahead, out float behind)` | Distancia libre, de centro a centro, al coche más cercano por delante y por detrás entre todos los que van hacia `toNode`. |
+| `CarAgent.Relocate(int from, int to, float t)` | Pone el coche en ese tramo de calle en la fracción `t`, orientado a lo largo de él, con su estado de carril, cruce y parada reiniciado. `false` (sin cambiar nada) si el par no es un tramo de calle. No comprueba si cabe: usa `GetGap`. |
+| `CarAgent.FromNode` / `TargetNode` / `MaxSpeed` / `IsPhysicsSimulated` | Estado de solo lectura. |
+| `PedestrianAgent.Relocate(int node)` | Pone al peatón en ese nodo (ni `Crossing` ni bloqueado) y hace que elija un destino nuevo. |
+| `PedestrianAgent.AnimationSpeed` / `SetAnimatorDriven(bool)` | El Speed del blend tree, y ceder el `Animator` (`false`) a un render propio y recuperarlo (`true`). |
 
 ## Cosas que esta API deliberadamente no hace
 
@@ -212,7 +229,8 @@ Solo lectura.
   peatones, edificios o la propia cuadrícula. Los marcadores del minimapa son UI temporal propiedad
   del HUD; la generación sigue siendo exclusivamente un flujo del Editor.
 - **Sin `SetFreeViewActive`** — Free View se mantiene como un toggle de input puro (la tecla V).
-- **Sin setters en Traffic/Pedestrians/Audio/Player** — esos módulos son de solo lectura.
+- **Sin setters en Audio/Player**, y en Traffic/Pedestrians solo las opciones de simulación de la
+  SPEC 20 — nunca nada que cambie cuántos agentes existen.
 - **Sin eventos/callbacks.** Consulta por polling en su lugar.
 - **Sin soporte para varias ciudades coexistiendo en posiciones físicas distintas** — ver la nota
   de arriba; resolver varias ciudades registradas sí está soportado, reubicarlas no.

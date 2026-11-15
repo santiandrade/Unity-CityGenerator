@@ -113,22 +113,25 @@ Player was disabled at generation time.
 
 ## `CityGeneratorCity.Traffic`
 
-Read-only.
-
-| Member | Returns |
+| Member | Returns / does |
 | --- | --- |
 | `IsEnabled` | `true` if traffic (vehicles) is enabled. |
 | `VehicleCount` | The **live** number of registered `CarAgent`s — not a count frozen at generation time. A car can self-disable (e.g. a Custom Grid dead end), so this can be lower than the configured Vehicle Count. |
+| `SetSimulationFocus(Transform focus)` | Measures sensor staggering and physics LOD distances from `focus` (e.g. the player's car) instead of the main camera. `null` restores the camera. |
+| `SetStagger(float distance, int frames, float invisibleDistance = 0f)` | Cars beyond `distance` from the focus run their forward sensor 1 of `frames` ticks; with `invisibleDistance` > 0, so do cars beyond that distance that no camera renders. Off by default (`invisibleDistance` 0). |
+| `SetPhysicsRadius(float meters)` | With Enable Physics on, cars beyond `meters` from the focus drive as kinematic bodies (no contacts among themselves, no collision callbacks) and switch back to dynamic, keeping their speed, within it. `0` (the default) turns it off. |
 
 ## `CityGeneratorCity.Pedestrians`
 
-Read-only.
-
-| Member | Returns |
+| Member | Returns / does |
 | --- | --- |
 | `IsEnabled` | `true` if (general) pedestrians are enabled. |
 | `Count` | The **live** number of registered `PedestrianAgent`s (general pedestrians and Custom Pedestrians combined) — not a count frozen at generation time. |
 | `CustomCount` | The configured Custom Pedestrian entry count (a budget independent of `IsEnabled`), not a live agent count. |
+| `SetSimulationFocus(Transform focus)` | Measures decision-logic staggering and collider LOD distances from `focus` instead of the main camera. `null` restores the camera. |
+| `SetStagger(float distance, int frames, float invisibleDistance = 0f)` | As for `Traffic`, for the pedestrians' decision logic (they always move every frame). |
+| `SetColliderRadius(float meters)` | Pedestrians beyond `meters` from the focus have their root collider off while cars find them through the proximity grid (busy cities). A collider switched back on is paired again with the physics vehicles, but loses any ignore pair your own code had set on it. `0` (the default) turns it off. |
+| `SetGroundingShortcutDistance(float meters)` | Pedestrians beyond `meters` from the focus skip their ground raycast while they walk a stretch between two nodes that lies on one flat surface (checked with two raycasts when the stretch starts; never across a kerb), and while staggered cast it only on their logic frames. `0` (the default) turns it off. |
 
 ## `CityGeneratorCity.Minimap`
 
@@ -199,6 +202,20 @@ Read-only.
 | `Count` | Number of registered cities. |
 | `InScene(Scene scene)` | `CityGeneratorCity?` — the city registered in that scene, or `null`. |
 | `For(CityGeneratorInfo info)` | `CityGeneratorCity?` — resolves even a deactivated city; `null` only if `info` is `null` or destroyed. |
+| `VehiclePedestrianPairFiltering` | `bool`, default `true`: every physics-mode vehicle is kept from colliding with every generated pedestrian through per-pair `Physics.IgnoreCollision`. A project with no on-foot player on the pedestrian layer can set it to `false` — ideally from a `RuntimeInitializeOnLoadMethod(BeforeSceneLoad)` — and keep them apart with its own layer collision matrix, saving vehicles × pedestrians pairs (a million with 1000 of each). Setting it later restores (or re-creates) the pairs of every active agent. The package never writes the matrix. |
+
+## Agent-level hooks (SPEC 20)
+
+For a project that manages its own crowd — for example a pool of generated agents moved around the player — the agent components expose a few methods outside the per-city facade:
+
+| Member | Does |
+| --- | --- |
+| `TrafficNetwork.LaneSegmentCount` / `GetLaneSegment(int i, out int from, out int to)` / `IsLaneSegment(int from, int to)` | The street segments: from a crossing's exit node to the next crossing's entry node. |
+| `TrafficLaneOccupancy.GetGap(int toNode, Vector3 position, Vector3 forward, out float ahead, out float behind)` | Free distance, centre to centre, to the nearest car ahead and behind among every car heading to `toNode`. |
+| `CarAgent.Relocate(int from, int to, float t)` | Puts the car on that street segment at fraction `t`, facing along it, with its lane, crossing and stop state reset. `false` (nothing changed) if the pair is not a street segment. It does not check for room: use `GetGap`. |
+| `CarAgent.FromNode` / `TargetNode` / `MaxSpeed` / `IsPhysicsSimulated` | Read-only state. |
+| `PedestrianAgent.Relocate(int node)` | Puts the pedestrian on that node (not a `Crossing`, not blocked) and has it pick a new destination. |
+| `PedestrianAgent.AnimationSpeed` / `SetAnimatorDriven(bool)` | The blend tree's Speed, and handing the `Animator` over (`false`) to a renderer of your own and back (`true`). |
 
 ## Things this API deliberately does not do
 
@@ -206,7 +223,8 @@ Read-only.
   buildings, or the grid itself. Runtime minimap markers are transient UI owned by the HUD;
   generation remains exclusively an Editor workflow.
 - **No `SetFreeViewActive`** — Free View stays a pure input toggle (the V key).
-- **No setters on Traffic/Pedestrians/Audio/Player** — those modules are read-only.
+- **No setters on Audio/Player**, and on Traffic/Pedestrians only the SPEC 20 simulation options —
+  never anything that changes how many agents exist.
 - **No events/callbacks.** Poll instead.
 - **No support for multiple cities coexisting at different physical positions** — see the note
   above; resolving several registered cities is supported, relocating them is not.

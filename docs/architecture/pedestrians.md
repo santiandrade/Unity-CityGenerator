@@ -90,9 +90,23 @@ On top of that it rebuilds a coarse spatial grid every frame and applies a small
 
 SPEC 05 changes: it owns the `PedestrianPathBufferPool`; it staggers each agent's first `PlanNewDestination` by spawn index across several frames instead of firing every agent's initial plan in the same `Start`; its separation pass processes each nearby agent pair once instead of twice (once per side) and skips a pair entirely when neither side is "active" this frame under the existing sensor staggering; and it rebuilds `PedestrianRoadProximityGrid` once per frame, passing in the resolved player `Transform` separately since the player isn't a `PedestrianAgent`.
 
+SPEC 20 changes, all off by default:
+- **`SimulationFocus`** and **`invisibleStaggerDistance`**, as in `TrafficManager`.
+- **Collider LOD (`ColliderRadius` + hysteresis):** beyond it from the focus, an agent's root collider is switched off — only while the proximity grid answers `CarAgent` (`HasEnoughAgents`), since below that the sensor's `SphereCast` fallback needs every collider. Each agent is checked one frame in four. A collider switched back on is paired again with the physics vehicles (`VehiclePedestrianCollisionFilter.RepairPedestrian`), since Unity drops a disabled collider's ignored pairs — including any a user's own code had set.
+- **`ApplyPlayerAvoidance`** retries its `FindAnyObjectByType<PlayerController>()` at most once a second while there is no player (it used to search every frame).
+- **Grounding shortcut (`GroundingShortcutDistance`):** only with a simulation focus. Within the distance nothing changes (one ground ray per agent and frame). Beyond it, an agent on a flat stretch reuses the stretch's height instead of raycasting: the stretch is the (current node, next node) pair, judged once when the agent starts it with two rays (at the agent and at the point it heads to), and flat means both hit the same collider, both normals are near vertical and the heights match within a few millimetres. A stretch that starts or ends at a `Curb` or `Crossing` node is never flat, so kerbs and zebra crossings always raycast. Off a flat stretch the ray is cast only on the agent's logic frames (one in `staggerFrames` when staggered), keeping the last height in between. Cutting the number of rays is what helped here, after making each ray cheaper (the batched attempt below) did not.
+- Profiler markers `CityGenerator.Pedestrians.Tick`, `.Grounding`, `.Separation`, `.ProximityGrid`, `.ColliderLod`.
+- Tried and dropped: batching every agent's ground ray into one `RaycastCommand` job. With 1000 pedestrians it cost the same as the per-agent `Physics.Raycast` (scheduling, completing on the main thread and writing the height back eat the parallel gain), so the plain raycast stays.
+
 ## `PedestrianRoadProximityGrid.cs` (SPEC 05)
 
 A uniform spatial grid of registered `PedestrianAgent` positions, rebuilt once per frame by `PedestrianManager` and queried by `CarAgent.pedestrianMask` sensing (above `staggerMinAgentCount` pedestrians) instead of `SphereCastNonAlloc`. The **player** is not a `PedestrianAgent` (it's the manually-driven player instance, sharing the `Pedestrian` layer) so it can't be bucketed like one; `PedestrianManager` passes the resolved player `Transform` into `Rebuild` separately, and the grid tracks it via `TryGetPlayerPosition`, checked alongside the bucketed query so cars keep braking for the player once this grid takes over from the `SphereCast` fallback.
+
+SPEC 20: with `CarAgent`'s pedestrian shortcut on (the default) the grid indexes only agents on a crosswalk arm (`PedestrianAgent.IsOnCrossingArm`: walking or waiting on a `Curb`↔`Crossing` segment), and `CarAgent` queries it with `QueryBox` over the cells of its sensor corridor instead of `QueryNear`'s square. `HasEnoughAgents` still counts every registered agent. `QueryNear` is unchanged but, with the shortcut on, only ever returns road-crossing pedestrians.
+
+## `PedestrianAgent.cs` additions (SPEC 20)
+
+`Relocate(node)` puts the agent on any non-`Crossing`, non-blocked node (inside a Custom Pedestrian's allowed set), on the ground under it, and has it plan a new destination after a short pause. `AnimationSpeed` (the blend tree's Speed, 0 when not walking) and `SetAnimatorDriven(bool)` let a project draw far pedestrians itself: with `false` the agent disables its `Animator` and stops writing parameters; with `true` it re-enables it and writes the current ones at once.
 
 ## Generation and layers
 

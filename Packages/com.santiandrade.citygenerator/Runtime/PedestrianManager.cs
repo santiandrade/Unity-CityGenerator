@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace CityGenerator.Runtime
@@ -11,6 +12,11 @@ namespace CityGenerator.Runtime
     /// coarse spatial grid every frame and applies a small local separation nudge between agents
     /// that end up too close, so a crowd doesn't visibly overlap — the extent of peer interaction
     /// implemented so far; it's also the base a future spec can build richer interaction on.
+    ///
+    /// SPEC 20: distances are measured from <see cref="SimulationFocus"/> when one is set (the
+    /// main camera otherwise); an agent neither near the focus nor visible can be staggered too;
+    /// root colliders beyond <see cref="ColliderRadius"/> of the focus can be switched off while
+    /// cars find pedestrians through the proximity grid. All off by default.
     /// </summary>
     [DisallowMultipleComponent]
     public class PedestrianManager : MonoBehaviour
@@ -38,10 +44,40 @@ namespace CityGenerator.Runtime
 
         [SerializeField] private float playerAvoidanceStrength = 6f;
 
+        [Header("SPEC 20 (all off by default)")]
+        [Tooltip("Where staggering and collider-LOD distances are measured from. Empty: the main camera.")]
+        [SerializeField] private Transform simulationFocus;
+
+        [Tooltip("Agents farther than this from the focus that no camera renders are staggered too, even inside Stagger Distance. 0 = off.")]
+        [SerializeField] private float invisibleStaggerDistance;
+
+        [Tooltip("Agents farther than this from the focus have their root collider switched off while cars use the proximity grid (enough agents). 0 = off.")]
+        [SerializeField] private float colliderRadius;
+
+        [Tooltip("Extra distance beyond Collider Radius before a collider is switched off again.")]
+        [SerializeField] private float colliderRadiusHysteresis = 5f;
+
+        [Tooltip("Agents farther than this from the focus skip their ground raycast while they walk between two nodes on the same flat surface, and staggered ones only cast it on the frames their logic runs. 0 = off: every walking agent raycasts every frame.")]
+        [SerializeField] private float groundingShortcutDistance;
+
         [Tooltip("This manager's PedestrianRoadProximityGrid, on the same GameObject. Set by CityGeneratorPedestrianBuilder.AddManagerComponent. Rebuilt once per frame here so CarAgent can query nearby pedestrians without a SphereCast (item 8, stage 4).")]
         [SerializeField] private PedestrianRoadProximityGrid roadProximityGrid;
 
         private readonly List<PedestrianAgent> agents = new();
+
+        // SPEC 20: same purpose and naming as TrafficManager's markers. Grounding wraps each
+        // agent's ground raycast (PedestrianAgent.ResolveGroundY), so it nests inside Tick.
+        private static readonly ProfilerMarker TickMarker = new("CityGenerator.Pedestrians.Tick");
+        private static readonly ProfilerMarker SeparationMarker = new("CityGenerator.Pedestrians.Separation");
+        private static readonly ProfilerMarker ProximityGridMarker = new("CityGenerator.Pedestrians.ProximityGrid");
+        internal static readonly ProfilerMarker GroundingMarker = new("CityGenerator.Pedestrians.Grounding");
+        private static readonly ProfilerMarker ColliderLodMarker = new("CityGenerator.Pedestrians.ColliderLod");
+
+        // A pedestrian walks a few centimetres a frame, so each one's collider LOD is checked one
+        // frame in this many.
+        private const int ColliderLodFrames = 4;
+        private int disabledColliderCount;
+
         // Item 9: bucketed by index into `agents`, not by PedestrianAgent reference -- lets
         // ApplyLocalSeparation dedupe pairs by comparing indices instead of doing a second,
         // separate identity lookup.
@@ -88,6 +124,9 @@ namespace CityGenerator.Runtime
         // CityGeneratorSceneBuilder after PedestrianManager already exists, so an eager lookup
         // would find nothing. Cached once found since it never changes afterwards.
         private Transform playerTransform;
+        // SPEC 20 (d): without a player in the scene the lookup used to run every frame.
+        private float nextPlayerLookupTime;
+        private const float PlayerLookupRetryInterval = 1f;
 
         // Contains-guarded rather than an unconditional Add: Register is called from
         // PedestrianAgent.OnEnable, so a re-enabled agent that was never Unregister-ed (SetActive
@@ -105,37 +144,142 @@ namespace CityGenerator.Runtime
 
         public void Unregister(PedestrianAgent agent) => agents.Remove(agent);
 
-        private void Update()
+        /// <summary>SPEC 20: where staggering and collider-LOD distances are measured from; null
+        /// means the main camera, the behaviour before SPEC 20.</summary>
+        public Transform SimulationFocus
         {
-            float dt = Time.deltaTime;
-            bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
-            Camera cam = staggeringActive ? Camera.main : null;
-            Vector3 camPosition = cam != null ? cam.transform.position : Vector3.zero;
-            float sqrStaggerDistance = staggerDistance * staggerDistance;
+            get => simulationFocus;
+            set => simulationFocus = value;
+        }
 
-            if (activeThisFrame.Length < agents.Count)
-                activeThisFrame = new bool[agents.Count];
+        /// <summary>SPEC 20: agents beyond this distance from the focus have their root collider
+        /// switched off while the proximity grid is in use. 0 (the default) keeps every collider.</summary>
+        public float ColliderRadius
+        {
+            get => colliderRadius;
+            set => colliderRadius = Mathf.Max(0f, value);
+        }
+
+        /// <summary>SPEC 20: agents beyond this distance from the focus skip the ground raycast on
+        /// flat stretches and, while staggered, between their logic frames. 0 (the default) keeps
+        /// one raycast per walking agent per frame.</summary>
+        public float GroundingShortcutDistance
+        {
+            get => groundingShortcutDistance;
+            set => groundingShortcutDistance = Mathf.Max(0f, value);
+        }
+
+        /// <summary>SPEC 20: sets the staggering parameters at runtime. <paramref name="invisibleDistance"/>
+        /// = 0 keeps visibility out of it (the default).</summary>
+        public void SetStagger(float distance, int frames, float invisibleDistance = 0f)
+        {
+            staggerDistance = Mathf.Max(0f, distance);
+            staggerFrames = Mathf.Max(1, frames);
+            invisibleStaggerDistance = Mathf.Max(0f, invisibleDistance);
+        }
+
+        /// <summary>The focus position, or false when there is neither a focus nor a main camera.</summary>
+        private bool TryGetFocusPosition(out Vector3 position)
+        {
+            if (simulationFocus != null)
+            {
+                position = simulationFocus.position;
+                return true;
+            }
+
+            Camera cam = Camera.main;
+            position = cam != null ? cam.transform.position : Vector3.zero;
+            return cam != null;
+        }
+
+        /// <summary>
+        /// SPEC 20: switches root colliders off beyond colliderRadius (+ hysteresis) of the focus and
+        /// back on within it -- only while the proximity grid answers CarAgent's pedestrian sensor;
+        /// below that, the sensor falls back to a SphereCast that needs every collider, so all of
+        /// them go back on. A collider switched back on is paired again with the physics vehicles
+        /// (Unity drops a disabled collider's ignored pairs).
+        /// </summary>
+        private void UpdateColliderLod(bool hasFocus, Vector3 focus)
+        {
+            bool lodActive = colliderRadius > 0f && hasFocus && roadProximityGrid != null && roadProximityGrid.HasEnoughAgents;
+            if (!lodActive && disabledColliderCount == 0)
+                return;
+
+            using var _ = ColliderLodMarker.Auto();
+            float sqrInner = colliderRadius * colliderRadius;
+            float outer = colliderRadius + Mathf.Max(0f, colliderRadiusHysteresis);
+            float sqrOuter = outer * outer;
+            int disabled = 0;
 
             for (int i = 0; i < agents.Count; i++)
             {
                 PedestrianAgent agent = agents[i];
-                bool runLogic = true;
-
-                if (cam != null)
+                bool active = agent.IsColliderActive;
+                if (!lodActive)
                 {
-                    float sqrDistance = (agent.transform.position - camPosition).sqrMagnitude;
-                    if (sqrDistance > sqrStaggerDistance)
-                        runLogic = (frameIndex + i) % staggerFrames == 0;
+                    active = true;
+                }
+                else if ((frameIndex + i) % ColliderLodFrames == 0)
+                {
+                    float sqrDistance = (agent.transform.position - focus).sqrMagnitude;
+                    if (sqrDistance <= sqrInner)
+                        active = true;
+                    else if (sqrDistance > sqrOuter)
+                        active = false;
                 }
 
-                activeThisFrame[i] = runLogic;
-                agent.Tick(dt, runLogic);
+                agent.SetColliderActive(active);
+                if (!agent.IsColliderActive)
+                    disabled++;
             }
 
-            ApplyLocalSeparation(dt);
-            ApplyPlayerAvoidance(dt);
+            disabledColliderCount = disabled;
+        }
 
-            roadProximityGrid?.Rebuild(agents, staggerMinAgentCount, playerTransform);
+        private void Update()
+        {
+            float dt = Time.deltaTime;
+            bool staggeringActive = agents.Count > staggerMinAgentCount && staggerFrames > 1;
+            bool hasFocus = TryGetFocusPosition(out Vector3 focus);
+            float sqrStaggerDistance = staggerDistance * staggerDistance;
+            float sqrInvisibleDistance = invisibleStaggerDistance * invisibleStaggerDistance;
+            bool groundingShortcut = groundingShortcutDistance > 0f && hasFocus;
+            float sqrGroundingDistance = groundingShortcutDistance * groundingShortcutDistance;
+
+            if (activeThisFrame.Length < agents.Count)
+                activeThisFrame = new bool[agents.Count];
+
+            using (TickMarker.Auto())
+            {
+                for (int i = 0; i < agents.Count; i++)
+                {
+                    PedestrianAgent agent = agents[i];
+                    bool runLogic = true;
+                    float sqrDistance = hasFocus ? (agent.transform.position - focus).sqrMagnitude : 0f;
+
+                    if (staggeringActive && hasFocus)
+                    {
+                        bool staggered = sqrDistance > sqrStaggerDistance
+                                         || (invisibleStaggerDistance > 0f && sqrDistance > sqrInvisibleDistance && !agent.IsVisible);
+                        if (staggered)
+                            runLogic = (frameIndex + i) % staggerFrames == 0;
+                    }
+
+                    activeThisFrame[i] = runLogic;
+                    agent.Tick(dt, runLogic, exactGrounding: !groundingShortcut || sqrDistance <= sqrGroundingDistance);
+                }
+            }
+
+            UpdateColliderLod(hasFocus, focus);
+
+            using (SeparationMarker.Auto())
+            {
+                ApplyLocalSeparation(dt);
+                ApplyPlayerAvoidance(dt);
+            }
+
+            using (ProximityGridMarker.Auto())
+                roadProximityGrid?.Rebuild(agents, staggerMinAgentCount, playerTransform);
 
             frameIndex++;
         }
@@ -144,6 +288,10 @@ namespace CityGenerator.Runtime
         {
             if (playerTransform == null)
             {
+                if (Time.time < nextPlayerLookupTime)
+                    return;
+
+                nextPlayerLookupTime = Time.time + PlayerLookupRetryInterval;
                 PlayerController player = FindAnyObjectByType<PlayerController>();
                 if (player == null)
                 {

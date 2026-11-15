@@ -76,6 +76,10 @@ namespace CityGenerator.Runtime
         // still counts, so a hit on the front corner does).
         private const float VehicleBumperMinNormalForwardDot = 0.5f;
 
+        // Lateral distance from this car's heading beyond which a pedestrian is never in its path
+        // (see PedestrianAheadClearanceFromGrid); SPEC 20 (c) also sizes the grid query with it.
+        private const float PedestrianLateralCutoff = 1.6f;
+
         // SPEC 19: same sensor origin every other forward sensor here measures from (2.2m ahead of
         // the car's centre, 0.9m up), so minGap means the same thing for a TrafficObstacle.
         private const float SensorOriginOffset = 2.2f;
@@ -92,7 +96,37 @@ namespace CityGenerator.Runtime
         // vehicles are built first. By the time Play actually starts and the sensor first runs, the
         // full scene (including this) exists.
         private PedestrianRoadProximityGrid pedestrianRoadProximity;
+        private Renderer visibilityRenderer;
+        // SPEC 20 (d): a city without pedestrians has no grid, and searching the whole scene for it
+        // on every sensor run was a per-car, per-step FindAnyObjectByType.
+        private float nextProximityLookupTime;
+        private const float ProximityLookupRetryInterval = 1f;
         private readonly List<PedestrianAgent> pedestrianQueryResults = new();
+
+        // SPEC 20 (b)/(c): sensor shortcuts that skip work which cannot change the result. On by
+        // default; internal so the tests can compare the same city with and without them.
+        internal static bool VehicleSensorShortcut = true;
+        internal static bool PedestrianSensorShortcut = true;
+
+        // SPEC 20 (b), tests only: when set, every skipped OverlapSphere is still run (without side
+        // effects) and any car it would have braked for is described in ShortcutMisses.
+        internal static bool VerifyVehicleShortcut;
+        internal static readonly List<string> ShortcutMisses = new();
+
+        // SPEC 20 (b): distance beyond sensorRange from its target node at which nothing but its
+        // own lane segment can be within a car's forward sensor -- covers the overhang of a long
+        // vehicle on the next segment (the overlap test uses its collider surface, the "ahead"
+        // test its centre) and arriveRadius.
+        private const float MidBlockMargin = 8f;
+
+        // SPEC 20 (b): distance from the centre of the crossing a car has just left beyond which no
+        // car still inside that crossing (half the 10 m street) can have its centre ahead of this
+        // one, even a long vehicle (half-length up to ~5 m), with a margin.
+        private const float CrossingClearDistance = 12f;
+
+        // SPEC 20 (b): cars that left TrafficLaneOccupancy without being disabled (Recovering),
+        // the only ones the mid-block shortcut could otherwise miss. Normally empty.
+        private static readonly List<CarAgent> RecoveringCars = new();
 
         // Own identifier for crossing reservations; 0 means "crossing free".
         private static int nextCarId = 1;
@@ -182,6 +216,10 @@ namespace CityGenerator.Runtime
         /// <summary>Identifier used for crossing reservations and to break ties in deadlocks.</summary>
         public int CarId => carId;
         public int TargetNode => targetNode;
+        /// <summary>Node the car last departed from, -1 until it reaches its first node (or after
+        /// re-attaching from Recovering). Together with <see cref="TargetNode"/>, its lane segment.</summary>
+        public int FromNode => fromNode;
+        public float MaxSpeed => maxSpeed;
         public int ReservedIntersection => reservedIntersection;
         public float DistanceTravelled => distanceTravelled;
         /// <summary>Seconds it has been continuously stopped for.</summary>
@@ -196,6 +234,21 @@ namespace CityGenerator.Runtime
         /// instead of Update.</summary>
         public bool HasPhysics => rb != null;
 
+        /// <summary>
+        /// SPEC 20: whether this physics-mode car is a dynamic body right now. False while
+        /// TrafficManager's physics LOD keeps it kinematic (beyond its physicsRadius from the
+        /// focus); always false for a kinematic-mode car (no Rigidbody).
+        /// </summary>
+        public bool IsPhysicsSimulated => rb != null && !kinematicByLod;
+
+        // SPEC 20: cached mirror of rb.isKinematic, which only the physics LOD sets, so neither the
+        // LOD loop nor Tick asks the engine for it.
+        private bool kinematicByLod;
+
+        /// <summary>SPEC 20: whether any camera renders this car (its first renderer), for
+        /// TrafficManager's visibility staggering. True when it has no renderer at all.</summary>
+        public bool IsVisible => visibilityRenderer == null || visibilityRenderer.isVisible;
+
         // Counter reset for Play sessions with Domain Reload disabled, where a static field
         // otherwise keeps growing across sessions and breaks the carId tie-break in IsDeadlockedWith.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -203,11 +256,18 @@ namespace CityGenerator.Runtime
         {
             nextCarId = 1;
             ColliderRegistry.Clear();
+            RecoveringCars.Clear();
+            VehicleSensorShortcut = true;
+            PedestrianSensorShortcut = true;
+            VerifyVehicleShortcut = false;
+            ShortcutMisses.Clear();
         }
 
         private void OnEnable()
         {
             ownCollider = GetComponent<Collider>();
+            if (visibilityRenderer == null)
+                visibilityRenderer = GetComponentInChildren<Renderer>();
             if (ownCollider != null)
                 ColliderRegistry[ownCollider.GetEntityId()] = this;
 
@@ -256,6 +316,15 @@ namespace CityGenerator.Runtime
                 trafficManager = new GameObject("TrafficManager").AddComponent<TrafficManager>();
             }
             trafficManager.Register(this);
+
+            // SPEC 20: a car that was disabled (OnDisable left its segment) and is enabled again
+            // goes straight back into its segment's occupancy instead of waiting for its next
+            // node: until then the cars behind it would only see it through the physics fallback,
+            // which the mid-block shortcut skips. Start does the first Enter (targetNode < 0 here).
+            if (network != null && network.LaneOccupancy != null && targetNode >= 0 && physicsState == PhysicsState.Driving)
+                network.LaneOccupancy.Enter(this, fromNode, targetNode);
+            else if (rb != null && physicsState == PhysicsState.Recovering && !RecoveringCars.Contains(this))
+                RecoveringCars.Add(this);
         }
 
         private void OnDisable()
@@ -270,6 +339,7 @@ namespace CityGenerator.Runtime
             }
             if (network != null && network.LaneOccupancy != null && targetNode >= 0)
                 network.LaneOccupancy.Leave(this, fromNode, targetNode);
+            RecoveringCars.Remove(this);
         }
 
         private void Start()
@@ -287,7 +357,9 @@ namespace CityGenerator.Runtime
             }
 
             carId = nextCarId++;
-            targetNode = network.FindNodeAhead(transform.position, transform.forward);
+            // SPEC 20: a car relocated before its first Start already knows its segment.
+            if (targetNode < 0)
+                targetNode = network.FindNodeAhead(transform.position, transform.forward);
             if (targetNode < 0)
             {
                 Debug.LogError($"{name}: no network node found ahead of the vehicle.", this);
@@ -331,9 +403,15 @@ namespace CityGenerator.Runtime
 
             if (runSensor)
             {
-                lastAheadClearance = VehicleAheadClearance();
-                lastPedestrianClearance = PedestrianAheadClearance();
-                lastObstacleClearance = ObstacleAheadClearance();
+                using (TrafficManager.SensorsMarker.Auto())
+                {
+                    using (TrafficManager.VehicleSensorMarker.Auto())
+                        lastAheadClearance = VehicleAheadClearance();
+                    using (TrafficManager.PedestrianSensorMarker.Auto())
+                        lastPedestrianClearance = PedestrianAheadClearance();
+                    using (TrafficManager.ObstacleSensorMarker.Auto())
+                        lastObstacleClearance = ObstacleAheadClearance();
+                }
             }
 
             // A detected pedestrian or TrafficObstacle is treated exactly like a car ahead: same
@@ -408,8 +486,18 @@ namespace CityGenerator.Runtime
                 // Y position is already frozen by the Rigidbody's constraints (see
                 // EnterDrivingPhysics), so unlike the kinematic path below there's no y = 0f to
                 // apply by hand.
-                rb.MoveRotation(rotation);
-                rb.linearVelocity = (rotation * Vector3.forward) * speed;
+                if (kinematicByLod)
+                {
+                    // SPEC 20 physics LOD: a kinematic body is moved, not driven by velocity. Y is
+                    // left as it is, like the frozen Y of the dynamic case.
+                    rb.MovePosition(rb.position + (rotation * Vector3.forward) * step);
+                    rb.MoveRotation(rotation);
+                }
+                else
+                {
+                    rb.MoveRotation(rotation);
+                    rb.linearVelocity = (rotation * Vector3.forward) * speed;
+                }
             }
             else
             {
@@ -449,6 +537,8 @@ namespace CityGenerator.Runtime
             if (rb == null)
                 return;
 
+            using var _ = TrafficManager.CollisionCallbacksMarker.Auto();
+
             if (physicsState == PhysicsState.Recovering)
             {
                 RecordRecoveryPush(collision);
@@ -480,6 +570,8 @@ namespace CityGenerator.Runtime
         {
             if (rb == null)
                 return;
+
+            using var _ = TrafficManager.CollisionCallbacksMarker.Auto();
 
             if (physicsState == PhysicsState.Recovering)
             {
@@ -604,8 +696,113 @@ namespace CityGenerator.Runtime
         /// an accident that kept either would block that crossing/lane indefinitely, reproducing
         /// the five-minute deadlock CLAUDE.md documents, by another path.
         /// </summary>
+        /// <summary>
+        /// SPEC 20: puts this car on the street segment (<paramref name="from"/>,
+        /// <paramref name="to"/>) -- see <see cref="TrafficNetwork.GetLaneSegment"/> -- at fraction
+        /// <paramref name="t"/> of its length, facing along it, as if it had just driven there:
+        /// leaves the occupancy of the segment it was on and enters the new one, gives up any
+        /// crossing reservation, and starts again from a moderate speed (maxSpeed x
+        /// cornerSpeedFactor) with no stop, deadlock or bumper state left over. A Recovering car
+        /// goes back to Driving. Works on an inactive car too (the occupancy is entered when it is
+        /// enabled). Returns false, changing nothing, when the pair is not a street segment. Placing
+        /// it where it does not overlap another car is the caller's job (see
+        /// <see cref="TrafficLaneOccupancy.GetGap"/>).
+        /// </summary>
+        public bool Relocate(int from, int to, float t)
+        {
+            if (network == null)
+                network = FindAnyObjectByType<TrafficNetwork>();
+            if (network == null || !network.IsLaneSegment(from, to))
+                return false;
+
+            bool registered = isActiveAndEnabled && targetNode >= 0 && physicsState == PhysicsState.Driving;
+            if (registered)
+                network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+            if (reservedIntersection >= 0)
+            {
+                network.Release(reservedIntersection, carId);
+                reservedIntersection = -1;
+            }
+            RecoveringCars.Remove(this);
+
+            Vector3 start = network.GetNode(from).Position;
+            Vector3 end = network.GetNode(to).Position;
+            Vector3 direction = end - start;
+            direction.y = 0f;
+            Quaternion rotation = Quaternion.LookRotation(direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward, Vector3.up);
+            Vector3 position = Vector3.Lerp(start, end, Mathf.Clamp01(t));
+            position.y = 0f;
+
+            fromNode = from;
+            targetNode = to;
+            speed = maxSpeed * cornerSpeedFactor;
+            stoppedTime = 0f;
+            breakingDeadlockUntil = 0f;
+            bumperBlockedUntil = 0f;
+            stopReason = StopReason.None;
+            lastStopReason = StopReason.None;
+            approachingUnsignalled = false;
+            lastAheadClearance = float.MaxValue;
+            lastPedestrianClearance = float.MaxValue;
+            lastObstacleClearance = float.MaxValue;
+            reattachAttempts = 0;
+
+            transform.SetPositionAndRotation(position, rotation);
+            if (rb != null)
+            {
+                if (physicsState == PhysicsState.Recovering)
+                {
+                    physicsState = PhysicsState.Driving;
+                    EnterDrivingPhysics();
+                }
+                rb.position = position;
+                rb.rotation = rotation;
+                rb.angularVelocity = Vector3.zero;
+                if (!kinematicByLod)
+                    rb.linearVelocity = rotation * Vector3.forward * speed;
+            }
+            physicsState = PhysicsState.Driving;
+
+            if (isActiveAndEnabled)
+                network.LaneOccupancy?.Enter(this, fromNode, targetNode);
+            return true;
+        }
+
+        /// <summary>
+        /// SPEC 20, called by TrafficManager's physics LOD: switches this physics-mode car between
+        /// a dynamic body (normal SPEC 17 driving) and a kinematic one moved with MovePosition.
+        /// Kinematic bodies generate no contacts with each other or with static geometry, so a far
+        /// queue stops costing anything in the solver. Going back to dynamic carries the current
+        /// driving speed over as velocity, so the car never jumps. Ignored without a Rigidbody and
+        /// while Recovering (a knocked car must stay free until it re-attaches).
+        /// </summary>
+        public void SetPhysicsSimulated(bool simulated)
+        {
+            if (rb == null || physicsState != PhysicsState.Driving || kinematicByLod == !simulated)
+                return;
+
+            kinematicByLod = !simulated;
+            if (simulated)
+            {
+                rb.isKinematic = false;
+                rb.linearVelocity = transform.forward * speed;
+                rb.angularVelocity = Vector3.zero;
+            }
+            else
+            {
+                rb.isKinematic = true;
+            }
+        }
+
         private void EnterRecovering()
         {
+            // SPEC 20: an impact always frees the car, even if the physics LOD had it kinematic.
+            if (kinematicByLod)
+            {
+                kinematicByLod = false;
+                rb.isKinematic = false;
+            }
+
             physicsState = PhysicsState.Recovering;
             recoveringSince = Time.time;
             lastPushedTime = float.NegativeInfinity;
@@ -624,6 +821,8 @@ namespace CityGenerator.Runtime
             }
             if (targetNode >= 0)
                 network.LaneOccupancy?.Leave(this, fromNode, targetNode);
+            if (!RecoveringCars.Contains(this))
+                RecoveringCars.Add(this);
 
             rb.useGravity = true;
             rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
@@ -699,6 +898,7 @@ namespace CityGenerator.Runtime
             targetNode = node;
             fromNode = -1;
             network.LaneOccupancy?.Enter(this, fromNode, targetNode);
+            RecoveringCars.Remove(this);
 
             // Carry on from the car's actual forward motion instead of snapping it to a halt (or to
             // its pre-impact speed): Driving imposes this speed from the next tick on and ramps it
@@ -798,6 +998,15 @@ namespace CityGenerator.Runtime
                 return laneDistance <= 0.001f ? 0f : laneDistance - minGap;
             }
 
+            // SPEC 20 (b): mid-block, with nobody ahead on its own segment, the physics fallback
+            // below has nothing left to find -- see CanSkipVehicleOverlap.
+            if (VehicleSensorShortcut && CanSkipVehicleOverlap(towardTarget))
+            {
+                if (VerifyVehicleShortcut)
+                    RecordShortcutMiss(towardTarget);
+                return float.MaxValue;
+            }
+
             // OverlapSphere centred on this car's own position, not on a point offset ahead of it --
             // a SphereCast (or an OverlapSphere at that offset point) has a blind spot for any
             // vehicle whose body spans past the offset point without its surface actually touching
@@ -807,6 +1016,7 @@ namespace CityGenerator.Runtime
             // full sensorRange has no such gap; forward/lateral projection below re-applies the same
             // narrow forward cone a directional cast gave for free, so a car in an adjacent lane
             // still isn't mistaken for one ahead in this one.
+            using var _ = TrafficManager.VehicleOverlapMarker.Auto();
             Vector3 egoPosition = transform.position;
             Vector3 origin = egoPosition + Vector3.up * 0.9f + towardTarget * 2.2f;
             int count = Physics.OverlapSphereNonAlloc(egoPosition + Vector3.up * 0.9f, sensorRange, overlaps,
@@ -839,6 +1049,109 @@ namespace CityGenerator.Runtime
             }
 
             return clearance;
+        }
+
+        /// <summary>
+        /// SPEC 20 (b): true when the OverlapSphere fallback of <see cref="VehicleAheadClearance"/>
+        /// cannot find a car the lane index has not already ruled out. Called only after
+        /// TrafficLaneOccupancy found no car ahead on this car's own segment. It requires:
+        /// - a proper segment (fromNode known): a freshly spawned or re-attached car registers as
+        ///   (-1, target) and does not know which physical segment it shares;
+        /// - this car farther than sensorRange + MidBlockMargin from its target node, so neither
+        ///   the crossing nor the next segment is within reach;
+        /// - no other car heading to the same target node ahead of it, under any key: one physical
+        ///   lane holds cars registered under different from-nodes (straight through a crossing as
+        ///   (previous entry, next entry), after a turn as (exit, next entry), spawned or re-attached
+        ///   as (-1, target)), and the lane index above only looked at this car's own key. Found by
+        ///   the exact verification test (SPEC 20, step 1b);
+        /// - this car farther than CrossingClearDistance from the centre of the crossing it has just
+        ///   left (fromNode's): until then a car still crossing it -- turning across this car's
+        ///   path, or merging into its lane before reaching the node where it would switch segment
+        ///   -- can be right ahead of it while the lane index has it on another segment. Found by
+        ///   the exact verification test (SPEC 20, step 1b);
+        /// - no car in Recovering within reach (it left the index without being disabled).
+        /// Opposite-lane traffic was never "ahead" (lateral filter), and a disabled car is out of
+        /// ColliderRegistry, so the fallback ignored it too.
+        /// </summary>
+        private bool CanSkipVehicleOverlap(Vector3 towardTarget)
+        {
+            if (fromNode < 0 || targetNode < 0 || network.LaneOccupancy == null)
+                return false;
+
+            float reach = sensorRange + MidBlockMargin;
+            Vector3 toTarget = network.GetNode(targetNode).Position - transform.position;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude <= reach * reach)
+                return false;
+
+            if (network.LaneOccupancy.HasCarAheadHeadingTo(this, targetNode, towardTarget))
+                return false;
+
+            Vector3 fromCrossing = transform.position - network.IntersectionCentre(network.GetNode(fromNode).Intersection);
+            fromCrossing.y = 0f;
+            if (fromCrossing.sqrMagnitude <= CrossingClearDistance * CrossingClearDistance)
+                return false;
+
+            Vector3 egoPosition = transform.position;
+            for (int i = 0; i < RecoveringCars.Count; i++)
+            {
+                CarAgent other = RecoveringCars[i];
+                if (other != null && other != this && (other.transform.position - egoPosition).sqrMagnitude <= reach * reach)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// SPEC 20 (b), tests only: runs the OverlapSphere scan the shortcut skipped, without
+        /// ProcessVehicleCollider's deadlock side effects, and records the closest car it would
+        /// have braked for (within brakeDistance of clearance), with both cars' graph state.
+        /// </summary>
+        private void RecordShortcutMiss(Vector3 towardTarget)
+        {
+            Vector3 egoPosition = transform.position;
+            Vector3 origin = egoPosition + Vector3.up * 0.9f + towardTarget * 2.2f;
+            var hits = new Collider[32];
+            int count = Physics.OverlapSphereNonAlloc(egoPosition + Vector3.up * 0.9f, sensorRange, hits,
+                vehicleMask, QueryTriggerInteraction.Ignore);
+
+            CarAgent blocker = null;
+            float best = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                Collider collider = hits[i];
+                if (!ColliderRegistry.TryGetValue(collider.GetEntityId(), out CarAgent other) || other == this)
+                    continue;
+
+                Vector3 offset = collider.transform.position - egoPosition;
+                float along = Vector3.Dot(offset, towardTarget);
+                if (along <= 0f)
+                    continue;
+                Vector3 lateral = offset - along * towardTarget;
+                if (lateral.sqrMagnitude > sensorRadius * sensorRadius)
+                    continue;
+
+                float distance = Vector3.Distance(origin, collider.ClosestPoint(origin));
+                float gap = distance <= 0.001f ? 0f : distance - minGap;
+                if (gap < best)
+                {
+                    best = gap;
+                    blocker = other;
+                }
+            }
+
+            if (blocker == null || best >= brakeDistance || ShortcutMisses.Count >= 500)
+                return;
+
+            Vector3 toTarget = network.GetNode(targetNode).Position - egoPosition;
+            Vector3 fromFrom = egoPosition - network.GetNode(fromNode).Position;
+            toTarget.y = 0f;
+            fromFrom.y = 0f;
+            ShortcutMisses.Add(
+                $"self(from={fromNode}, to={targetNode}, toTarget={toTarget.magnitude:0.0}, fromFrom={fromFrom.magnitude:0.0}, speed={speed:0.0}) " +
+                $"blocker(from={blocker.fromNode}, to={blocker.targetNode}, state={blocker.physicsState}, enabled={blocker.enabled}, speed={blocker.speed:0.0}, " +
+                $"sameKey={(blocker.fromNode == fromNode && blocker.targetNode == targetNode)}, toMyFrom={blocker.targetNode == fromNode}, toMyTarget={blocker.targetNode == targetNode}) gap={best:0.0}");
         }
 
         /// <summary>
@@ -975,8 +1288,11 @@ namespace CityGenerator.Runtime
         /// </summary>
         private float PedestrianAheadClearance()
         {
-            if (pedestrianRoadProximity == null)
+            if (pedestrianRoadProximity == null && Time.time >= nextProximityLookupTime)
+            {
                 pedestrianRoadProximity = FindAnyObjectByType<PedestrianRoadProximityGrid>();
+                nextProximityLookupTime = Time.time + ProximityLookupRetryInterval;
+            }
 
             // Item 8, stage 4: once the pedestrian count justifies it, query the shared proximity
             // grid instead of casting -- falls back to the SphereCast below whenever the grid
@@ -1024,7 +1340,21 @@ namespace CityGenerator.Runtime
         private float PedestrianAheadClearanceFromGrid()
         {
             Vector3 origin = transform.position + Vector3.up * 0.9f + transform.forward * 2.2f;
-            pedestrianRoadProximity.QueryNear(origin, sensorRange, pedestrianQueryResults);
+            if (PedestrianSensorShortcut)
+            {
+                // SPEC 20 (c): only the cells the sensor's own corridor touches -- from the car's
+                // centre (a pedestrian at the bumper still counts, see below) to the end of its
+                // range, widened by the lateral cutoff -- instead of the whole square around origin.
+                Vector3 corridorEnd = origin + transform.forward * sensorRange;
+                Vector3 centre = transform.position;
+                var widen = new Vector3(PedestrianLateralCutoff, 0f, PedestrianLateralCutoff);
+                pedestrianRoadProximity.QueryBox(Vector3.Min(centre, corridorEnd) - widen,
+                    Vector3.Max(centre, corridorEnd) + widen, pedestrianQueryResults);
+            }
+            else
+            {
+                pedestrianRoadProximity.QueryNear(origin, sensorRange, pedestrianQueryResults);
+            }
 
             // The "ahead" cone is measured from this car's own centre, not from `origin`: origin
             // already sits 2.2m ahead of centre, so a pedestrian closer than that to the car (the
@@ -1070,7 +1400,7 @@ namespace CityGenerator.Runtime
                         return false;
 
                     Vector3 lateral = fromCar - Vector3.Dot(fromCar, transform.forward) * transform.forward;
-                    if (lateral.sqrMagnitude > 1.6f * 1.6f)
+                    if (lateral.sqrMagnitude > PedestrianLateralCutoff * PedestrianLateralCutoff)
                         return false;
                 }
 

@@ -43,6 +43,23 @@ namespace CityGenerator.Runtime
 
         public static int Count => registered.Count;
 
+        /// <summary>
+        /// SPEC 20: whether every physics-mode vehicle is kept from colliding with every generated
+        /// pedestrian through per-pair <see cref="Physics.IgnoreCollision(Collider, Collider, bool)"/>
+        /// (SPEC 17). On by default. A project with no on-foot player sharing the pedestrian layer can
+        /// switch it off -- ideally before the city's scene loads, e.g. from a
+        /// <c>RuntimeInitializeOnLoadMethod(BeforeSceneLoad)</c> -- and keep them apart with its own
+        /// layer collision matrix instead, which saves vehicles x pedestrians pairs (a million with
+        /// 1000 of each). Switching it off later restores every pair already ignored; switching it
+        /// back on pairs every agent active at that moment. The package never writes the matrix.
+        /// Process-wide, like the pairs themselves.
+        /// </summary>
+        public static bool VehiclePedestrianPairFiltering
+        {
+            get => VehiclePedestrianCollisionFilter.Enabled;
+            set => VehiclePedestrianCollisionFilter.Enabled = value;
+        }
+
         public static CityGeneratorCity? InScene(Scene scene)
         {
             foreach (CityGeneratorInfo candidate in registered)

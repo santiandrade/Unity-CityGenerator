@@ -103,11 +103,125 @@ namespace CityGenerator.Runtime
 
         public PedestrianState State => state;
         public int CurrentNode => currentNode;
+
+        /// <summary>
+        /// SPEC 20 (c): true while this pedestrian walks, or waits to start, a crosswalk arm (one
+        /// end of its current path segment is a Crossing node) -- the only place a generated
+        /// pedestrian ever sets foot on the road. Read by PedestrianRoadProximityGrid.
+        /// </summary>
+        public bool IsOnCrossingArm
+        {
+            get
+            {
+                if (network == null || path == null || pathIndex >= pathLength)
+                    return false;
+                if (state != PedestrianState.Walking && state != PedestrianState.WaitingToCross)
+                    return false;
+
+                if (currentNode >= 0 && network.GetNode(currentNode).Kind == PedestrianNodeKind.Crossing)
+                    return true;
+                return network.GetNode(path[pathIndex]).Kind == PedestrianNodeKind.Crossing;
+            }
+        }
         /// <summary>Total distance walked so far, for diagnosing stuck/jammed agents — mirrors CarAgent.DistanceTravelled.</summary>
         public float DistanceTravelled => distanceTravelled;
 
+        // SPEC 20: first renderer of the hierarchy, for PedestrianManager's visibility staggering.
+        private Renderer visibilityRenderer;
+
+        /// <summary>SPEC 20: whether any camera renders this pedestrian. True without a renderer.</summary>
+        public bool IsVisible => visibilityRenderer == null || visibilityRenderer.isVisible;
+
+        /// <summary>SPEC 20: whether its root collider is on (PedestrianManager's collider LOD
+        /// switches it off far from the focus). True without a collider.</summary>
+        public bool IsColliderActive => ownCollider == null || colliderActive;
+
+        // Cached, so the collider LOD never asks the engine for every agent every frame.
+        private bool colliderActive = true;
+
+        /// <summary>
+        /// SPEC 20, called by PedestrianManager's collider LOD: switches the root proxy collider on
+        /// or off. Switching it back on pairs it again with every physics vehicle, since Unity drops
+        /// a disabled collider's ignored pairs -- including any a user's own code had set on it.
+        /// </summary>
+        internal void SetColliderActive(bool active)
+        {
+            if (ownCollider == null || colliderActive == active)
+                return;
+
+            colliderActive = active;
+            ownCollider.enabled = active;
+            if (active)
+                VehiclePedestrianCollisionFilter.RepairPedestrian(ownCollider);
+        }
+
+        // SPEC 20: false while an external renderer draws this pedestrian (see SetAnimatorDriven).
+        private bool animatorDriven = true;
+
+        /// <summary>
+        /// SPEC 20: the Locomotion blend tree's Speed this pedestrian is walking at (0 while
+        /// waiting or idling), for a renderer that draws it without its Animator.
+        /// </summary>
+        public float AnimationSpeed => state == PedestrianState.Walking ? normalizedSpeed : 0f;
+
+        /// <summary>
+        /// SPEC 20: with false, this agent stops writing its Animator's parameters and disables the
+        /// Animator, for a project that draws far pedestrians itself (e.g. with baked animation);
+        /// with true, it enables it again and writes the current parameters at once.
+        /// </summary>
+        public void SetAnimatorDriven(bool driven)
+        {
+            if (animatorDriven == driven)
+                return;
+
+            animatorDriven = driven;
+            if (animator == null)
+                return;
+
+            animator.enabled = driven;
+            if (driven && hasAnimatorController)
+            {
+                animator.SetFloat(SpeedHash, AnimationSpeed);
+                animator.SetBool(GroundedHash, true);
+            }
+        }
+
+        /// <summary>
+        /// SPEC 20: puts this pedestrian on node <paramref name="node"/> of its network (on the
+        /// ground under it), facing its current way, and has it pick a new destination after a short
+        /// pause -- as if it had just walked there. Returns false, changing nothing, for a node that
+        /// is out of range, blocked, a Crossing (the middle of a road), or outside a Custom
+        /// Pedestrian's allowed nodes. Works before its first Start too.
+        /// </summary>
+        public bool Relocate(int node)
+        {
+            if (network == null)
+                network = FindAnyObjectByType<PedestrianNetwork>();
+            if (network == null || node < 0 || node >= network.NodeCount)
+                return false;
+
+            PedestrianNode target = network.GetNode(node);
+            if (target.Blocked || target.Kind == PedestrianNodeKind.Crossing)
+                return false;
+            if (allowedNodes != null && allowedNodes.Count > 0 && !allowedNodes.Contains(node))
+                return false;
+
+            Vector3 position = target.Position;
+            position.y = ResolveGroundY(position, position.y);
+            transform.position = position;
+
+            currentNode = node;
+            pathLength = 0;
+            pathIndex = 0;
+            StartIdling(0.1f, 0.5f);
+            if (hasAnimatorController && animatorDriven)
+                animator.SetFloat(SpeedHash, 0f);
+            return true;
+        }
+
         private void Awake()
         {
+            visibilityRenderer = GetComponentInChildren<Renderer>();
             animator = GetComponent<Animator>();
             hasAnimatorController = animator.runtimeAnimatorController != null;
         }
@@ -121,6 +235,7 @@ namespace CityGenerator.Runtime
             // ignore state whenever it is disabled and re-enabled. Costs nothing while no vehicle
             // is registered, which is every city generated with Enable Physics off.
             ownCollider = GetComponent<Collider>();
+            colliderActive = ownCollider == null || ownCollider.enabled;
             VehiclePedestrianCollisionFilter.RegisterPedestrian(ownCollider);
 
             if (network == null)
@@ -201,15 +316,24 @@ namespace CityGenerator.Runtime
         /// back up next time it's true — PedestrianManager only does this for agents far from the
         /// camera, same convention as TrafficManager staggering CarAgent's sensor.
         /// </summary>
-        public void Tick(float dt, bool runLogic)
+        public void Tick(float dt, bool runLogic) => Tick(dt, runLogic, exactGrounding: true);
+
+        /// <summary>
+        /// SPEC 20: as <see cref="Tick(float, bool)"/>; with <paramref name="exactGrounding"/> false
+        /// the agent skips its ground raycast while it walks between two nodes on the same flat
+        /// surface, and on the other ticks casts it only when <paramref name="runLogic"/> is true.
+        /// </summary>
+        internal void Tick(float dt, bool runLogic, bool exactGrounding)
         {
+            groundEveryTick = exactGrounding;
+            groundThisTick = exactGrounding || runLogic;
             switch (state)
             {
                 case PedestrianState.Walking:
                     TickWalking(dt, runLogic);
                     break;
                 case PedestrianState.WaitingToCross:
-                    if (hasAnimatorController)
+                    if (hasAnimatorController && animatorDriven)
                     {
                         animator.SetFloat(SpeedHash, 0f);
                     }
@@ -219,7 +343,7 @@ namespace CityGenerator.Runtime
                     }
                     break;
                 case PedestrianState.Idling:
-                    if (hasAnimatorController)
+                    if (hasAnimatorController && animatorDriven)
                     {
                         animator.SetFloat(SpeedHash, 0f);
                     }
@@ -230,7 +354,7 @@ namespace CityGenerator.Runtime
                     break;
             }
 
-            if (hasAnimatorController)
+            if (hasAnimatorController && animatorDriven)
             {
                 animator.SetBool(GroundedHash, true);
             }
@@ -240,7 +364,7 @@ namespace CityGenerator.Runtime
         {
             Vector3 targetPosition = AimPoint(pathIndex);
             MoveTowards(targetPosition, dt);
-            if (hasAnimatorController)
+            if (hasAnimatorController && animatorDriven)
             {
                 animator.SetFloat(SpeedHash, normalizedSpeed);
             }
@@ -451,6 +575,20 @@ namespace CityGenerator.Runtime
         private const float GroundRayUpOffset = 1f;
         private const float GroundRayDownDistance = 3f;
 
+        // SPEC 20, grounding shortcut: set by each Tick from PedestrianManager. Two raycasts at
+        // the start of a stretch (the agent's position and its aim point) tell whether the whole
+        // stretch is on one flat surface: same collider, both normals straight up, same height. A
+        // box's top face is convex, so a straight walk between two points on it stays on it. Any
+        // stretch that touches a Curb or Crossing node has the kerb step in it and is never flat.
+        private const float FlatNormalY = 0.999f;
+        private const float FlatHeightTolerance = 0.005f;
+        private bool groundEveryTick = true;
+        private bool groundThisTick = true;
+        private int flatStretchFrom = -1;
+        private int flatStretchTo = -1;
+        private bool flatStretch;
+        private float flatStretchY;
+
         private void MoveTowards(Vector3 targetPosition, float dt)
         {
             Vector3 flatDir = targetPosition - transform.position;
@@ -466,15 +604,63 @@ namespace CityGenerator.Runtime
             Vector3 targetXZ = new(targetPosition.x, 0f, targetPosition.z);
             Vector3 nextXZ = Vector3.MoveTowards(currentXZ, targetXZ, effectiveSpeed * dt);
 
-            float nextY = ResolveGroundY(nextXZ, currentPosition.y);
+            float nextY = ResolveWalkingGroundY(nextXZ, targetPosition, currentPosition.y);
             Vector3 nextPosition = new(nextXZ.x, nextY, nextXZ.z);
 
             distanceTravelled += Vector3.Distance(currentPosition, nextPosition);
             transform.position = nextPosition;
         }
 
+        private float ResolveWalkingGroundY(Vector3 nextXZ, Vector3 targetPosition, float currentY)
+        {
+            if (groundEveryTick)
+                return ResolveGroundY(nextXZ, currentY);
+            if (IsOnFlatStretch(targetPosition, currentY))
+                return flatStretchY;
+            return groundThisTick ? ResolveGroundY(nextXZ, currentY) : currentY;
+        }
+
+        private bool IsOnFlatStretch(Vector3 targetPosition, float currentY)
+        {
+            int to = pathIndex < pathLength ? path[pathIndex] : -1;
+            if (currentNode == flatStretchFrom && to == flatStretchTo)
+                return flatStretch;
+
+            flatStretchFrom = currentNode;
+            flatStretchTo = to;
+            flatStretch = false;
+            if (currentNode < 0 || to < 0 || IsKerbNode(currentNode) || IsKerbNode(to))
+                return false;
+
+            using var _ = PedestrianManager.GroundingMarker.Auto();
+            Vector3 here = transform.position;
+            if (!CastGround(new Vector3(here.x, currentY, here.z), out RaycastHit start)
+                || !CastGround(targetPosition, out RaycastHit end))
+                return false;
+
+            flatStretch = start.collider == end.collider
+                          && start.normal.y >= FlatNormalY
+                          && end.normal.y >= FlatNormalY
+                          && Mathf.Abs(start.point.y - end.point.y) <= FlatHeightTolerance;
+            flatStretchY = start.point.y;
+            return flatStretch;
+        }
+
+        private bool IsKerbNode(int node)
+        {
+            PedestrianNodeKind kind = network.GetNode(node).Kind;
+            return kind == PedestrianNodeKind.Curb || kind == PedestrianNodeKind.Crossing;
+        }
+
+        private bool CastGround(Vector3 position, out RaycastHit hit)
+        {
+            Vector3 origin = new(position.x, position.y + GroundRayUpOffset, position.z);
+            return Physics.Raycast(origin, Vector3.down, out hit, GroundRayUpOffset + GroundRayDownDistance, groundMask, QueryTriggerInteraction.Ignore);
+        }
+
         private float ResolveGroundY(Vector3 xz, float fallbackY)
         {
+            using var _ = PedestrianManager.GroundingMarker.Auto();
             Vector3 origin = new(xz.x, fallbackY + GroundRayUpOffset, xz.z);
             if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, GroundRayUpOffset + GroundRayDownDistance, groundMask, QueryTriggerInteraction.Ignore))
             {

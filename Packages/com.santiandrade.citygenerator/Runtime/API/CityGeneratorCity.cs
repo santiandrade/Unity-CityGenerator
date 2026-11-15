@@ -95,6 +95,31 @@ namespace CityGenerator.Runtime
 
         public bool IsEnabled => info != null && info.trafficEnabled;
         public int VehicleCount => info != null && info.trafficManager != null ? info.trafficManager.AgentCount : 0;
+
+        /// <summary>SPEC 20: where the traffic measures staggering and physics-LOD distances from
+        /// (e.g. the player's car). Null restores the main camera. No-op without traffic.</summary>
+        public void SetSimulationFocus(Transform focus)
+        {
+            if (info != null && info.trafficManager != null)
+                info.trafficManager.SimulationFocus = focus;
+        }
+
+        /// <summary>SPEC 20: sensor staggering beyond <paramref name="distance"/> of the focus, 1 of
+        /// <paramref name="frames"/> ticks; with <paramref name="invisibleDistance"/> &gt; 0, also for
+        /// cars beyond that distance that no camera renders. No-op without traffic.</summary>
+        public void SetStagger(float distance, int frames, float invisibleDistance = 0f)
+        {
+            if (info != null && info.trafficManager != null)
+                info.trafficManager.SetStagger(distance, frames, invisibleDistance);
+        }
+
+        /// <summary>SPEC 20: physics-mode cars beyond <paramref name="meters"/> of the focus drive as
+        /// kinematic bodies; 0 turns it off. No-op without traffic or with Enable Physics off.</summary>
+        public void SetPhysicsRadius(float meters)
+        {
+            if (info != null && info.trafficManager != null)
+                info.trafficManager.PhysicsRadius = meters;
+        }
     }
 
     public readonly struct PedestriansModule
@@ -105,6 +130,42 @@ namespace CityGenerator.Runtime
         public bool IsEnabled => info != null && info.pedestriansEnabled;
         public int Count => info != null && info.pedestrianManager != null ? info.pedestrianManager.AgentCount : 0;
         public int CustomCount => info != null ? info.customPedestrianCount : 0;
+
+        /// <summary>SPEC 20: where pedestrians measure staggering and collider-LOD distances from.
+        /// Null restores the main camera. No-op without pedestrians.</summary>
+        public void SetSimulationFocus(Transform focus)
+        {
+            if (info != null && info.pedestrianManager != null)
+                info.pedestrianManager.SimulationFocus = focus;
+        }
+
+        /// <summary>SPEC 20: decision-logic staggering beyond <paramref name="distance"/> of the focus,
+        /// 1 of <paramref name="frames"/> frames; with <paramref name="invisibleDistance"/> &gt; 0, also
+        /// for agents beyond that distance that no camera renders. No-op without pedestrians.</summary>
+        public void SetStagger(float distance, int frames, float invisibleDistance = 0f)
+        {
+            if (info != null && info.pedestrianManager != null)
+                info.pedestrianManager.SetStagger(distance, frames, invisibleDistance);
+        }
+
+        /// <summary>SPEC 20: pedestrians beyond <paramref name="meters"/> of the focus have their root
+        /// collider off while cars find them through the proximity grid; 0 turns it off. A collider
+        /// switched back on is paired again with the physics vehicles, but loses any ignore pair the
+        /// project's own code had set on it. No-op without pedestrians.</summary>
+        public void SetColliderRadius(float meters)
+        {
+            if (info != null && info.pedestrianManager != null)
+                info.pedestrianManager.ColliderRadius = meters;
+        }
+
+        /// <summary>SPEC 20: pedestrians beyond <paramref name="meters"/> of the focus skip their
+        /// ground raycast while walking a stretch that lies on one flat surface, and cast it only on
+        /// their logic frames while staggered; 0 turns it off. No-op without pedestrians.</summary>
+        public void SetGroundingShortcutDistance(float meters)
+        {
+            if (info != null && info.pedestrianManager != null)
+                info.pedestrianManager.GroundingShortcutDistance = meters;
+        }
     }
 
     public readonly struct MinimapModule
