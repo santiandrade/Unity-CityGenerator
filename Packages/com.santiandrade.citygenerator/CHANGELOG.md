@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-11-17
+### Fixed
+
+- The demo buildings' colliders now cover only the building's footprint at street level (the
+  extent of the model below 2.5 m), instead of the bounds of the whole model: balconies, cornices
+  and upper overhangs (up to 1.4 m on a side) no longer stop a car driving past well before it
+  touches the wall. Height is unchanged. Cities already generated pick it up without a rebuild,
+  since their buildings are instances of these prefabs.
+
 ## [3.7.0] - 2026-11-15
 ### Added
 

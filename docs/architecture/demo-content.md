@@ -21,6 +21,8 @@ Inventory (which prefabs exist, and which of them a fresh window starts with) de
 
 ## Colliders
 
+Each `Buildings/` prefab has a single root `BoxCollider` sized to the building's **footprint at street level**, not to the whole model's bounds: its X/Z (size and centre) are the extent of the model's vertices below 2.5 m, its Y the full height. The models have balconies, cornices and upper floors that overhang the ground floor by up to 1.4 m on a side; a bounds-sized box made a car driving along the sidewalk hit thin air (fixed in v3.7.1). The height stays full because consumers use these colliders as occluders and camera blockers. A `MeshCollider` was rejected: it would still collide with the overhangs, and it costs more than a box for no gain at street level. A new building prefab should follow the same rule.
+
 Deliberately simple: `BoxCollider`s on floors, benches, lamps and traffic lights; `MeshCollider`s only on `Tree` (trunk + crown); **no collider at all** on road markings. Vehicles carry a single root `BoxCollider` (no `Rigidbody` — they move by transform, and the collider exists only so they can detect each other). See the collider policy in `runtime-and-traffic.md` for what happens at generation time when a vehicle or pedestrian prefab has none.
 
 ## Baked `CarAgent` tuning
