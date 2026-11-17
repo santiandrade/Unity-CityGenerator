@@ -3,11 +3,12 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// Development-repo-only tooling: rebuilds the compound collider of every demo building prefab
-/// (Packages/com.santiandrade.citygenerator/DefaultAssets/Prefabs/Buildings) as a few
-/// BoxColliders on the prefab root that follow the model's real shape, instead of one box sized
-/// to the whole model's bounds — which stopped a car well before it reached the wall wherever an
-/// upper floor, a balcony or a cornice overhung the street.
+/// Development-repo-only tooling: rebuilds the collider of every demo building prefab
+/// (Packages/com.santiandrade.citygenerator/DefaultAssets/Prefabs/Buildings) as one BoxCollider
+/// for the main body plus at most maxExtraBoxes for pronounced protrusions (a balcony, a planter, a
+/// canopy, a taller part of the building), all on the prefab root, instead of one box sized to the
+/// whole model's bounds — which stopped a car well before it reached the wall wherever an upper
+/// floor, a balcony or a cornice overhung the street.
 ///
 /// How it works, all in the root's axes and in metres:
 /// 1. Every triangle of the model is sampled densely into a voxel grid (cellSize horizontally,
@@ -27,7 +28,9 @@ using UnityEngine;
 ///    frames and pillars are covered exactly; above it the most frequent rectangle wins and boxes
 ///    another one contains within the tolerance are dropped, so a cornice band doesn't fatten a
 ///    whole floor's box. The street band is never chained with the floors above it.
-/// 5. Each box is shrunk to the sampled points it actually contains, which removes the voxel
+/// 5. Select keeps the main body (a full-height box) and the extras that pay off most; see its
+///    comment for the scoring. The detailed pieces of steps 3-4 are only its candidates.
+/// 6. Each box is shrunk to the sampled points it actually contains, which removes the voxel
 ///    quantisation.
 ///
 /// Lives outside Packages/com.santiandrade.citygenerator/ on purpose, like the other tools in
@@ -49,6 +52,11 @@ internal static class CityGeneratorBuildingColliderBaker
         public float matchTolerance;
         public float bridgeHeight;
         public int maxRectsPerSlice;
+        public int maxExtraBoxes;
+        public float minProtrusion;
+        public float minExtraVolume;
+        public float groundEmptyWeight;
+        public float upperEmptyWeight;
     }
 
     internal static Settings DefaultSettings => new Settings
@@ -62,6 +70,11 @@ internal static class CityGeneratorBuildingColliderBaker
         matchTolerance = 0.4f,
         bridgeHeight = 1.0f,
         maxRectsPerSlice = 12,
+        maxExtraBoxes = 2,
+        minProtrusion = 0.8f,
+        minExtraVolume = 1.5f,
+        groundEmptyWeight = 3f,
+        upperEmptyWeight = 2f,
     };
 
     [MenuItem("Tools/City Generator/Bake Building Colliders")]
@@ -69,7 +82,7 @@ internal static class CityGeneratorBuildingColliderBaker
     {
         bool confirmed = EditorUtility.DisplayDialog(
             "City Generator - Bake Building Colliders",
-            "This replaces the BoxColliders on every prefab in " + BuildingsFolder + " with boxes fitted to each model's shape.",
+            "This replaces the BoxColliders on every prefab in " + BuildingsFolder + " with one box for the main body plus up to two for pronounced protrusions.",
             "Bake",
             "Cancel");
         if (confirmed)
@@ -145,6 +158,8 @@ internal static class CityGeneratorBuildingColliderBaker
         int toleranceCells = Mathf.Max(0, Mathf.RoundToInt(settings.matchTolerance / settings.cellSize));
         int bridgeSlices = Mathf.Max(0, Mathf.RoundToInt(settings.bridgeHeight / settings.sliceHeight));
 
+        var solids = new bool[grid.ny][];
+        int groundSlices = 0;
         var open = new List<Chain>();
         var closed = new List<Chain>();
         bool previousGround = true;
@@ -160,6 +175,9 @@ internal static class CityGeneratorBuildingColliderBaker
             }
 
             bool[] solid = grid.SolidSlice(y);
+            solids[y] = solid;
+            if (ground)
+                groundSlices = y + 1;
             int minCells = ground ? minCellsGround : minCellsUpper;
             List<RectInt> rects = Decompose(solid, grid.nx, grid.nz, minCells, settings.growFill, settings.maxRectsPerSlice);
 
@@ -222,8 +240,11 @@ internal static class CityGeneratorBuildingColliderBaker
 
         MergeAndPrune(pieces, toleranceCells, bridgeSlices);
 
-        var boxes = new List<Bounds>(pieces.Count);
-        foreach (Piece piece in pieces)
+        var occupancy = new Occupancy(solids, grid.nx, grid.nz, groundSlices, settings);
+        List<Piece> selected = Select(pieces, occupancy, grid.ny, settings);
+
+        var boxes = new List<Bounds>(selected.Count);
+        foreach (Piece piece in selected)
             boxes.Add(grid.ToBounds(piece.rect, piece.y0, piece.y1));
 
         grid.ShrinkToContents(boxes, triangles);
@@ -309,6 +330,243 @@ internal static class CityGeneratorBuildingColliderBaker
         }
 
         return best;
+    }
+
+    /// <summary>Keeps one box for the main body plus at most maxExtraBoxes for pronounced
+    /// protrusions. The main body is the full-height candidate (every piece's footprint, from the
+    /// ground up to every piece's top) that covers the most solid volume minus the empty volume it
+    /// would add, empty space at street level weighing groundEmptyWeight and above it
+    /// upperEmptyWeight. Each extra is then the piece (as is, or extended down to the ground) that
+    /// adds the most score on top of the boxes already chosen, as long as it sticks out of the main
+    /// body by minProtrusion (see Protrudes), adds minExtraVolume of solid volume and isn't repeated
+    /// on four or more floors.</summary>
+    private static List<Piece> Select(List<Piece> pieces, Occupancy occupancy, int ny, Settings settings)
+    {
+        var selected = new List<Piece>();
+        if (pieces.Count == 0)
+            return selected;
+
+        var tops = new HashSet<int> { ny - 1 };
+        foreach (Piece piece in pieces)
+            tops.Add(piece.y1);
+
+        Piece main = null;
+        double mainScore = double.MinValue;
+        foreach (Piece piece in pieces)
+        {
+            foreach (int top in tops)
+            {
+                double score = occupancy.Score(piece.rect, 0, top);
+                if (score > mainScore)
+                {
+                    mainScore = score;
+                    main = new Piece { ground = false, rect = piece.rect, y0 = 0, y1 = top };
+                }
+            }
+        }
+
+        main.rect = occupancy.Refine(main.rect, main.y0, main.y1);
+        selected.Add(main);
+
+        var candidates = new List<Piece>();
+        int toleranceCells = Mathf.Max(0, Mathf.RoundToInt(settings.matchTolerance / settings.cellSize));
+        foreach (Piece piece in pieces)
+        {
+            // A protrusion repeated on many floors (a ledge or a sill on every storey) is an
+            // ornament of the facade: picking two of them would be arbitrary, so none is.
+            int repeats = 0;
+            foreach (Piece other in pieces)
+                if (other != piece && MaxEdgeDifference(other.rect, piece.rect) <= toleranceCells)
+                    repeats++;
+            if (repeats >= 3)
+                continue;
+
+            candidates.Add(piece);
+            if (piece.y0 > 0)
+                candidates.Add(new Piece { ground = piece.ground, rect = piece.rect, y0 = 0, y1 = piece.y1 });
+        }
+
+        int minProtrusionCells = Mathf.RoundToInt(settings.minProtrusion / settings.cellSize);
+        int minProtrusionSlices = Mathf.RoundToInt(settings.minProtrusion / settings.sliceHeight);
+        long minExtraVoxels = (long)(settings.minExtraVolume / (settings.cellSize * settings.cellSize * settings.sliceHeight));
+        for (int extra = 0; extra < settings.maxExtraBoxes; extra++)
+        {
+            Piece best = null;
+            double bestScore = 0;
+            foreach (Piece candidate in candidates)
+            {
+                if (!Protrudes(main, candidate, minProtrusionCells, minProtrusionSlices))
+                    continue;
+                double score = occupancy.MarginalScore(candidate, selected, out long newSolid);
+                if (newSolid >= minExtraVoxels && score > bestScore)
+                {
+                    bestScore = score;
+                    best = candidate;
+                }
+            }
+
+            if (best == null)
+                break;
+            selected.Add(best);
+        }
+
+        return selected;
+    }
+
+    /// <summary>Whether a candidate sticks out of the main body: sideways by minProtrusion, or upwards
+    /// by minProtrusion when its footprint is at least a quarter of the main body's (a taller part of
+    /// the building, never a rooftop hut).</summary>
+    private static bool Protrudes(Piece main, Piece candidate, int minCells, int minSlices)
+    {
+        if (Protrusion(main.rect, candidate.rect) >= minCells)
+            return true;
+        long mainArea = (long)main.rect.width * main.rect.height;
+        long area = (long)candidate.rect.width * candidate.rect.height;
+        return candidate.y1 - main.y1 >= minSlices && area * 4 >= mainArea;
+    }
+
+    /// <summary>How far, in cells, a rectangle sticks out of the main body's footprint.</summary>
+    private static int Protrusion(RectInt main, RectInt rect)
+    {
+        return Mathf.Max(
+            Mathf.Max(main.xMin - rect.xMin, rect.xMax - main.xMax),
+            Mathf.Max(main.yMin - rect.yMin, rect.yMax - main.yMax));
+    }
+
+    /// <summary>Solid voxels per slice with 2D prefix sums, to score candidate boxes.</summary>
+    private sealed class Occupancy
+    {
+        private readonly bool[][] solids;
+        private readonly int[][] prefix;
+        private readonly int nx;
+        private readonly int stride;
+        private readonly int groundSlices;
+        private readonly float groundEmptyWeight;
+        private readonly float upperEmptyWeight;
+
+        public Occupancy(bool[][] solids, int nx, int nz, int groundSlices, Settings settings)
+        {
+            this.solids = solids;
+            this.nx = nx;
+            this.groundSlices = groundSlices;
+            groundEmptyWeight = settings.groundEmptyWeight;
+            upperEmptyWeight = settings.upperEmptyWeight;
+            stride = nx + 1;
+            prefix = new int[solids.Length][];
+            for (int y = 0; y < solids.Length; y++)
+            {
+                var p = new int[(nx + 1) * (nz + 1)];
+                for (int z = 0; z < nz; z++)
+                {
+                    int row = 0;
+                    for (int x = 0; x < nx; x++)
+                    {
+                        if (solids[y][z * nx + x])
+                            row++;
+                        p[(z + 1) * stride + x + 1] = p[z * stride + x + 1] + row;
+                    }
+                }
+
+                prefix[y] = p;
+            }
+        }
+
+        private float EmptyWeight(int y) => y < groundSlices ? groundEmptyWeight : upperEmptyWeight;
+
+        /// <summary>Moves each edge of the rectangle one cell at a time while that improves the score.</summary>
+        public RectInt Refine(RectInt rect, int y0, int y1)
+        {
+            double best = Score(rect, y0, y1);
+            bool improved = true;
+            while (improved)
+            {
+                improved = false;
+                for (int edge = 0; edge < 4; edge++)
+                {
+                    for (int step = -1; step <= 1; step += 2)
+                    {
+                        RectInt moved = rect;
+                        switch (edge)
+                        {
+                            case 0: moved.xMin += step; break;
+                            case 1: moved.xMax += step; break;
+                            case 2: moved.yMin += step; break;
+                            default: moved.yMax += step; break;
+                        }
+
+                        if (moved.width < 1 || moved.height < 1 || moved.xMin < 0 || moved.yMin < 0 ||
+                            moved.xMax > nx || moved.yMax > (prefix[0].Length / stride) - 1)
+                            continue;
+                        double score = Score(moved, y0, y1);
+                        if (score > best)
+                        {
+                            best = score;
+                            rect = moved;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+
+            return rect;
+        }
+
+        public double Score(RectInt rect, int y0, int y1)
+        {
+            double score = 0;
+            int area = rect.width * rect.height;
+            for (int y = y0; y <= y1; y++)
+            {
+                int[] p = prefix[y];
+                int solid = p[rect.yMax * stride + rect.xMax] - p[rect.yMin * stride + rect.xMax]
+                            - p[rect.yMax * stride + rect.xMin] + p[rect.yMin * stride + rect.xMin];
+                score += solid - EmptyWeight(y) * (area - solid);
+            }
+
+            return score;
+        }
+
+        public double MarginalScore(Piece candidate, List<Piece> chosen, out long newSolid)
+        {
+            double score = 0;
+            newSolid = 0;
+            for (int y = candidate.y0; y <= candidate.y1; y++)
+            {
+                bool[] slice = solids[y];
+                float weight = EmptyWeight(y);
+                for (int z = candidate.rect.yMin; z < candidate.rect.yMax; z++)
+                {
+                    for (int x = candidate.rect.xMin; x < candidate.rect.xMax; x++)
+                    {
+                        if (Covered(chosen, x, y, z))
+                            continue;
+                        if (slice[z * nx + x])
+                        {
+                            newSolid++;
+                            score += 1;
+                        }
+                        else
+                        {
+                            score -= weight;
+                        }
+                    }
+                }
+            }
+
+            return score;
+        }
+
+        private static bool Covered(List<Piece> chosen, int x, int y, int z)
+        {
+            foreach (Piece piece in chosen)
+            {
+                if (y >= piece.y0 && y <= piece.y1 && x >= piece.rect.xMin && x < piece.rect.xMax &&
+                    z >= piece.rect.yMin && z < piece.rect.yMax)
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     private sealed class Piece

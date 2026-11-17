@@ -10,13 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.7.1] - 2026-11-17
 ### Fixed
 
-- The demo buildings' colliders now follow each model's shape instead of the bounds of the whole
-  model: every building prefab carries several BoxColliders on its root (3 to 44, about 20 on
-  average). At street level (below 2.5 m) they cover the real footprint, including plinths,
-  planters, door frames and the pillars of porches and canopies, so balconies, cornices and upper
-  overhangs (up to 1.4 m on a side) no longer stop a car driving past well before it touches the
-  wall; above it, the body of each floor band, balconies, canopies, ledges and rooftop structures
-  have their own boxes. Cities already generated pick it up without a rebuild, since their
+- The demo buildings' colliders no longer cover the bounds of the whole model, which made
+  balconies, cornices and upper overhangs (up to 1.4 m on a side) stop a car driving past well
+  before it touched the wall. Each building now has one box for its main body plus at most two
+  for pronounced protrusions (a balcony, a planter, a canopy, a taller part of the building):
+  1 to 3 boxes per prefab. Cities already generated pick it up without a rebuild, since their
   buildings are instances of these prefabs.
 
 ## [3.7.0] - 2026-11-15
