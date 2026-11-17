@@ -5,7 +5,7 @@ using UnityEngine;
 /// <summary>
 /// Development-repo-only tooling: rebuilds the collider of every demo building prefab
 /// (Packages/com.santiandrade.citygenerator/DefaultAssets/Prefabs/Buildings) as one BoxCollider
-/// for the main body plus at most maxExtraBoxes for pronounced protrusions (a balcony, a planter, a
+/// for the main body plus one for each pronounced protrusion (a balcony, a planter, a
 /// canopy, a taller part of the building), all on the prefab root, instead of one box sized to the
 /// whole model's bounds — which stopped a car well before it reached the wall wherever an upper
 /// floor, a balcony or a cornice overhung the street.
@@ -25,11 +25,12 @@ using UnityEngine;
 ///    box, across gaps of up to bridgeHeight (a cornice band, a hollow floor slab). Below
 ///    groundBandTop (the street level a vehicle can touch) a chain takes the union of its
 ///    rectangles and only exactly contained boxes are dropped, so plinths, steps, planters, door
-///    frames and pillars are covered exactly; above it the most frequent rectangle wins and boxes
+///    frames and pillars are described exactly; above it the most frequent rectangle wins and boxes
 ///    another one contains within the tolerance are dropped, so a cornice band doesn't fatten a
 ///    whole floor's box. The street band is never chained with the floors above it.
-/// 5. Select keeps the main body (a full-height box) and the extras that pay off most; see its
-///    comment for the scoring. The detailed pieces of steps 3-4 are only its candidates.
+/// 5. Select keeps the main body (a full-height box) plus one box for each pronounced protrusion,
+///    leaving small ones out; see its comment and Protrudes for the rules. The detailed pieces of
+///    steps 3-4 are only its candidates.
 /// 6. Each box is shrunk to the sampled points it actually contains, which removes the voxel
 ///    quantisation.
 ///
@@ -52,9 +53,9 @@ internal static class CityGeneratorBuildingColliderBaker
         public float matchTolerance;
         public float bridgeHeight;
         public int maxRectsPerSlice;
-        public int maxExtraBoxes;
         public float minProtrusion;
         public float minExtraVolume;
+        public float minProfileArea;
         public float groundEmptyWeight;
         public float upperEmptyWeight;
     }
@@ -70,9 +71,9 @@ internal static class CityGeneratorBuildingColliderBaker
         matchTolerance = 0.4f,
         bridgeHeight = 1.0f,
         maxRectsPerSlice = 12,
-        maxExtraBoxes = 2,
-        minProtrusion = 0.8f,
-        minExtraVolume = 1.5f,
+        minProtrusion = 0.6f,
+        minExtraVolume = 0.5f,
+        minProfileArea = 0.7f,
         groundEmptyWeight = 3f,
         upperEmptyWeight = 2f,
     };
@@ -82,7 +83,7 @@ internal static class CityGeneratorBuildingColliderBaker
     {
         bool confirmed = EditorUtility.DisplayDialog(
             "City Generator - Bake Building Colliders",
-            "This replaces the BoxColliders on every prefab in " + BuildingsFolder + " with one box for the main body plus up to two for pronounced protrusions.",
+            "This replaces the BoxColliders on every prefab in " + BuildingsFolder + " with one box for the main body plus one for each pronounced protrusion.",
             "Bake",
             "Cancel");
         if (confirmed)
@@ -332,14 +333,16 @@ internal static class CityGeneratorBuildingColliderBaker
         return best;
     }
 
-    /// <summary>Keeps one box for the main body plus at most maxExtraBoxes for pronounced
-    /// protrusions. The main body is the full-height candidate (every piece's footprint, from the
-    /// ground up to every piece's top) that covers the most solid volume minus the empty volume it
-    /// would add, empty space at street level weighing groundEmptyWeight and above it
-    /// upperEmptyWeight. Each extra is then the piece (as is, or extended down to the ground) that
-    /// adds the most score on top of the boxes already chosen, as long as it sticks out of the main
-    /// body by minProtrusion (see Protrudes), adds minExtraVolume of solid volume and isn't repeated
-    /// on four or more floors.</summary>
+    /// <summary>Keeps one box for the main body plus one for each pronounced protrusion, at any
+    /// height and however many there are (ten balconies stacked up a facade get ten boxes). The main
+    /// body is the full-height candidate (every piece's footprint, from the ground up to every
+    /// piece's top) that covers the most solid volume minus the empty volume it would add, empty
+    /// space at street level weighing groundEmptyWeight and above it upperEmptyWeight. Every other
+    /// piece is a candidate as is and extended down to the ground (a canopy on pillars); the extras
+    /// are picked greedily, best score on top of the boxes already chosen first, as long as the
+    /// candidate is a pronounced protrusion (see Protrudes) and adds minExtraVolume of solid volume:
+    /// small protrusions (drain pipes, window sills, thin pillars, trims, cornices, the ledges of a
+    /// skyscraper facade) are not worth a box.</summary>
     private static List<Piece> Select(List<Piece> pieces, Occupancy occupancy, int ny, Settings settings)
     {
         var selected = new List<Piece>();
@@ -369,33 +372,21 @@ internal static class CityGeneratorBuildingColliderBaker
         selected.Add(main);
 
         var candidates = new List<Piece>();
-        int toleranceCells = Mathf.Max(0, Mathf.RoundToInt(settings.matchTolerance / settings.cellSize));
         foreach (Piece piece in pieces)
         {
-            // A protrusion repeated on many floors (a ledge or a sill on every storey) is an
-            // ornament of the facade: picking two of them would be arbitrary, so none is.
-            int repeats = 0;
-            foreach (Piece other in pieces)
-                if (other != piece && MaxEdgeDifference(other.rect, piece.rect) <= toleranceCells)
-                    repeats++;
-            if (repeats >= 3)
-                continue;
-
             candidates.Add(piece);
             if (piece.y0 > 0)
                 candidates.Add(new Piece { ground = piece.ground, rect = piece.rect, y0 = 0, y1 = piece.y1 });
         }
 
-        int minProtrusionCells = Mathf.RoundToInt(settings.minProtrusion / settings.cellSize);
-        int minProtrusionSlices = Mathf.RoundToInt(settings.minProtrusion / settings.sliceHeight);
         long minExtraVoxels = (long)(settings.minExtraVolume / (settings.cellSize * settings.cellSize * settings.sliceHeight));
-        for (int extra = 0; extra < settings.maxExtraBoxes; extra++)
+        while (true)
         {
             Piece best = null;
             double bestScore = 0;
             foreach (Piece candidate in candidates)
             {
-                if (!Protrudes(main, candidate, minProtrusionCells, minProtrusionSlices))
+                if (selected.Contains(candidate) || !Protrudes(main, candidate, settings))
                     continue;
                 double score = occupancy.MarginalScore(candidate, selected, out long newSolid);
                 if (newSolid >= minExtraVoxels && score > bestScore)
@@ -413,16 +404,26 @@ internal static class CityGeneratorBuildingColliderBaker
         return selected;
     }
 
-    /// <summary>Whether a candidate sticks out of the main body: sideways by minProtrusion, or upwards
-    /// by minProtrusion when its footprint is at least a quarter of the main body's (a taller part of
-    /// the building, never a rooftop hut).</summary>
-    private static bool Protrudes(Piece main, Piece candidate, int minCells, int minSlices)
+    /// <summary>Whether a candidate is a pronounced protrusion of the main body: its footprint is at
+    /// least minProtrusion across, it sticks out by minProtrusion and its profile (how far it sticks out times its thickness) is at least
+    /// minProfileArea. Sideways the thickness is the candidate's height (a balcony 1.4 m deep and
+    /// 1.5 m tall: 2.1 m²; a ledge 0.8 m deep and 0.5 m tall: 0.4 m²); upwards (a taller part of the
+    /// building, a rooftop structure) it is the candidate's narrower horizontal side. Where it sits
+    /// doesn't matter, only its own size.</summary>
+    private static bool Protrudes(Piece main, Piece candidate, Settings settings)
     {
-        if (Protrusion(main.rect, candidate.rect) >= minCells)
+        // Thinner than minProtrusion across: a drain pipe, a pillar, a post.
+        float narrower = Mathf.Min(candidate.rect.width, candidate.rect.height) * settings.cellSize;
+        if (narrower < settings.minProtrusion)
+            return false;
+
+        float sideways = Protrusion(main.rect, candidate.rect) * settings.cellSize;
+        float height = (candidate.y1 - candidate.y0 + 1) * settings.sliceHeight;
+        if (sideways >= settings.minProtrusion && sideways * height >= settings.minProfileArea)
             return true;
-        long mainArea = (long)main.rect.width * main.rect.height;
-        long area = (long)candidate.rect.width * candidate.rect.height;
-        return candidate.y1 - main.y1 >= minSlices && area * 4 >= mainArea;
+
+        float upwards = (candidate.y1 - main.y1) * settings.sliceHeight;
+        return upwards >= settings.minProtrusion && upwards * narrower >= settings.minProfileArea;
     }
 
     /// <summary>How far, in cells, a rectangle sticks out of the main body's footprint.</summary>
