@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   balconies, cornices and upper overhangs (up to 1.4 m on a side) stop a car driving past well
   before it touched the wall. Each building now has one box for its main body plus one for each
   pronounced protrusion, at any height and however many there are (every balcony, bay, planter,
-  wide awning or canopy, taller part of the building and rooftop structure); small ones (drain
-  pipes, window sills, thin pillars, trims, facade ledges) get none: 1 to 5 boxes per prefab.
+  wide awning or canopy, taller part of the building and rooftop structure, plus every
+  free-standing column holding up a porch, a canopy or an awning); small ones (drain pipes, window
+  sills, trims, facade ledges) get none: 1 to 8 boxes per prefab.
   Cities already generated pick it up without a rebuild, since their buildings are instances of
   these prefabs.
 

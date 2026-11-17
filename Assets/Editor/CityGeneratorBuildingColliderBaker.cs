@@ -29,8 +29,8 @@ using UnityEngine;
 ///    another one contains within the tolerance are dropped, so a cornice band doesn't fatten a
 ///    whole floor's box. The street band is never chained with the floors above it.
 /// 5. Select keeps the main body (a full-height box) plus one box for each pronounced protrusion,
-///    leaving small ones out; see its comment and Protrudes for the rules. The detailed pieces of
-///    steps 3-4 are only its candidates.
+///    leaving small ones out, and one for each free-standing column; see its comment, Protrudes and
+///    AddColumns for the rules. The detailed pieces of steps 3-4 are only its candidates.
 /// 6. Each box is shrunk to the sampled points it actually contains, which removes the voxel
 ///    quantisation.
 ///
@@ -56,6 +56,8 @@ internal static class CityGeneratorBuildingColliderBaker
         public float minProtrusion;
         public float minExtraVolume;
         public float minProfileArea;
+        public float minColumnHeight;
+        public float columnClearance;
         public float groundEmptyWeight;
         public float upperEmptyWeight;
     }
@@ -74,6 +76,8 @@ internal static class CityGeneratorBuildingColliderBaker
         minProtrusion = 0.6f,
         minExtraVolume = 0.5f,
         minProfileArea = 0.7f,
+        minColumnHeight = 2f,
+        columnClearance = 0.3f,
         groundEmptyWeight = 3f,
         upperEmptyWeight = 2f,
     };
@@ -401,7 +405,52 @@ internal static class CityGeneratorBuildingColliderBaker
             selected.Add(best);
         }
 
+        AddColumns(pieces, main, selected, occupancy, ny, settings);
         return selected;
+    }
+
+    /// <summary>Gives every free-standing column (a porch or canopy pillar) its own box, however
+    /// thin: a piece that rises from the ground at least minColumnHeight and stands at least
+    /// columnClearance away from the main body, so a drain pipe on the wall isn't one. The box goes
+    /// up as long as its footprint stays mostly solid (the column itself, then whatever it holds up)
+    /// and never into the box it holds up, when there is one right above it.</summary>
+    private static void AddColumns(List<Piece> pieces, Piece main, List<Piece> selected, Occupancy occupancy, int ny, Settings settings)
+    {
+        int minHeightSlices = Mathf.RoundToInt(settings.minColumnHeight / settings.sliceHeight);
+        int clearanceCells = Mathf.RoundToInt(settings.columnClearance / settings.cellSize);
+        var clearArea = new RectInt(
+            main.rect.xMin - clearanceCells, main.rect.yMin - clearanceCells,
+            main.rect.width + 2 * clearanceCells, main.rect.height + 2 * clearanceCells);
+        foreach (Piece piece in pieces)
+        {
+            if (piece.y0 != 0 || piece.y1 + 1 < minHeightSlices || clearArea.Overlaps(piece.rect))
+                continue;
+
+            var column = new Piece { ground = true, rect = piece.rect, y0 = 0, y1 = piece.y1 };
+            while (column.y1 + 1 < ny && occupancy.SolidFraction(column.rect, column.y1 + 1) >= 0.5f)
+                column.y1++;
+
+            int support = int.MaxValue;
+            bool covered = false;
+            foreach (Piece other in selected)
+            {
+                bool over = other.rect.xMin <= column.rect.xMin && other.rect.xMax >= column.rect.xMax &&
+                            other.rect.yMin <= column.rect.yMin && other.rect.yMax >= column.rect.yMax;
+                if (!over)
+                    continue;
+                if (other.y0 <= column.y0 && other.y1 >= column.y1)
+                    covered = true;
+                else if (other.y0 > column.y0)
+                    support = Mathf.Min(support, other.y0);
+            }
+
+            if (covered)
+                continue;
+            column.y1 = Mathf.Min(column.y1, support - 1);
+            if (column.y1 < column.y0)
+                continue;
+            selected.Add(column);
+        }
     }
 
     /// <summary>Whether a candidate is a pronounced protrusion of the main body: its footprint is at
@@ -510,6 +559,14 @@ internal static class CityGeneratorBuildingColliderBaker
             }
 
             return rect;
+        }
+
+        public float SolidFraction(RectInt rect, int y)
+        {
+            int[] p = prefix[y];
+            int solid = p[rect.yMax * stride + rect.xMax] - p[rect.yMin * stride + rect.xMax]
+                        - p[rect.yMax * stride + rect.xMin] + p[rect.yMin * stride + rect.xMin];
+            return solid / (float)Mathf.Max(1, rect.width * rect.height);
         }
 
         public double Score(RectInt rect, int y0, int y1)
