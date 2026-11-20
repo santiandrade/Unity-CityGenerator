@@ -138,7 +138,7 @@ namespace CityGenerator.Editor
     [Serializable]
     internal class PropsSettings
     {
-        [Tooltip("Traffic light prefab placed at every signalled intersection. Required when Include Traffic is enabled; must have a TrafficLight component.")]
+        [Tooltip("Prefab placed on the right sidewalk at signalled intersections. Requires a TrafficLight component. A custom cantilevered prefab should extend its arm toward local -X.")]
         public GameObject trafficLightPrefab; // required if includeTraffic
         [Tooltip("Optional street lamp prefab placed along sidewalks.")]
         public GameObject lampPrefab; // optional

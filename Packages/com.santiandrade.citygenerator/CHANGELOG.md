@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.2] - 2026-11-20
+### Changed
+
+- New cities place traffic lights on the right side of each incoming lane. The built-in
+  traffic light extends its arm over the road from that sidewalk. Custom cantilevered
+  prefabs should extend their arm along local `-X`.
+- Simplified the fountain collider to cover its three basins and central column. Adjusted
+  the bench seat collider and removed colliders from the bin lid and traffic light visor.
+
+### Fixed
+
+- Each incoming lane at a newly generated T-intersection is controlled by its own signal.
+
 ## [3.7.1] - 2026-11-19
 ### Changed
 

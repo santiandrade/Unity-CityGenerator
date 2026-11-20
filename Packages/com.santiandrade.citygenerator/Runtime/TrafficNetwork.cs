@@ -419,6 +419,19 @@ namespace CityGenerator.Runtime
             int nx = axesX.Length;
             int nz = axesZ.Length;
             TrafficLight[] lights = FindLightsInScope();
+            var facingDirections = new Vector3[lights.Length];
+            for (int index = 0; index < lights.Length; index++)
+            {
+                Transform signal = lights[index].transform;
+                TrafficLightIntersection intersection = signal.parent != null
+                    ? signal.parent.GetComponent<TrafficLightIntersection>()
+                    : null;
+                // New generated signals have the lamp face on local -Z. Existing scenes
+                // and manually placed signals keep the previous matching convention.
+                facingDirections[index] = intersection != null && intersection.UsesIncomingArmOrientation
+                    ? -signal.forward
+                    : signal.forward;
+            }
             hasSignals = new bool[nx * nz];
 
             for (int i = 0; i < nx; i++)
@@ -432,14 +445,12 @@ namespace CityGenerator.Runtime
                         TrafficLight best = null;
                         float bestDistance = float.MaxValue;
 
-                        foreach (TrafficLight light in lights)
+                        for (int index = 0; index < lights.Length; index++)
                         {
-                            Vector3 facing = light.transform.forward;
-                            if (Vector3.Dot(facing, dirWorld) > -0.9f)
-                            {
+                            if (Vector3.Dot(facingDirections[index], dirWorld) > -0.9f)
                                 continue;
-                            }
 
+                            TrafficLight light = lights[index];
                             float distance = Vector3.Distance(light.transform.position, centre);
                             if (distance < 14f && distance < bestDistance)
                             {

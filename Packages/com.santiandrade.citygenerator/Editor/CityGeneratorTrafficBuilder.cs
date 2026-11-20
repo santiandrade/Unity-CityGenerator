@@ -154,6 +154,7 @@ namespace CityGenerator.Editor
         /// </summary>
         public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, int gridWidth, int gridHeight, System.Random random)
         {
+            trafficLightPrefab = CityGeneratorDefaultAssets.ResolveTrafficLightPrefab(trafficLightPrefab);
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
             var armReal = new bool[4];
@@ -177,16 +178,7 @@ namespace CityGenerator.Editor
                         if (!armReal[k])
                             continue;
 
-                        Vector3 corner = (Dirs[k] + RightOfDir(Dirs[k])) * CityGeneratorConstants.TrafficLightCornerOffset;
-                        Vector3 position = centre + corner;
-                        position.y = CityGeneratorConstants.GroundDatumY;
-                        Quaternion rotation = Quaternion.LookRotation(-Dirs[k], Vector3.up);
-
-                        var instance = (GameObject)PrefabUtility.InstantiatePrefab(trafficLightPrefab, intersectionGroup);
-                        instance.name = "TrafficLight_" + k;
-                        instance.transform.position = position;
-                        instance.transform.rotation = rotation;
-
+                        var instance = PlaceTrafficLight(trafficLightPrefab, intersectionGroup, centre, k);
                         placed.Add(instance);
                         lights[k] = instance.GetComponent<TrafficLight>();
                     }
@@ -212,6 +204,7 @@ namespace CityGenerator.Editor
         /// </summary>
         public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, IReadOnlyCollection<Vector2Int> blockCells, System.Random random)
         {
+            trafficLightPrefab = CityGeneratorDefaultAssets.ResolveTrafficLightPrefab(trafficLightPrefab);
             var cellSet = new HashSet<Vector2Int>(blockCells);
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
@@ -237,16 +230,7 @@ namespace CityGenerator.Editor
                         if (!armReal[k])
                             continue;
 
-                        Vector3 corner = (Dirs[k] + RightOfDir(Dirs[k])) * CityGeneratorConstants.TrafficLightCornerOffset;
-                        Vector3 position = centre + corner;
-                        position.y = CityGeneratorConstants.GroundDatumY;
-                        Quaternion rotation = Quaternion.LookRotation(-Dirs[k], Vector3.up);
-
-                        var instance = (GameObject)PrefabUtility.InstantiatePrefab(trafficLightPrefab, intersectionGroup);
-                        instance.name = "TrafficLight_" + k;
-                        instance.transform.position = position;
-                        instance.transform.rotation = rotation;
-
+                        var instance = PlaceTrafficLight(trafficLightPrefab, intersectionGroup, centre, k);
                         placed.Add(instance);
                         lights[k] = instance.GetComponent<TrafficLight>();
                     }
@@ -279,6 +263,7 @@ namespace CityGenerator.Editor
             var serialized = new SerializedObject(component);
             SetLightList(serialized, "eastWest", lights[0], lights[1]);
             SetLightList(serialized, "northSouth", lights[2], lights[3]);
+            serialized.FindProperty("usesIncomingArmOrientation").boolValue = true;
             serialized.FindProperty("startOffset").floatValue = (float)random.NextDouble() * CityGeneratorConstants.TrafficLightStartOffsetMax;
             serialized.FindProperty("startWithNorthSouth").boolValue = intersectionIndex % 2 == 1;
             serialized.ApplyModifiedPropertiesWithoutUndo();
@@ -292,7 +277,19 @@ namespace CityGenerator.Editor
                 property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
-        private static Vector3 RightOfDir(Vector3 dir) => new(dir.z, 0f, -dir.x);
+        private static GameObject PlaceTrafficLight(GameObject prefab, Transform parent, Vector3 centre, int armIndex)
+        {
+            Vector3 arm = Dirs[armIndex];
+            Vector3 approach = -arm;
+            Vector3 driverRight = Vector3.Cross(Vector3.up, approach);
+            Vector3 position = centre + (arm + driverRight) * CityGeneratorConstants.TrafficLightCornerOffset;
+            position.y = CityGeneratorConstants.GroundDatumY;
+
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            instance.name = "TrafficLight_" + armIndex;
+            instance.transform.SetPositionAndRotation(position, Quaternion.LookRotation(approach, Vector3.up));
+            return instance;
+        }
 
         /// <summary>
         /// Creates the <see cref="CityGeneratorConstants.VehicleLayerName"/> layer in this project

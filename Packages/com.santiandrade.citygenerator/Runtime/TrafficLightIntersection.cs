@@ -14,6 +14,9 @@ namespace CityGenerator.Runtime
         [SerializeField] private List<TrafficLight> eastWest = new List<TrafficLight>();
         [SerializeField] private List<TrafficLight> northSouth = new List<TrafficLight>();
 
+        [SerializeField, HideInInspector] private bool usesIncomingArmOrientation;
+        internal bool UsesIncomingArmOrientation => usesIncomingArmOrientation;
+
         [Header("Timings (seconds)")]
         [SerializeField] private float greenDuration = 8f;
         [SerializeField] private float amberDuration = 2f;
