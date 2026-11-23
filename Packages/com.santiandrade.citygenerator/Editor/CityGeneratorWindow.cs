@@ -94,6 +94,8 @@ namespace CityGenerator.Editor
         private PropertyField seedField;
         private VisualElement vehiclePhysicsFields;
         private HelpBox physicsBetaWarning;
+        private PropertyField rightTrafficLightField;
+        private PropertyField leftTrafficLightField;
         private Button buildNewSceneButton;
         private Button rebuildCurrentSceneButton;
 
@@ -512,8 +514,13 @@ namespace CityGenerator.Editor
         private void BuildPropsCard(VisualElement parent)
         {
             CityGeneratorCard card = AddCard(parent, "props", "Props", "d_Light Icon", defaultExpanded: false, TabCity);
-            AddRequiredField(card.ContentContainer, "props.trafficLightPrefab", "Traffic Light Prefab (if Include Traffic)",
-                () => FindProperty("general.includeTraffic").boolValue);
+            // Only the prefab for the selected side is shown (see RefreshDynamicUi); the other one
+            // keeps its value so switching side back and forth never loses a custom prefab.
+            card.ContentContainer.Add(CreateField("props.trafficLightSide", "Traffic Light Side"));
+            rightTrafficLightField = AddRequiredField(card.ContentContainer, "props.rightTrafficLightPrefab", "Right Traffic Light Prefab (if Include Traffic)",
+                () => FindProperty("general.includeTraffic").boolValue && !IsLeftTrafficLightSide());
+            leftTrafficLightField = AddRequiredField(card.ContentContainer, "props.leftTrafficLightPrefab", "Left Traffic Light Prefab (if Include Traffic)",
+                () => FindProperty("general.includeTraffic").boolValue && IsLeftTrafficLightSide());
             card.ContentContainer.Add(CreateField("props.lampPrefab"));
             card.ContentContainer.Add(CreateField("props.lampDensity"));
             card.ContentContainer.Add(CreateField("props.binPrefab"));
@@ -764,12 +771,18 @@ namespace CityGenerator.Editor
         /// mirroring the old IMGUI window's conditional red asterisk. Registered in
         /// <see cref="requiredRows"/> so <see cref="RefreshDynamicUi"/> can re-evaluate it live.
         /// </summary>
-        private void AddRequiredField(VisualElement parent, string relativePath, string label, Func<bool> isRequired)
+        private PropertyField AddRequiredField(VisualElement parent, string relativePath, string label, Func<bool> isRequired)
         {
             SerializedProperty property = FindProperty(relativePath);
             PropertyField field = CreateField(relativePath, label);
             parent.Add(field);
             requiredRows.Add(new RequiredRow(field, isRequired, () => property.objectReferenceValue == null));
+            return field;
+        }
+
+        private bool IsLeftTrafficLightSide()
+        {
+            return FindProperty("props.trafficLightSide").enumValueIndex == (int)TrafficLightSide.Left;
         }
 
         private SerializedProperty FindProperty(string relativePath)
@@ -893,6 +906,10 @@ namespace CityGenerator.Editor
             bool enablePhysics = FindProperty("general.enablePhysics").boolValue;
             vehiclePhysicsFields.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
             physicsBetaWarning.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
+
+            bool leftTrafficLights = IsLeftTrafficLightSide();
+            rightTrafficLightField.style.display = leftTrafficLights ? DisplayStyle.None : DisplayStyle.Flex;
+            leftTrafficLightField.style.display = leftTrafficLights ? DisplayStyle.Flex : DisplayStyle.None;
 
             SetWarning(vehicleDensityWarning, GetVehicleDensityWarning());
             SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());

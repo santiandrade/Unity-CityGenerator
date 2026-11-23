@@ -273,11 +273,12 @@ calle.
 
 ![Card Props](images/manual/card-props.png)
 
-Mobiliario urbano, más el prefab de semáforo que usa la red de tráfico.
+Mobiliario urbano, más los prefabs de semáforo que usa la red de tráfico.
 
 | Parámetro | Qué hace |
 |---|---|
-| **Traffic Light Prefab** | Se coloca en cada cruce semaforizado: aquel con al menos tres brazos de calle reales, es decir un cruce en X completo o una intersección en T en el borde de la ciudad. Debe llevar un componente `TrafficLight`. Obligatorio siempre que la ciudad tenga al menos uno de esos cruces, lo que incluye una retícula 1 × N o N × 1 y la mayoría de formas personalizadas; solo una ciudad de una única manzana no tiene ninguno. Obligatorio **incluso con los vehículos desactivados**: la red y sus semáforos se generan siempre para que los pasos de peatones estén conectados a un semáforo real. |
+| **Traffic Light Side** | En qué acera se coloca cada semáforo, vista por el conductor que llega al cruce: **Right** (derecha, la opción por defecto) o **Left** (izquierda). Solo se muestra, coloca y valida el prefab del lado elegido; el otro conserva su valor, así que cambiar de lado varias veces nunca pierde un prefab personalizado. |
+| **Right Traffic Light Prefab** / **Left Traffic Light Prefab** | El prefab que se coloca en cada cruce semaforizado (aquel con al menos tres brazos de calle reales, es decir un cruce en X completo o una intersección en T en el borde de la ciudad) para el lado elegido. Debe llevar un componente `TrafficLight`. El prefab mira al conductor que llega a lo largo de su −Z local; uno con brazo volado debe pasar por encima de la calzada, así que su brazo se extiende por el −X local en el lado derecho y por el +X local en el izquierdo. Los dos vienen por defecto con los semáforos del propio paquete. Obligatorio siempre que la ciudad tenga al menos un cruce semaforizado, lo que incluye una retícula 1 × N o N × 1 y la mayoría de formas personalizadas; solo una ciudad de una única manzana no tiene ninguno. Obligatorio **incluso con los vehículos desactivados**: la red y sus semáforos se generan siempre para que los pasos de peatones estén conectados a un semáforo real. |
 | **Lamp Prefab** | Farola opcional, colocada a lo largo de las aceras. |
 | **Lamp Density** | Fracción de los puntos candidatos de farola ocupados en cada lado de manzana (hay 3 candidatos por lado). |
 | **Bin Prefab** | Papelera opcional, colocada en las esquinas. |
@@ -748,7 +749,7 @@ Errores bloqueantes habituales y su solución:
 | *Ground: … prefab is required* | Asigna el prefab que falta en la card Ground. |
 | *Ground: Empty Block prefab is required while Customize mode is on* | Asígnalo, o sal del modo Customize. |
 | *Plaza: Lawn prefab is required when at least one plaza cell is selected* | Asigna un Lawn Prefab, o desmarca las manzanas-plaza. |
-| *Props: Traffic Light prefab is required…* / *…must have a TrafficLight component* | Asigna un prefab que lleve el componente `TrafficLight`. |
+| *Props: Right/Left Traffic Light prefab is required…* / *…must have a TrafficLight component* | Asigna un prefab que lleve el componente `TrafficLight`. |
 | *Vehicles / Pedestrians: percentages must sum to 100* | Pulsa **Normalize to 100 %**. |
 | *Player: Player Prefab / Input Actions is required when Player is enabled* | Asígnalos, o desactiva la card Player. |
 | *General: … action was not found in the … action map* | Corrige el nombre de la acción en Player Settings > Input Actions, o el propio asset. |

@@ -267,11 +267,12 @@ doesn't pack noticeably more trees inside a plaza than along a street.
 
 ![Props card](images/manual/card-props.png)
 
-Street furniture, plus the traffic light prefab used by the traffic network.
+Street furniture, plus the traffic light prefabs used by the traffic network.
 
 | Parameter | What it does |
 |---|---|
-| **Traffic Light Prefab** | Placed at every signalled intersection — one with at least three real street arms, so a full 4-way crossroads or a T-intersection along the city's own border. Must carry a `TrafficLight` component. Required whenever the city has at least one of those, which includes a 1 × N or N × 1 grid and most custom shapes; only a single-block city has none. Required **even when Include Traffic is off**, because the network and its lights are always generated so pedestrian crossings stay wired to a real light. |
+| **Traffic Light Side** | Which sidewalk each traffic light stands on, as seen by the driver arriving at the intersection: **Right** (the default) or **Left**. Only the prefab for the chosen side is shown, placed and validated; the other keeps its value, so switching back and forth never loses a custom prefab. |
+| **Right Traffic Light Prefab** / **Left Traffic Light Prefab** | The prefab placed at every signalled intersection — one with at least three real street arms, so a full 4-way crossroads or a T-intersection along the city's own border — for the chosen side. Must carry a `TrafficLight` component. The prefab faces the arriving driver along its local −Z; a cantilevered one must reach over the road, so its arm extends along local −X on the right side and local +X on the left side. Both default to the package's own signals. Required whenever the city has at least one signalled intersection, which includes a 1 × N or N × 1 grid and most custom shapes; only a single-block city has none. Required **even when Include Traffic is off**, because the network and its lights are always generated so pedestrian crossings stay wired to a real light. |
 | **Lamp Prefab** | Optional street lamp, placed along the sidewalks. |
 | **Lamp Density** | Fraction of the candidate lamp points filled along each block side (there are 3 candidate points per side). |
 | **Bin Prefab** | Optional bin, placed at street corners. |
@@ -733,7 +734,7 @@ Common blocking errors and their fix:
 | *Ground: … prefab is required* | Assign the missing prefab in the Ground card. |
 | *Ground: Empty Block prefab is required while Customize mode is on* | Assign it, or leave Customize mode. |
 | *Plaza: Lawn prefab is required when at least one plaza cell is selected* | Assign a Lawn Prefab, or unselect the plaza blocks. |
-| *Props: Traffic Light prefab is required…* / *…must have a TrafficLight component* | Assign a prefab carrying the `TrafficLight` component. |
+| *Props: Right/Left Traffic Light prefab is required…* / *…must have a TrafficLight component* | Assign a prefab carrying the `TrafficLight` component. |
 | *Vehicles / Pedestrians: percentages must sum to 100* | Click **Normalize to 100 %**. |
 | *Player: Player Prefab / Input Actions is required when Player is enabled* | Assign them, or disable the Player card. |
 | *General: … action was not found in the … action map* | Fix the action name in Player Settings > Input Actions, or the asset itself. |

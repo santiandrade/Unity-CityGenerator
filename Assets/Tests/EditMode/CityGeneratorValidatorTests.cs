@@ -134,7 +134,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -143,12 +143,12 @@ namespace CityGenerator.Tests.EditMode
             CityGeneratorSettings settings = MakeMinimalValidSettings();
             settings.general.gridWidth = 2;
             settings.general.gridHeight = 2;
-            settings.props.trafficLightPrefab = MakePrefabLike("TrafficLightNoComponent");
+            settings.props.rightTrafficLightPrefab = MakePrefabLike("TrafficLightNoComponent");
 
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -159,9 +159,33 @@ namespace CityGenerator.Tests.EditMode
             settings.general.gridHeight = 2;
             GameObject light = MakePrefabLike("TrafficLight");
             light.AddComponent<CityGenerator.Runtime.TrafficLight>();
-            settings.props.trafficLightPrefab = light;
+            settings.props.rightTrafficLightPrefab = light;
 
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
+        }
+
+        [Test]
+        public void ValidateDetailed_LeftSide_RequiresOnlyTheLeftPrefab()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.gridWidth = 2;
+            settings.general.gridHeight = 2;
+            GameObject light = MakePrefabLike("TrafficLight");
+            light.AddComponent<CityGenerator.Runtime.TrafficLight>();
+            settings.props.rightTrafficLightPrefab = light;
+            settings.props.trafficLightSide = TrafficLightSide.Left;
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.leftTrafficLightPrefab" && !i.isWarning));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab"));
+
+            settings.props.rightTrafficLightPrefab = null;
+            settings.props.leftTrafficLightPrefab = light;
+            valid = CityGeneratorValidator.ValidateDetailed(settings, out issues);
 
             Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
         }
@@ -567,7 +591,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         // The lights are built even with Include Traffic off (CityGeneratorContentAssembler keeps
@@ -583,7 +607,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -594,7 +618,7 @@ namespace CityGenerator.Tests.EditMode
             settings.general.gridHeight = 2;
             GameObject light = MakePrefabLike("TrafficLight");
             light.AddComponent<CityGenerator.Runtime.TrafficLight>();
-            settings.props.trafficLightPrefab = light;
+            settings.props.rightTrafficLightPrefab = light;
 
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
@@ -627,7 +651,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -640,7 +664,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -721,7 +745,7 @@ namespace CityGenerator.Tests.EditMode
         {
             CityGeneratorSettings settings = MakeMinimalValidSettings();
             settings.general.gridWidth = 2; // a 1x2 grid: two blocks, so the names are the only conflict
-            settings.props.trafficLightPrefab = MakeTrafficLightPrefab();
+            settings.props.rightTrafficLightPrefab = MakeTrafficLightPrefab();
             settings.districts.Add(MakeValidDistrict("Downtown"));
             DistrictEntry second = MakeValidDistrict(" downtown ");
             second.cells = new List<Vector2Int> { new(1, 0) };

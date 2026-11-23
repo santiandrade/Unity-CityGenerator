@@ -18,6 +18,7 @@ namespace CityGenerator.Tests.EditMode
     internal class SignalledIntersectionAgreementTests
     {
         private GameObject trafficLightPrefab;
+        private GameObject leftTrafficLightPrefab;
         private GameObject group;
 
         [SetUp]
@@ -25,7 +26,8 @@ namespace CityGenerator.Tests.EditMode
         {
             var settings = new CityGeneratorSettings();
             CityGeneratorDefaultAssets.ApplyTo(settings);
-            trafficLightPrefab = settings.props.trafficLightPrefab;
+            trafficLightPrefab = settings.props.rightTrafficLightPrefab;
+            leftTrafficLightPrefab = settings.props.leftTrafficLightPrefab;
             Assert.IsNotNull(trafficLightPrefab, "The default assets must provide a Traffic Light prefab for this test.");
             group = new GameObject("TrafficLights");
         }
@@ -47,7 +49,7 @@ namespace CityGenerator.Tests.EditMode
         {
             bool predicted = CityGeneratorTrafficBuilder.HasSignalledIntersection(gridWidth, gridHeight);
             List<GameObject> placed = CityGeneratorTrafficBuilder.BuildTrafficLights(
-                trafficLightPrefab, group.transform, gridWidth, gridHeight, new System.Random(1));
+                trafficLightPrefab, TrafficLightSide.Right, group.transform, gridWidth, gridHeight, new System.Random(1));
 
             Assert.AreEqual(predicted, placed.Count > 0,
                 $"Grid {gridWidth}x{gridHeight}: predicate says {predicted} but the builder placed {placed.Count} lights.");
@@ -67,7 +69,7 @@ namespace CityGenerator.Tests.EditMode
         {
             bool predicted = CityGeneratorTrafficBuilder.HasSignalledIntersection(shape);
             List<GameObject> placed = CityGeneratorTrafficBuilder.BuildTrafficLights(
-                trafficLightPrefab, group.transform, shape, new System.Random(1));
+                trafficLightPrefab, TrafficLightSide.Right, group.transform, shape, new System.Random(1));
 
             Assert.AreEqual(predicted, placed.Count > 0,
                 $"Custom shape of {shape.Count} cells: predicate says {predicted} but the builder placed {placed.Count} lights.");
@@ -79,22 +81,24 @@ namespace CityGenerator.Tests.EditMode
             Assert.IsFalse(CityGeneratorTrafficBuilder.HasSignalledIntersection(new List<Vector2Int>()));
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public void GeneratedLights_StandOnDriversRightAndRegulateTheirArrivalLane(bool customGrid)
+        [TestCase(false, TrafficLightSide.Right)]
+        [TestCase(true, TrafficLightSide.Right)]
+        [TestCase(false, TrafficLightSide.Left)]
+        [TestCase(true, TrafficLightSide.Left)]
+        public void GeneratedLights_StandOnChosenSideAndRegulateTheirArrivalLane(bool customGrid, TrafficLightSide side)
         {
             group.AddComponent<CityGeneratorRoot>();
             var random = new System.Random(1);
             var cells = new List<Vector2Int> { new(5, 5), new(6, 5), new(5, 6), new(6, 6) };
-            var legacyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Packages/com.santiandrade.citygenerator/DefaultAssets/Prefabs/Props/TrafficLight.prefab");
-            Assert.IsNotNull(legacyPrefab);
-            Assert.AreEqual("TrafficLight_Right", trafficLightPrefab.name);
+            bool left = side == TrafficLightSide.Left;
+            GameObject prefab = left ? leftTrafficLightPrefab : trafficLightPrefab;
+            Assert.AreEqual(left ? "TrafficLight_Left" : "TrafficLight_Right", prefab.name);
+            float sideSign = left ? -1f : 1f;
 
             var network = CityGeneratorTrafficBuilder.AddNetworkComponent(group.transform, 2, 2);
             List<GameObject> placed = customGrid
-                ? CityGeneratorTrafficBuilder.BuildTrafficLights(legacyPrefab, group.transform, cells, random)
-                : CityGeneratorTrafficBuilder.BuildTrafficLights(trafficLightPrefab, group.transform, 2, 2, random);
+                ? CityGeneratorTrafficBuilder.BuildTrafficLights(prefab, side, group.transform, cells, random)
+                : CityGeneratorTrafficBuilder.BuildTrafficLights(prefab, side, group.transform, 2, 2, random);
             if (customGrid)
                 network.BuildFromBlockCells(cells);
             else
@@ -114,12 +118,13 @@ namespace CityGenerator.Tests.EditMode
                 Vector3 approach = -arms[int.Parse(signal.name.Split('_')[1])];
                 Vector3 right = Vector3.Cross(Vector3.up, approach);
                 Vector3 offset = signal.position - centre;
-                Assert.That(Vector3.Dot(offset, right), Is.EqualTo(6.2f).Within(0.001f));
+                Assert.That(Vector3.Dot(offset, right), Is.EqualTo(6.2f * sideSign).Within(0.001f));
                 Assert.That(Vector3.Dot(offset, approach), Is.EqualTo(-6.2f).Within(0.001f));
                 Assert.That(Vector3.Dot(signal.forward, approach), Is.GreaterThan(0.999f));
-                Assert.That(signal.Find("Arm").localPosition.x, Is.EqualTo(-1.45f));
-                Assert.That(signal.Find("Housing").localPosition.x, Is.EqualTo(-2.7f));
-                Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(instance), Is.EqualTo(trafficLightPrefab));
+                // The arm and housing reach over the road, i.e. toward the centre of the street.
+                Assert.That(signal.Find("Arm").localPosition.x, Is.EqualTo(-1.45f * sideSign));
+                Assert.That(signal.Find("Housing").localPosition.x, Is.EqualTo(-2.7f * sideSign));
+                Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(instance), Is.EqualTo(prefab));
 
                 TrafficNetwork.Node arrival = null;
                 for (int index = 0; index < network.NodeCount; index++)

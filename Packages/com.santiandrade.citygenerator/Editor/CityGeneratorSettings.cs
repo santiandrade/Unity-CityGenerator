@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 namespace CityGenerator.Editor
 {
@@ -136,11 +137,21 @@ namespace CityGenerator.Editor
         [Range(0f, 100f)] public float percentage;
     }
 
+    // Which corner of each signalled arm a traffic light stands on, seen by the driver arriving
+    // on that arm. Consumed by CityGeneratorTrafficBuilder.PlaceTrafficLight.
+    [Serializable]
+    internal enum TrafficLightSide { Right, Left }
+
     [Serializable]
     internal class PropsSettings
     {
-        [Tooltip("Prefab placed on the right sidewalk at signalled intersections. Requires a TrafficLight component. A custom cantilevered prefab should extend its arm toward local -X.")]
-        public GameObject trafficLightPrefab; // required if includeTraffic
+        [Tooltip("Sidewalk each traffic light stands on, seen by the driver arriving at the intersection. Picks which of the two prefabs below is placed.")]
+        public TrafficLightSide trafficLightSide = TrafficLightSide.Right;
+        [Tooltip("Prefab placed on the right sidewalk at signalled intersections when Traffic Light Side is Right. Requires a TrafficLight component. A cantilevered prefab should extend its arm toward local -X, over the road.")]
+        [FormerlySerializedAs("trafficLightPrefab")]
+        public GameObject rightTrafficLightPrefab; // required if trafficLightSide == Right
+        [Tooltip("Prefab placed on the left sidewalk at signalled intersections when Traffic Light Side is Left. Requires a TrafficLight component. A cantilevered prefab should extend its arm toward local +X, over the road.")]
+        public GameObject leftTrafficLightPrefab; // required if trafficLightSide == Left
         [Tooltip("Optional street lamp prefab placed along sidewalks.")]
         public GameObject lampPrefab; // optional
         [Tooltip("Fraction of candidate lamp points filled along each block side (1 = all 3 candidate points per side).")]
@@ -149,6 +160,12 @@ namespace CityGenerator.Editor
         public GameObject binPrefab;
         [Tooltip("Fraction of candidate corner points filled with a bin.")]
         [Range(0f, 1f)] public float binDensity = 0.3f;
+
+        // The prefab generation actually places, and the settings path validation reports it
+        // under, for the current trafficLightSide. Every consumer goes through these two, so the
+        // inactive side's prefab is never placed, required or validated.
+        public GameObject TrafficLightPrefab => trafficLightSide == TrafficLightSide.Left ? leftTrafficLightPrefab : rightTrafficLightPrefab;
+        public string TrafficLightPrefabPath => trafficLightSide == TrafficLightSide.Left ? "props.leftTrafficLightPrefab" : "props.rightTrafficLightPrefab";
     }
 
     // Applied to the generated Player instance by CityGeneratorSceneBuilder.ConfigurePlayer —

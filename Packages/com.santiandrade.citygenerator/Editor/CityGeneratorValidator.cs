@@ -98,8 +98,11 @@ namespace CityGenerator.Editor
                     issues.Add(new CityGeneratorValidationIssue("buildingPrefabs", $"Buildings: entry {i + 1} ('{buildingPrefab.name}') has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
             }
 
-            if (settings.props.trafficLightPrefab != null && settings.props.trafficLightPrefab.GetComponentInChildren<Renderer>() == null)
-                issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+            GameObject trafficLightPrefab = settings.props.TrafficLightPrefab;
+            string trafficLightPath = settings.props.TrafficLightPrefabPath;
+            string trafficLightLabel = settings.props.trafficLightSide == TrafficLightSide.Left ? "Left Traffic Light" : "Right Traffic Light";
+            if (trafficLightPrefab != null && trafficLightPrefab.GetComponentInChildren<Renderer>() == null)
+                issues.Add(new CityGeneratorValidationIssue(trafficLightPath, $"Props: {trafficLightLabel} prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
             if (settings.props.lampPrefab != null && settings.props.lampPrefab.GetComponentInChildren<Renderer>() == null)
                 issues.Add(new CityGeneratorValidationIssue("props.lampPrefab", "Props: Lamp prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
             if (settings.props.binPrefab != null && settings.props.binPrefab.GetComponentInChildren<Renderer>() == null)
@@ -123,13 +126,13 @@ namespace CityGenerator.Editor
                 : CityGeneratorTrafficBuilder.HasSignalledIntersection(settings.general.gridWidth, settings.general.gridHeight);
             if (hasSignalledIntersection)
             {
-                if (settings.props.trafficLightPrefab == null)
+                if (trafficLightPrefab == null)
                 {
-                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab is required when the grid has at least one signalled intersection (a 4-way, or a T-intersection along the grid's border)."));
+                    issues.Add(new CityGeneratorValidationIssue(trafficLightPath, $"Props: {trafficLightLabel} prefab is required when the grid has at least one signalled intersection (a 4-way, or a T-intersection along the grid's border)."));
                 }
-                else if (settings.props.trafficLightPrefab.GetComponent<Runtime.TrafficLight>() == null)
+                else if (trafficLightPrefab.GetComponent<Runtime.TrafficLight>() == null)
                 {
-                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab must have a TrafficLight component."));
+                    issues.Add(new CityGeneratorValidationIssue(trafficLightPath, $"Props: {trafficLightLabel} prefab must have a TrafficLight component."));
                 }
             }
 

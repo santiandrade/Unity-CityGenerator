@@ -163,13 +163,13 @@ namespace CityGenerator.Editor
             if (settings.general.useCustomGrid)
             {
                 network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup);
-                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, settings.general.customBlockCells, random);
+                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, trafficLights, settings.general.customBlockCells, random);
                 network.BuildFromBlockCells(settings.general.customBlockCells);
             }
             else
             {
                 network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup, gridWidth, gridHeight);
-                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, gridWidth, gridHeight, random);
+                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, trafficLights, gridWidth, gridHeight, random);
                 network.Build();
             }
 

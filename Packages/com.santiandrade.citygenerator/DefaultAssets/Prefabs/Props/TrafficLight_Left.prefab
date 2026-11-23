@@ -303,7 +303,7 @@ GameObject:
   - component: {fileID: 6464348784467141539}
   - component: {fileID: 3002163395336882089}
   m_Layer: 0
-  m_Name: TrafficLight
+  m_Name: TrafficLight_Left
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   override. Every prefab of a district appears at least once in it when it has enough slots.
   Custom Places inside a district keep their slots. With no districts, a given seed still
   generates exactly the same city as before.
+- Traffic Light Side in the Props card: traffic lights can stand on the right (default) or the
+  left sidewalk of each incoming lane. Each side has its own prefab field, Right Traffic Light
+  Prefab and Left Traffic Light Prefab, and only the one for the chosen side is placed and
+  required. A cantilevered prefab for the left side should extend its arm along local `+X`.
+
+### Changed
+
+- The original built-in traffic light is now `TrafficLight_Left`, the default left-side
+  prefab. Cities generated with 3.7.1 or earlier keep their traffic lights.
+- `TrafficLight_Right` is now a standalone prefab instead of a variant of the original one.
+- The Props card's Traffic Light Prefab field is now Right Traffic Light Prefab.
 
 ## [3.7.2] - 2026-11-20
 ### Changed
