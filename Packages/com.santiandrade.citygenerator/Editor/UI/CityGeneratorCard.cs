@@ -26,7 +26,7 @@ namespace CityGenerator.Editor.UI
 
         public VisualElement ContentContainer => content;
 
-        public CityGeneratorCard(string cardName, string title, string iconName, bool defaultExpanded, bool isBeta = false)
+        public CityGeneratorCard(string cardName, string title, string iconName, bool defaultExpanded, bool isBeta = false, Color? iconColor = null)
         {
             this.cardName = cardName;
             AddToClassList("cg-card");
@@ -35,7 +35,9 @@ namespace CityGenerator.Editor.UI
             header.AddToClassList("cg-card__header");
             Add(header);
 
-            Texture2D icon = CityGeneratorUiIcons.Get(iconName);
+            Texture2D icon = iconColor.HasValue
+                ? CityGeneratorUiIcons.GetRecolored(iconName, iconColor.Value)
+                : CityGeneratorUiIcons.Get(iconName);
             if (icon != null)
             {
                 var iconElement = new VisualElement();

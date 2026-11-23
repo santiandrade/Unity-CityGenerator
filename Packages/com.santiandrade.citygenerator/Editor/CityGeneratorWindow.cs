@@ -19,6 +19,11 @@ namespace CityGenerator.Editor
         private const string ThumbnailPath = "Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png";
 
         private const string TabCity = "city";
+
+        // The Buildings and Districts cards share the same building icon in two colours, so they
+        // read as related but distinct.
+        private static readonly Color BuildingsIconColor = new Color(0.45f, 0.80f, 0.45f);
+        private static readonly Color DistrictsIconColor = new Color(0.95f, 0.62f, 0.25f);
         private const string TabPlayer = "player";
         private const string TabTraffic = "traffic";
         private const string TabPedestrians = "pedestrians";
@@ -404,7 +409,7 @@ namespace CityGenerator.Editor
 
         private void BuildBuildingsCard(VisualElement parent)
         {
-            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", "d_BoxCollider Icon", defaultExpanded: false, TabCity);
+            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", CityGeneratorUiIcons.Building, defaultExpanded: false, TabCity, iconColor: BuildingsIconColor);
             var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
             grid.Bind(FindProperty("buildingPrefabs"));
             buildingsCard.ContentContainer.Add(grid);
@@ -412,7 +417,7 @@ namespace CityGenerator.Editor
 
         private void BuildDistrictsCard(VisualElement parent)
         {
-            districtsCard = AddCard(parent, "districts", "Districts", "d_Folder Icon", defaultExpanded: false, TabCity);
+            districtsCard = AddCard(parent, "districts", "Districts", CityGeneratorUiIcons.Building, defaultExpanded: false, TabCity, iconColor: DistrictsIconColor);
             districtList = new CityGeneratorDistrictList(() => FindProperty("general.buildingsPerBlock").intValue, RefreshDynamicUi);
             districtList.Bind(FindProperty("districts"));
             districtsCard.ContentContainer.Add(districtList);
@@ -719,9 +724,9 @@ namespace CityGenerator.Editor
             resetButton.clicked += ResetToDefaults;
         }
 
-        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId, bool isBeta = false)
+        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId, bool isBeta = false, Color? iconColor = null)
         {
-            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded, isBeta);
+            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded, isBeta, iconColor);
             parent.Add(card);
             cardsBySettingsSegment[settingsSegment] = card;
             tabIdBySettingsSegment[settingsSegment] = tabId;
