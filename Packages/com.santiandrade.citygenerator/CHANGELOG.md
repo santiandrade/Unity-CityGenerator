@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Districts (SPEC 21): a new Districts card in the City tab, after Buildings. Each district has
+  a name, its own blocks (picked on its own grid preview) and its own list of building prefabs,
+  used for its blocks instead of the base Buildings list, plus an optional Buildings Per Block
+  override. Every prefab of a district appears at least once in it when it has enough slots.
+  Custom Places inside a district keep their slots. With no districts, a given seed still
+  generates exactly the same city as before.
 
 ## [3.7.2] - 2026-11-20
 ### Changed

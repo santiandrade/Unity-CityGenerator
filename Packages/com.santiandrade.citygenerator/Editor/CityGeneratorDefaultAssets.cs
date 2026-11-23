@@ -61,6 +61,10 @@ namespace CityGenerator.Editor
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-E.prefab"),
             };
 
+            settings.districts = new List<DistrictEntry>
+            {
+            };
+
             settings.vegetation.prefabs = new List<GameObject>
             {
                 Load($"{DefaultAssetsRoot}/Prefabs/Vegetation/Tree.prefab"),

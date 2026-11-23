@@ -48,6 +48,8 @@ namespace CityGenerator.Editor
         private readonly List<RequiredRow> requiredRows = new();
         private CityGeneratorCard generalCard;
         private CityGeneratorCard buildingsCard;
+        private CityGeneratorCard districtsCard;
+        private CityGeneratorDistrictList districtList;
         private CityGeneratorCard vegetationCard;
         private CityGeneratorCard trafficCard;
         private CityGeneratorCard physicsCard;
@@ -233,6 +235,7 @@ namespace CityGenerator.Editor
             BuildGroundCard(cityContainer);
             BuildPlazaCard(cityContainer);
             BuildBuildingsCard(cityContainer);
+            BuildDistrictsCard(cityContainer);
             BuildVegetationCard(cityContainer);
             BuildPropsCard(cityContainer);
             BuildCustomPlacesCard(cityContainer);
@@ -403,6 +406,14 @@ namespace CityGenerator.Editor
             var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
             grid.Bind(FindProperty("buildingPrefabs"));
             buildingsCard.ContentContainer.Add(grid);
+        }
+
+        private void BuildDistrictsCard(VisualElement parent)
+        {
+            districtsCard = AddCard(parent, "districts", "Districts", "d_Folder Icon", defaultExpanded: false, TabCity);
+            districtList = new CityGeneratorDistrictList(() => FindProperty("general.buildingsPerBlock").intValue, RefreshDynamicUi);
+            districtList.Bind(FindProperty("districts"));
+            districtsCard.ContentContainer.Add(districtList);
         }
 
         private void BuildVegetationCard(VisualElement parent)
@@ -827,6 +838,12 @@ namespace CityGenerator.Editor
 
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
+            districtList.SetGrid(gridWidth, gridHeight);
+            districtList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
+            districtList.SetPlazaMask(FindProperty("general.plazaCells"));
+            districtList.RefreshPreviews();
+            int districtCount = FindProperty("districts").arraySize;
+            districtsCard.SetBadge(districtCount == 1 ? "1 district" : $"{districtCount} districts");
             customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
             customPlaceList.SetPlazaMask(FindProperty("general.plazaCells"));
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
@@ -843,7 +860,7 @@ namespace CityGenerator.Editor
                 ? $"Starts {FindProperty("dayNight.startHour").floatValue:0.#}h"
                 : "Off");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
-            int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
+            int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock + EstimateDistrictOverrideDelta(buildingsPerBlock);
             float totalSize;
             float totalSizeZ;
             if (useCustomGrid)
@@ -893,6 +910,44 @@ namespace CityGenerator.Editor
             }
 
             RefreshValidation();
+        }
+
+        /// <summary>
+        /// SPEC 21: how many buildings the districts' Buildings Per Block overrides add to (or
+        /// remove from) the global estimate. Counts each real, non-plaza block once, for the first
+        /// district claiming it -- the same block the builder resolves it to -- and ignores blocks
+        /// the validator would reject, since the estimate only has to be close.
+        /// </summary>
+        private int EstimateDistrictOverrideDelta(int globalBuildingsPerBlock)
+        {
+            if (settings.districts == null || settings.districts.Count == 0)
+                return 0;
+
+            int maxSlots = CityGeneratorConstants.MaxBuildingSlotsPerBlock;
+            int global = Mathf.Clamp(globalBuildingsPerBlock, 0, maxSlots);
+            var plazaCells = new HashSet<Vector2Int>(settings.general.plazaCells);
+            var shapeCells = settings.general.useCustomGrid ? new HashSet<Vector2Int>(settings.general.customBlockCells) : null;
+            var counted = new HashSet<Vector2Int>();
+            int delta = 0;
+
+            foreach (DistrictEntry district in settings.districts)
+            {
+                if (district.cells == null)
+                    continue;
+
+                int perBlock = district.overrideBuildingsPerBlock ? Mathf.Clamp(district.buildingsPerBlock, 0, maxSlots) : global;
+                foreach (Vector2Int cell in district.cells)
+                {
+                    bool exists = shapeCells != null
+                        ? shapeCells.Contains(cell)
+                        : cell.x >= 0 && cell.x < settings.general.gridWidth && cell.y >= 0 && cell.y < settings.general.gridHeight;
+                    if (!exists || plazaCells.Contains(cell) || !counted.Add(cell))
+                        continue;
+                    delta += perBlock - global;
+                }
+            }
+
+            return delta;
         }
 
         private static void SetWarning(HelpBox helpBox, string message)

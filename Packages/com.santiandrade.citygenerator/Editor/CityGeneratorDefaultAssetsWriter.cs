@@ -97,6 +97,9 @@ namespace CityGenerator.Editor
             AppendGameObjectList(sb, "settings.buildingPrefabs", settings.buildingPrefabs, warnings, "Buildings");
             sb.AppendLine();
 
+            AppendDistrictsList(sb, settings.districts, warnings);
+            sb.AppendLine();
+
             AppendGameObjectList(sb, "settings.vegetation.prefabs", settings.vegetation.prefabs, warnings, "Vegetation");
             sb.AppendLine();
 
@@ -211,6 +214,45 @@ namespace CityGenerator.Editor
                 sb.AppendLine($"                    cornerSlot = {entry.cornerSlot.ToString(CultureInfo.InvariantCulture)},");
                 sb.AppendLine($"                    facing = CustomPlaceFacing.{entry.facing},");
                 sb.AppendLine($"                    positionAssigned = {(entry.positionAssigned ? "true" : "false")},");
+                sb.AppendLine("                },");
+            }
+            sb.AppendLine("            };");
+        }
+
+        // Unlike the Custom Places/Pedestrians lists, an entry is kept even when none of its
+        // prefabs resolve: name and cells are user data worth preserving on their own, and the
+        // validator already flags a district with no usable prefab.
+        private static void AppendDistrictsList(StringBuilder sb, List<DistrictEntry> districts, List<string> warnings)
+        {
+            sb.AppendLine("            settings.districts = new List<DistrictEntry>");
+            sb.AppendLine("            {");
+            foreach (DistrictEntry entry in districts)
+            {
+                sb.AppendLine("                new()");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    name = \"{Escape(entry.name ?? string.Empty)}\",");
+                sb.AppendLine("                    cells = new List<Vector2Int>");
+                sb.AppendLine("                    {");
+                if (entry.cells != null)
+                {
+                    foreach (Vector2Int cell in entry.cells)
+                        sb.AppendLine($"                        new Vector2Int({cell.x}, {cell.y}),");
+                }
+                sb.AppendLine("                    },");
+                sb.AppendLine("                    buildingPrefabs = new List<GameObject>");
+                sb.AppendLine("                    {");
+                if (entry.buildingPrefabs != null)
+                {
+                    foreach (GameObject prefab in entry.buildingPrefabs)
+                    {
+                        string expression = BuildGameObjectExpr(prefab, warnings, $"Districts > {entry.name}");
+                        if (expression != null)
+                            sb.AppendLine($"                        {expression},");
+                    }
+                }
+                sb.AppendLine("                    },");
+                sb.AppendLine($"                    overrideBuildingsPerBlock = {(entry.overrideBuildingsPerBlock ? "true" : "false")},");
+                sb.AppendLine($"                    buildingsPerBlock = {entry.buildingsPerBlock.ToString(CultureInfo.InvariantCulture)},");
                 sb.AppendLine("                },");
             }
             sb.AppendLine("            };");

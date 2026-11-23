@@ -20,6 +20,8 @@ namespace CityGenerator.Editor.UI
         CustomAreaEdit,
         /// <summary>A Custom Pedestrian entry's own picker (SPEC 12): draws the real pedestrian graph (Ring/Curb/Crossing/Interior) grouped into clickable line zones instead of blocks or raw nodes; clicking a zone adds/removes all of its underlying nodes from the entry's selectedNodeIndices subgraph.</summary>
         NodeGraphPicker,
+        /// <summary>A District entry's own picker (SPEC 21): clicking a cell toggles it in that district's cells list. Plazas (SetPlazaMask) and other districts' blocks (SetOccupiedMask) are only painted as a reference and stay clickable -- an overlap is the validator's to report.</summary>
+        DistrictMultiToggle,
     }
 
     /// <summary>
@@ -58,6 +60,10 @@ namespace CityGenerator.Editor.UI
         private SerializedProperty graphFingerprintProperty;
         private List<GraphZone> zoneCache;
         private CityGeneratorPedestrianPreview zoneCacheSource;
+
+        // DistrictMultiToggle mode.
+        private SerializedProperty districtCellsProperty;
+        private Func<HashSet<Vector2Int>> occupiedCellsGetter;
 
         public CityGeneratorGridPreview()
         {
@@ -148,6 +154,32 @@ namespace CityGenerator.Editor.UI
         }
 
         /// <summary>
+        /// Binds this preview as one District entry's block picker (SPEC 21): clicking a cell
+        /// adds it to, or removes it from, <paramref name="districtCellsProperty"/>. Never prunes
+        /// that list when the grid shrinks -- a block that stops existing is reported by the
+        /// validator instead, so the user never loses data without knowing.
+        /// </summary>
+        public void BindDistrictCells(SerializedProperty districtCellsProperty, Action onChanged)
+        {
+            mode = CityGeneratorGridPreviewMode.DistrictMultiToggle;
+            this.districtCellsProperty = districtCellsProperty;
+            this.onChanged = onChanged;
+            tooltip = "Click a block to add it to, or remove it from, this district.";
+            MarkDirtyRepaint();
+        }
+
+        /// <summary>
+        /// DistrictMultiToggle mode only: blocks already claimed by other districts, painted in a
+        /// neutral tone as a reference. Read at paint time, so it never goes stale between
+        /// repaints. Pass <c>null</c> to disable.
+        /// </summary>
+        public void SetOccupiedMask(Func<HashSet<Vector2Int>> occupiedCellsGetter)
+        {
+            this.occupiedCellsGetter = occupiedCellsGetter;
+            MarkDirtyRepaint();
+        }
+
+        /// <summary>
         /// Overlays a shape mask on top of an already-bound PlazaMultiToggle/SingleSelectQuadrant
         /// preview: any cell outside <paramref name="customBlockCellsProperty"/> is painted
         /// semi-transparent and ignores clicks. Pass <c>null</c> to disable (plain rectangular
@@ -160,9 +192,9 @@ namespace CityGenerator.Editor.UI
         }
 
         /// <summary>
-        /// SingleSelectQuadrant mode only: overlays the General Options grid's configured plazas
-        /// (<c>general.plazaCells</c>) as a reference so the user can see where plazas already sit
-        /// while placing a Custom Place. Pass <c>null</c> to disable.
+        /// SingleSelectQuadrant/DistrictMultiToggle modes only: overlays the General Options grid's
+        /// configured plazas (<c>general.plazaCells</c>) as a reference so the user can see where
+        /// plazas already sit while placing a Custom Place or a District. Pass <c>null</c> to disable.
         /// </summary>
         public void SetPlazaMask(SerializedProperty plazaCellsProperty)
         {
@@ -267,6 +299,10 @@ namespace CityGenerator.Editor.UI
             {
                 TogglePlazaCell(cell);
             }
+            else if (mode == CityGeneratorGridPreviewMode.DistrictMultiToggle)
+            {
+                ToggleDistrictCell(cell);
+            }
             else
             {
                 float cellLocalX = local.x - (originX + gx * cellSize);
@@ -347,6 +383,39 @@ namespace CityGenerator.Editor.UI
             onChanged?.Invoke();
         }
 
+        private void ToggleDistrictCell(Vector2Int cell)
+        {
+            if (districtCellsProperty == null)
+                return;
+
+            districtCellsProperty.serializedObject.Update();
+
+            int existingIndex = -1;
+            for (int i = 0; i < districtCellsProperty.arraySize; i++)
+            {
+                if (districtCellsProperty.GetArrayElementAtIndex(i).vector2IntValue == cell)
+                {
+                    existingIndex = i;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0)
+            {
+                districtCellsProperty.DeleteArrayElementAtIndex(existingIndex);
+            }
+            else
+            {
+                int index = districtCellsProperty.arraySize;
+                districtCellsProperty.InsertArrayElementAtIndex(index);
+                districtCellsProperty.GetArrayElementAtIndex(index).vector2IntValue = cell;
+            }
+
+            districtCellsProperty.serializedObject.ApplyModifiedProperties();
+            MarkDirtyRepaint();
+            onChanged?.Invoke();
+        }
+
         // Quadrant index follows the same 0-3 convention as CityGeneratorBuildingBuilder.SlotOffsets
         // (0 = min/min, 1 = max/min, 2 = min/max, 3 = max/max), reading the click's position within
         // the cell instead of the block's own world offsets.
@@ -383,6 +452,8 @@ namespace CityGenerator.Editor.UI
                 DrawPlazaMultiToggle(context);
             else if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
                 DrawZoneGraph(context);
+            else if (mode == CityGeneratorGridPreviewMode.DistrictMultiToggle)
+                DrawDistrictMultiToggle(context);
             else
                 DrawSingleSelection(context);
         }
@@ -936,6 +1007,76 @@ namespace CityGenerator.Editor.UI
                     DrawRect(painter, isPlaza ? plazaColor : blockColor, cx, cy, size, size);
                 }
             }
+        }
+
+        private void DrawDistrictMultiToggle(MeshGenerationContext context)
+        {
+            Rect area = contentRect;
+            if (area.width <= 0f || area.height <= 0f)
+                return;
+
+            Painter2D painter = context.painter2D;
+
+            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
+            float totalWidth = cellSize * gridWidth;
+            float totalHeight = cellSize * gridHeight;
+            float originX = (area.width - totalWidth) * 0.5f;
+            float originY = (area.height - totalHeight) * 0.5f;
+
+            Color streetColor = new Color(0f, 0f, 0f, 0.15f);
+            Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
+            Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
+            Color districtColor = new Color(0.85f, 0.6f, 0.2f, 0.75f);
+            Color occupiedColor = new Color(0.55f, 0.55f, 0.62f, 0.75f);
+            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
+
+            DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
+
+            HashSet<Vector2Int> ownCells = ReadDistrictCells();
+            HashSet<Vector2Int> plazaCells = plazaCellsProperty != null ? ReadPlazaCells() : null;
+            HashSet<Vector2Int> occupiedCells = occupiedCellsGetter?.Invoke();
+            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
+            float inset = cellSize * 0.08f;
+
+            // Same row flip as DrawPlazaMultiToggle: screen row y=0 (top) must show gy = gridHeight-1
+            // (largest +Z), matching Unity's own top-down view.
+            for (int y = 0; y < gridHeight; y++)
+            {
+                int gy = gridHeight - 1 - y;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    var cell = new Vector2Int(x, gy);
+                    float cx = originX + x * cellSize + inset;
+                    float cy = originY + y * cellSize + inset;
+                    float size = cellSize - inset * 2f;
+
+                    if (shapeCells != null && !shapeCells.Contains(cell))
+                    {
+                        DrawRect(painter, holeColor, cx, cy, size, size);
+                        continue;
+                    }
+
+                    Color cellColor = blockColor;
+                    if (ownCells.Contains(cell))
+                        cellColor = districtColor;
+                    else if (plazaCells != null && plazaCells.Contains(cell))
+                        cellColor = plazaColor;
+                    else if (occupiedCells != null && occupiedCells.Contains(cell))
+                        cellColor = occupiedColor;
+                    DrawRect(painter, cellColor, cx, cy, size, size);
+                }
+            }
+        }
+
+        private HashSet<Vector2Int> ReadDistrictCells()
+        {
+            var result = new HashSet<Vector2Int>();
+            if (districtCellsProperty == null)
+                return result;
+
+            for (int i = 0; i < districtCellsProperty.arraySize; i++)
+                result.Add(districtCellsProperty.GetArrayElementAtIndex(i).vector2IntValue);
+            return result;
         }
 
         private void DrawSingleSelection(MeshGenerationContext context)

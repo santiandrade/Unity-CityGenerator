@@ -12,6 +12,7 @@ namespace CityGenerator.Editor
         public GroundSettings ground = new();
         public PlazaSettings plaza = new();
         public List<GameObject> buildingPrefabs = new();
+        public List<DistrictEntry> districts = new();
         public VegetationSettings vegetation = new();
         public List<VehicleEntry> vehicles = new();
         public PropsSettings props = new();
@@ -358,6 +359,26 @@ namespace CityGenerator.Editor
         // Internal bookkeeping: whether blockCell/cornerSlot were ever set via the grid preview
         // (distinguishes "not placed yet" from a legitimate (0,0) selection), read by the validator.
         public bool positionAssigned;
+    }
+
+    // SPEC 21: a named group of blocks whose building slots are filled from its own prefab list
+    // (and, optionally, its own Buildings Per Block) instead of the base Buildings list. Consumed
+    // by CityGeneratorBuildingBuilder.BuildBuildings; cells uses the same (gridX, gridY)
+    // convention as GeneralSettings.plazaCells/customBlockCells. Code creating an entry may leave
+    // cells/buildingPrefabs null, so every reader treats them as "null or empty".
+    [Serializable]
+    internal struct DistrictEntry
+    {
+        [Tooltip("Display name for this district in the tool UI and in validation messages. Required and unique.")]
+        public string name;
+        [Tooltip("Blocks (x, y) belonging to this district, picked by clicking its grid preview. At least one; never a plaza block; a block belongs to at most one district.")]
+        public List<Vector2Int> cells;
+        [Tooltip("Building prefabs randomly placed in this district's blocks instead of the base Buildings list. At least one non-empty entry required.")]
+        public List<GameObject> buildingPrefabs;
+        [Tooltip("If on, this district uses its own Buildings Per Block instead of the global one in General Options.")]
+        public bool overrideBuildingsPerBlock;
+        [Tooltip("How many of the 4 corner slots each block of this district fills (0-4). Only used when Override Buildings Per Block is on.")]
+        public int buildingsPerBlock;
     }
 
     // selectedNodeIndices indexes the deterministic node ordering PedestrianNetwork.Build()/
