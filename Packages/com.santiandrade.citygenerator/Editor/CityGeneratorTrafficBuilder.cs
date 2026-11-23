@@ -101,7 +101,7 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// True when the rectangular grid contains at least one intersection that
-        /// <see cref="BuildTrafficLights(GameObject, Transform, int, int, System.Random)"/> would
+        /// <see cref="BuildTrafficLights(GameObject, TrafficLightSide, Transform, int, int, System.Random)"/> would
         /// signal, i.e. one with at least <see cref="SignalledIntersectionMinArms"/> real arms.
         /// This is the single predicate CityGeneratorValidator shares with the builder: the two
         /// once disagreed (the validator asked for a Traffic Light prefab only on a grid larger
@@ -152,9 +152,8 @@ namespace CityGenerator.Editor
         /// rule for zebra crossings/dash exclusion, so the drawn markings and the signalled set
         /// always agree.
         /// </summary>
-        public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, int gridWidth, int gridHeight, System.Random random)
+        public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, TrafficLightSide side, Transform trafficLightsGroup, int gridWidth, int gridHeight, System.Random random)
         {
-            trafficLightPrefab = CityGeneratorDefaultAssets.ResolveTrafficLightPrefab(trafficLightPrefab);
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
             var armReal = new bool[4];
@@ -178,7 +177,7 @@ namespace CityGenerator.Editor
                         if (!armReal[k])
                             continue;
 
-                        var instance = PlaceTrafficLight(trafficLightPrefab, intersectionGroup, centre, k);
+                        var instance = PlaceTrafficLight(trafficLightPrefab, side, intersectionGroup, centre, k);
                         placed.Add(instance);
                         lights[k] = instance.GetComponent<TrafficLight>();
                     }
@@ -202,9 +201,8 @@ namespace CityGenerator.Editor
         /// instantiated; the same rule is mirrored by CityGeneratorGroundBuilder for zebra
         /// crossings/dash exclusion, so the drawn markings and the signalled set always agree.
         /// </summary>
-        public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, Transform trafficLightsGroup, IReadOnlyCollection<Vector2Int> blockCells, System.Random random)
+        public static List<GameObject> BuildTrafficLights(GameObject trafficLightPrefab, TrafficLightSide side, Transform trafficLightsGroup, IReadOnlyCollection<Vector2Int> blockCells, System.Random random)
         {
-            trafficLightPrefab = CityGeneratorDefaultAssets.ResolveTrafficLightPrefab(trafficLightPrefab);
             var cellSet = new HashSet<Vector2Int>(blockCells);
             var placed = new List<GameObject>();
             int intersectionIndex = 0;
@@ -230,7 +228,7 @@ namespace CityGenerator.Editor
                         if (!armReal[k])
                             continue;
 
-                        var instance = PlaceTrafficLight(trafficLightPrefab, intersectionGroup, centre, k);
+                        var instance = PlaceTrafficLight(trafficLightPrefab, side, intersectionGroup, centre, k);
                         placed.Add(instance);
                         lights[k] = instance.GetComponent<TrafficLight>();
                     }
@@ -277,12 +275,18 @@ namespace CityGenerator.Editor
                 property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
-        private static GameObject PlaceTrafficLight(GameObject prefab, Transform parent, Vector3 centre, int armIndex)
+        // Stands the signal on the corner at the driver's right (or left) as they arrive along
+        // armIndex, facing them. Only the corner changes with the side: the rotation is the same,
+        // so a right-side prefab reaches the road along local -X and a left-side one along +X.
+        // TrafficNetwork.AssignTrafficLights matches signals by facing and distance alone, which
+        // is identical for both corners.
+        private static GameObject PlaceTrafficLight(GameObject prefab, TrafficLightSide side, Transform parent, Vector3 centre, int armIndex)
         {
             Vector3 arm = Dirs[armIndex];
             Vector3 approach = -arm;
             Vector3 driverRight = Vector3.Cross(Vector3.up, approach);
-            Vector3 position = centre + (arm + driverRight) * CityGeneratorConstants.TrafficLightCornerOffset;
+            Vector3 lateral = side == TrafficLightSide.Left ? -driverRight : driverRight;
+            Vector3 position = centre + (arm + lateral) * CityGeneratorConstants.TrafficLightCornerOffset;
             position.y = CityGeneratorConstants.GroundDatumY;
 
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);

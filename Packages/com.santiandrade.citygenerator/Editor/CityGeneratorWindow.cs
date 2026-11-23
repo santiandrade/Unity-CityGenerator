@@ -19,6 +19,11 @@ namespace CityGenerator.Editor
         private const string ThumbnailPath = "Packages/com.santiandrade.citygenerator/Editor/ToolThumbnail.png";
 
         private const string TabCity = "city";
+
+        // The Buildings and Districts cards share the same building icon in two colours, so they
+        // read as related but distinct.
+        private static readonly Color BuildingsIconColor = new Color(0.45f, 0.80f, 0.45f);
+        private static readonly Color DistrictsIconColor = new Color(0.95f, 0.62f, 0.25f);
         private const string TabPlayer = "player";
         private const string TabTraffic = "traffic";
         private const string TabPedestrians = "pedestrians";
@@ -48,6 +53,8 @@ namespace CityGenerator.Editor
         private readonly List<RequiredRow> requiredRows = new();
         private CityGeneratorCard generalCard;
         private CityGeneratorCard buildingsCard;
+        private CityGeneratorCard districtsCard;
+        private CityGeneratorDistrictList districtList;
         private CityGeneratorCard vegetationCard;
         private CityGeneratorCard trafficCard;
         private CityGeneratorCard physicsCard;
@@ -92,6 +99,8 @@ namespace CityGenerator.Editor
         private PropertyField seedField;
         private VisualElement vehiclePhysicsFields;
         private HelpBox physicsBetaWarning;
+        private PropertyField rightTrafficLightField;
+        private PropertyField leftTrafficLightField;
         private Button buildNewSceneButton;
         private Button rebuildCurrentSceneButton;
 
@@ -233,6 +242,7 @@ namespace CityGenerator.Editor
             BuildGroundCard(cityContainer);
             BuildPlazaCard(cityContainer);
             BuildBuildingsCard(cityContainer);
+            BuildDistrictsCard(cityContainer);
             BuildVegetationCard(cityContainer);
             BuildPropsCard(cityContainer);
             BuildCustomPlacesCard(cityContainer);
@@ -399,10 +409,18 @@ namespace CityGenerator.Editor
 
         private void BuildBuildingsCard(VisualElement parent)
         {
-            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", "d_BoxCollider Icon", defaultExpanded: false, TabCity);
+            buildingsCard = AddCard(parent, "buildingPrefabs", "Buildings", CityGeneratorUiIcons.Building, defaultExpanded: false, TabCity, iconColor: BuildingsIconColor);
             var grid = new CityGeneratorPrefabGrid(RefreshDynamicUi);
             grid.Bind(FindProperty("buildingPrefabs"));
             buildingsCard.ContentContainer.Add(grid);
+        }
+
+        private void BuildDistrictsCard(VisualElement parent)
+        {
+            districtsCard = AddCard(parent, "districts", "Districts", CityGeneratorUiIcons.Building, defaultExpanded: false, TabCity, iconColor: DistrictsIconColor);
+            districtList = new CityGeneratorDistrictList(() => FindProperty("general.buildingsPerBlock").intValue, RefreshDynamicUi);
+            districtList.Bind(FindProperty("districts"));
+            districtsCard.ContentContainer.Add(districtList);
         }
 
         private void BuildVegetationCard(VisualElement parent)
@@ -501,8 +519,13 @@ namespace CityGenerator.Editor
         private void BuildPropsCard(VisualElement parent)
         {
             CityGeneratorCard card = AddCard(parent, "props", "Props", "d_Light Icon", defaultExpanded: false, TabCity);
-            AddRequiredField(card.ContentContainer, "props.trafficLightPrefab", "Traffic Light Prefab (if Include Traffic)",
-                () => FindProperty("general.includeTraffic").boolValue);
+            // Only the prefab for the selected side is shown (see RefreshDynamicUi); the other one
+            // keeps its value so switching side back and forth never loses a custom prefab.
+            card.ContentContainer.Add(CreateField("props.trafficLightSide", "Traffic Light Side"));
+            rightTrafficLightField = AddRequiredField(card.ContentContainer, "props.rightTrafficLightPrefab", "Right Traffic Light Prefab (if Include Traffic)",
+                () => FindProperty("general.includeTraffic").boolValue && !IsLeftTrafficLightSide());
+            leftTrafficLightField = AddRequiredField(card.ContentContainer, "props.leftTrafficLightPrefab", "Left Traffic Light Prefab (if Include Traffic)",
+                () => FindProperty("general.includeTraffic").boolValue && IsLeftTrafficLightSide());
             card.ContentContainer.Add(CreateField("props.lampPrefab"));
             card.ContentContainer.Add(CreateField("props.lampDensity"));
             card.ContentContainer.Add(CreateField("props.binPrefab"));
@@ -701,9 +724,9 @@ namespace CityGenerator.Editor
             resetButton.clicked += ResetToDefaults;
         }
 
-        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId, bool isBeta = false)
+        private CityGeneratorCard AddCard(VisualElement parent, string settingsSegment, string title, string iconName, bool defaultExpanded, string tabId, bool isBeta = false, Color? iconColor = null)
         {
-            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded, isBeta);
+            var card = new CityGeneratorCard(settingsSegment, title, iconName, defaultExpanded, isBeta, iconColor);
             parent.Add(card);
             cardsBySettingsSegment[settingsSegment] = card;
             tabIdBySettingsSegment[settingsSegment] = tabId;
@@ -753,12 +776,18 @@ namespace CityGenerator.Editor
         /// mirroring the old IMGUI window's conditional red asterisk. Registered in
         /// <see cref="requiredRows"/> so <see cref="RefreshDynamicUi"/> can re-evaluate it live.
         /// </summary>
-        private void AddRequiredField(VisualElement parent, string relativePath, string label, Func<bool> isRequired)
+        private PropertyField AddRequiredField(VisualElement parent, string relativePath, string label, Func<bool> isRequired)
         {
             SerializedProperty property = FindProperty(relativePath);
             PropertyField field = CreateField(relativePath, label);
             parent.Add(field);
             requiredRows.Add(new RequiredRow(field, isRequired, () => property.objectReferenceValue == null));
+            return field;
+        }
+
+        private bool IsLeftTrafficLightSide()
+        {
+            return FindProperty("props.trafficLightSide").enumValueIndex == (int)TrafficLightSide.Left;
         }
 
         private SerializedProperty FindProperty(string relativePath)
@@ -827,6 +856,12 @@ namespace CityGenerator.Editor
 
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
+            districtList.SetGrid(gridWidth, gridHeight);
+            districtList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
+            districtList.SetPlazaMask(FindProperty("general.plazaCells"));
+            districtList.RefreshPreviews();
+            int districtCount = FindProperty("districts").arraySize;
+            districtsCard.SetBadge(districtCount == 1 ? "1 district" : $"{districtCount} districts");
             customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
             customPlaceList.SetPlazaMask(FindProperty("general.plazaCells"));
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
@@ -843,7 +878,7 @@ namespace CityGenerator.Editor
                 ? $"Starts {FindProperty("dayNight.startHour").floatValue:0.#}h"
                 : "Off");
             int estimatedBuildableBlocks = Mathf.Max(0, blockCount - Mathf.Min(plazaCount, blockCount));
-            int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock;
+            int estimatedBuildings = estimatedBuildableBlocks * buildingsPerBlock + EstimateDistrictOverrideDelta(buildingsPerBlock);
             float totalSize;
             float totalSizeZ;
             if (useCustomGrid)
@@ -877,6 +912,10 @@ namespace CityGenerator.Editor
             vehiclePhysicsFields.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
             physicsBetaWarning.style.display = enablePhysics ? DisplayStyle.Flex : DisplayStyle.None;
 
+            bool leftTrafficLights = IsLeftTrafficLightSide();
+            rightTrafficLightField.style.display = leftTrafficLights ? DisplayStyle.None : DisplayStyle.Flex;
+            leftTrafficLightField.style.display = leftTrafficLights ? DisplayStyle.Flex : DisplayStyle.None;
+
             SetWarning(vehicleDensityWarning, GetVehicleDensityWarning());
             SetWarning(pedestrianDensityWarning, GetPedestrianDensityWarning());
             SetWarning(isolatedBlocksWarning, GetIsolatedBlocksWarning());
@@ -893,6 +932,44 @@ namespace CityGenerator.Editor
             }
 
             RefreshValidation();
+        }
+
+        /// <summary>
+        /// SPEC 21: how many buildings the districts' Buildings Per Block overrides add to (or
+        /// remove from) the global estimate. Counts each real, non-plaza block once, for the first
+        /// district claiming it -- the same block the builder resolves it to -- and ignores blocks
+        /// the validator would reject, since the estimate only has to be close.
+        /// </summary>
+        private int EstimateDistrictOverrideDelta(int globalBuildingsPerBlock)
+        {
+            if (settings.districts == null || settings.districts.Count == 0)
+                return 0;
+
+            int maxSlots = CityGeneratorConstants.MaxBuildingSlotsPerBlock;
+            int global = Mathf.Clamp(globalBuildingsPerBlock, 0, maxSlots);
+            var plazaCells = new HashSet<Vector2Int>(settings.general.plazaCells);
+            var shapeCells = settings.general.useCustomGrid ? new HashSet<Vector2Int>(settings.general.customBlockCells) : null;
+            var counted = new HashSet<Vector2Int>();
+            int delta = 0;
+
+            foreach (DistrictEntry district in settings.districts)
+            {
+                if (district.cells == null)
+                    continue;
+
+                int perBlock = district.overrideBuildingsPerBlock ? Mathf.Clamp(district.buildingsPerBlock, 0, maxSlots) : global;
+                foreach (Vector2Int cell in district.cells)
+                {
+                    bool exists = shapeCells != null
+                        ? shapeCells.Contains(cell)
+                        : cell.x >= 0 && cell.x < settings.general.gridWidth && cell.y >= 0 && cell.y < settings.general.gridHeight;
+                    if (!exists || plazaCells.Contains(cell) || !counted.Add(cell))
+                        continue;
+                    delta += perBlock - global;
+                }
+            }
+
+            return delta;
         }
 
         private static void SetWarning(HelpBox helpBox, string message)

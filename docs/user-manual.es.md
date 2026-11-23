@@ -27,10 +27,11 @@ documento da por hecho que el paquete ya está instalado.
   - [4.3 Ground](#43-ground)
   - [4.4 Plazas](#44-plazas)
   - [4.5 Buildings](#45-buildings)
-  - [4.6 Vegetation](#46-vegetation)
-  - [4.7 Props](#47-props)
-  - [4.8 Custom Places](#48-custom-places)
-  - [4.9 Day/Night Cycle](#49-daynight-cycle)
+  - [4.6 Districts](#46-districts)
+  - [4.7 Vegetation](#47-vegetation)
+  - [4.8 Props](#48-props)
+  - [4.9 Custom Places](#49-custom-places)
+  - [4.10 Day/Night Cycle](#410-daynight-cycle)
 - [5. Pestaña Player](#5-pestaña-player)
   - [5.1 Player](#51-player)
   - [5.2 Player Settings](#52-player-settings)
@@ -138,7 +139,7 @@ resultante en metros.
 | **Customize** (botón, arriba a la derecha) | Cambia la vista previa al modo Custom Grid, donde dibujas a mano una forma arbitraria en lugar de un rectángulo. Ver [4.2](#42-custom-grid-modo-customize). |
 | **Grid Width** | Número de manzanas en el eje X. Oculto mientras el modo Customize está activo. |
 | **Grid Height** | Número de manzanas en el eje Z. Oculto mientras el modo Customize está activo. |
-| **Buildings Per Block** | Cuántas de las cuatro esquinas fijas de cada manzana no-plaza reciben un edificio (0–4). Por debajo de 4, qué esquinas quedan vacías se baraja por manzana, para que la ciudad no quede uniforme. |
+| **Buildings Per Block** | Cuántas de las cuatro esquinas fijas de cada manzana no-plaza reciben un edificio (0–4). Por debajo de 4, qué esquinas quedan vacías se baraja por manzana, para que la ciudad no quede uniforme. Un District puede sobrescribirlo para sus propias manzanas (ver [4.6](#46-districts)). |
 | **Custom Seed** | Al activarlo, la generación usa una semilla fija: los mismos ajustes producen siempre exactamente la misma ciudad (trazado, elección de prefabs, colocación). Desactivado, cada generación es distinta. |
 | **Seed** | El valor de la semilla. Solo se muestra con Custom Seed activo. |
 
@@ -204,7 +205,7 @@ Contenido colocado en las manzanas que marcaste como plaza.
 | **Lawn Prefab (if any plaza block is selected)** | Losa de césped que tesela la manzana-plaza. Obligatorio en cuanto existe al menos una plaza. |
 | **Bench Prefab** | Opcional. Se coloca alrededor de los cuadrantes de césped de cada plaza. |
 
-Las plazas también reciben vegetación (ver [4.6](#46-vegetation)) y, si lo configuras, su
+Las plazas también reciben vegetación (ver [4.7](#47-vegetation)) y, si lo configuras, su
 propia fuente de audio posicional (ver [sección 9](#9-pestaña-audio)).
 
 ### 4.5 Buildings
@@ -214,14 +215,48 @@ propia fuente de audio posicional (ver [sección 9](#9-pestaña-audio)).
 El conjunto de prefabs de edificio. Arrastra un prefab al campo inferior para añadirlo; cada
 entrada se dibuja como una miniatura con una **×** para eliminarla.
 
-Los edificios se eligen al azar de esta lista para cada esquina de cada manzana. Aquí no hay
+Los edificios se eligen al azar de esta lista para cada esquina de cada manzana, salvo en las
+manzanas de un District (ver [4.6](#46-districts)), que usan la lista propia del barrio. Aquí no hay
 pesos por prefab: para reparto ponderado, mira las listas de Vehicles y Pedestrians.
 
 > Los edificios son la única categoría que **no** se comprueba contra solapamientos, ni entre
 > ellos ni contra el borde de la manzana. Un prefab mayor que el hueco de 22 m se meterá
 > visiblemente dentro del edificio contiguo. Dimensiona tus prefabs al hueco.
 
-### 4.6 Vegetation
+### 4.6 Districts
+
+![Card Districts](images/manual/card-districts.png)
+
+Un District (barrio) es un grupo de manzanas con nombre que toma sus edificios de **su propia
+lista de prefabs** en vez de la lista base de Buildings: rascacielos en el centro, casas bajas
+en las afueras. Las manzanas que no pertenecen a ningún barrio siguen usando
+[4.5 Buildings](#45-buildings).
+
+Pulsa **+ Add District** para añadir una entrada. Cada entrada tiene su propia vista previa del
+grid: haz clic en una manzana para añadirla al barrio y vuelve a hacer clic para quitarla. Sus
+manzanas se pintan en naranja, las plazas en verde y las de otros barrios en un gris azulado
+neutro, como referencia; en modo Customize solo se dibujan las manzanas de la forma.
+
+| Parámetro | Qué hace |
+|---|---|
+| **Name** | Nombre del barrio, mostrado en la interfaz y en los mensajes de validación. Obligatorio y único (sin distinguir mayúsculas ni espacios a los lados). |
+| **Override Buildings Per Block** | Si está activo, el barrio usa su propio deslizador **Buildings Per Block** (0-4) en vez del de General Options. Si no, sigue el valor global, también sus cambios posteriores. Un override a 0 deja las manzanas del barrio sin edificios. |
+| **Buildings** | Los prefabs de edificio propios del barrio, que se añaden y quitan igual que en la card Buildings. Cada uno aparece al menos una vez en el barrio siempre que tenga huecos suficientes. |
+| **×** (botón) | Elimina el barrio. |
+
+Un Custom Place dentro de un barrio conserva su hueco: el barrio solo rellena las esquinas
+libres, y un Custom Place de manzana entera deja esa manzana sin edificios del barrio.
+
+Son errores bloqueantes, que aparecen en el panel de validación y marcan la card en rojo: un
+nombre vacío o repetido, un barrio sin manzanas, una manzana fuera del grid (o que ya no está
+en la forma personalizada; nunca se eliminan en silencio al cambiar el grid), una manzana de
+plaza, una manzana en dos barrios o un barrio sin ningún prefab de edificio utilizable. Una
+entrada vacía en la lista de edificios de un barrio, o un prefab sin Renderer, solo produce un
+aviso.
+
+Sin barrios, la misma seed sigue generando exactamente la misma ciudad que antes.
+
+### 4.7 Vegetation
 
 ![Card Vegetation](images/manual/card-vegetation.png)
 
@@ -234,21 +269,22 @@ Las plazas usan una fracción de esta densidad sobre su propia retícula de cand
 densa, para que el mismo valor no meta muchísimos más árboles dentro de una plaza que en la
 calle.
 
-### 4.7 Props
+### 4.8 Props
 
 ![Card Props](images/manual/card-props.png)
 
-Mobiliario urbano, más el prefab de semáforo que usa la red de tráfico.
+Mobiliario urbano, más los prefabs de semáforo que usa la red de tráfico.
 
 | Parámetro | Qué hace |
 |---|---|
-| **Traffic Light Prefab** | Se coloca en cada cruce semaforizado: aquel con al menos tres brazos de calle reales, es decir un cruce en X completo o una intersección en T en el borde de la ciudad. Debe llevar un componente `TrafficLight`. Obligatorio siempre que la ciudad tenga al menos uno de esos cruces, lo que incluye una retícula 1 × N o N × 1 y la mayoría de formas personalizadas; solo una ciudad de una única manzana no tiene ninguno. Obligatorio **incluso con los vehículos desactivados**: la red y sus semáforos se generan siempre para que los pasos de peatones estén conectados a un semáforo real. |
+| **Traffic Light Side** | En qué acera se coloca cada semáforo, vista por el conductor que llega al cruce: **Right** (derecha, la opción por defecto) o **Left** (izquierda). Solo se muestra, coloca y valida el prefab del lado elegido; el otro conserva su valor, así que cambiar de lado varias veces nunca pierde un prefab personalizado. |
+| **Right Traffic Light Prefab** / **Left Traffic Light Prefab** | El prefab que se coloca en cada cruce semaforizado (aquel con al menos tres brazos de calle reales, es decir un cruce en X completo o una intersección en T en el borde de la ciudad) para el lado elegido. Debe llevar un componente `TrafficLight`. El prefab mira al conductor que llega a lo largo de su −Z local; uno con brazo volado debe pasar por encima de la calzada, así que su brazo se extiende por el −X local en el lado derecho y por el +X local en el izquierdo. Los dos vienen por defecto con los semáforos del propio paquete. Obligatorio siempre que la ciudad tenga al menos un cruce semaforizado, lo que incluye una retícula 1 × N o N × 1 y la mayoría de formas personalizadas; solo una ciudad de una única manzana no tiene ninguno. Obligatorio **incluso con los vehículos desactivados**: la red y sus semáforos se generan siempre para que los pasos de peatones estén conectados a un semáforo real. |
 | **Lamp Prefab** | Farola opcional, colocada a lo largo de las aceras. |
 | **Lamp Density** | Fracción de los puntos candidatos de farola ocupados en cada lado de manzana (hay 3 candidatos por lado). |
 | **Bin Prefab** | Papelera opcional, colocada en las esquinas. |
 | **Bin Density** | Fracción de las esquinas candidatas que reciben papelera. |
 
-### 4.8 Custom Places
+### 4.9 Custom Places
 
 ![Card Custom Places](images/manual/card-custom-places.png)
 
@@ -274,7 +310,7 @@ Dos entradas no pueden reclamar el mismo hueco, y una entrada de manzana complet
 conflicto con cualquier otra entrada de esa manzana: ambos casos se reportan como errores
 bloqueantes.
 
-### 4.9 Day/Night Cycle
+### 4.10 Day/Night Cycle
 
 ![Card Day/Night Cycle](images/manual/card-day-night.png)
 
@@ -686,7 +722,7 @@ El pie, de abajo arriba:
 | **Build City in New Scene** | Genera una ciudad y la guarda como la siguiente `Assets/Scenes/City<N>.unity` libre. La escena que tuvieras abierta no se toca. |
 | **Re-Build City in Current Scene** | Borra el objeto `City` de la escena actual y lo regenera con los ajustes actuales. Pide confirmación primero. |
 | **Reset to Defaults** | Descarta todos los cambios y restaura los valores por defecto de la herramienta. |
-| **Línea de resumen** | Estimación en vivo de lo que se va a generar: edificios, vehículos, peatones, custom places. |
+| **Línea de resumen** | Estimación en vivo de lo que se va a generar: edificios (teniendo en cuenta el override de Buildings Per Block de cada District), vehículos, peatones, custom places. |
 | **Panel de validación** | Todos los problemas encontrados en los ajustes actuales, en vivo. |
 
 **Qué conserva Re-Build.** La cámara y el jugador quedan intactos. La luz direccional conserva
@@ -713,7 +749,7 @@ Errores bloqueantes habituales y su solución:
 | *Ground: … prefab is required* | Asigna el prefab que falta en la card Ground. |
 | *Ground: Empty Block prefab is required while Customize mode is on* | Asígnalo, o sal del modo Customize. |
 | *Plaza: Lawn prefab is required when at least one plaza cell is selected* | Asigna un Lawn Prefab, o desmarca las manzanas-plaza. |
-| *Props: Traffic Light prefab is required…* / *…must have a TrafficLight component* | Asigna un prefab que lleve el componente `TrafficLight`. |
+| *Props: Right/Left Traffic Light prefab is required…* / *…must have a TrafficLight component* | Asigna un prefab que lleve el componente `TrafficLight`. |
 | *Vehicles / Pedestrians: percentages must sum to 100* | Pulsa **Normalize to 100 %**. |
 | *Player: Player Prefab / Input Actions is required when Player is enabled* | Asígnalos, o desactiva la card Player. |
 | *General: … action was not found in the … action map* | Corrige el nombre de la acción en Player Settings > Input Actions, o el propio asset. |

@@ -28,10 +28,11 @@ already installed.
   - [4.3 Ground](#43-ground)
   - [4.4 Plazas](#44-plazas)
   - [4.5 Buildings](#45-buildings)
-  - [4.6 Vegetation](#46-vegetation)
-  - [4.7 Props](#47-props)
-  - [4.8 Custom Places](#48-custom-places)
-  - [4.9 Day/Night Cycle](#49-daynight-cycle)
+  - [4.6 Districts](#46-districts)
+  - [4.7 Vegetation](#47-vegetation)
+  - [4.8 Props](#48-props)
+  - [4.9 Custom Places](#49-custom-places)
+  - [4.10 Day/Night Cycle](#410-daynight-cycle)
 - [5. Player tab](#5-player-tab)
   - [5.1 Player](#51-player)
   - [5.2 Player Settings](#52-player-settings)
@@ -137,7 +138,7 @@ resulting world size in metres.
 | **Customize** (button, top-right) | Switches the grid preview to Custom Grid mode, where you draw an arbitrary city shape instead of a rectangle. See [4.2](#42-custom-grid-customize-mode). |
 | **Grid Width** | Number of blocks along the X axis. Hidden while Customize mode is on. |
 | **Grid Height** | Number of blocks along the Z axis. Hidden while Customize mode is on. |
-| **Buildings Per Block** | How many of the four fixed corner slots of every non-plaza block get a building (0–4). Below 4, which corners stay empty is shuffled per block, so the city doesn't look uniform. |
+| **Buildings Per Block** | How many of the four fixed corner slots of every non-plaza block get a building (0–4). Below 4, which corners stay empty is shuffled per block, so the city doesn't look uniform. A District can override it for its own blocks (see [4.6](#46-districts)). |
 | **Custom Seed** | When enabled, generation uses a fixed seed: the same settings always produce exactly the same city (layout, prefab choices, placement). When disabled, every generation is different. |
 | **Seed** | The seed value. Only shown while Custom Seed is enabled. |
 
@@ -201,7 +202,7 @@ Content placed in the blocks you marked as plazas in the grid preview.
 | **Lawn Prefab (if any plaza block is selected)** | Lawn slab tiling a plaza block. Required as soon as at least one plaza block exists. |
 | **Bench Prefab** | Optional. Placed around each plaza's lawn quadrants. |
 
-Plaza blocks also get vegetation (see [4.6](#46-vegetation)) and, if configured, their own
+Plaza blocks also get vegetation (see [4.7](#47-vegetation)) and, if configured, their own
 positional audio source (see [section 9](#9-audio-tab)).
 
 ### 4.5 Buildings
@@ -211,14 +212,46 @@ positional audio source (see [section 9](#9-audio-tab)).
 The pool of building prefabs. Drop a prefab into the field at the bottom to add it; every
 entry is drawn as a tile with an **×** to remove it.
 
-Buildings are picked at random from this list for each of a block's corner slots. There are
+Buildings are picked at random from this list for each of a block's corner slots, except in
+the blocks of a District (see [4.6](#46-districts)), which use the district's own list. There are
 no per-prefab weights here — for weighted distribution, see Vehicles and Pedestrians.
 
 > Buildings are the one category that is **not** overlap-checked against its neighbours or
 > against the block edge. A prefab larger than the 22 m slot will visibly clip into the
 > building next to it. Size your own building prefabs to the slot.
 
-### 4.6 Vegetation
+### 4.6 Districts
+
+![Districts card](images/manual/card-districts.png)
+
+A District is a named group of blocks that draws its buildings from **its own prefab list**
+instead of the base Buildings list: a skyscraper downtown, low-rise houses in the suburbs. Every
+block outside a district keeps using [4.5 Buildings](#45-buildings).
+
+Click **+ Add District** to add an entry. Each entry has its own grid preview: click a block to
+add it to the district, click it again to remove it. Its own blocks are drawn in orange, plaza
+blocks in green and blocks of other districts in a neutral grey-blue, for reference; in
+Customize mode only the blocks of the custom shape are drawn.
+
+| Parameter | What it does |
+|---|---|
+| **Name** | Name of the district, shown in the UI and in validation messages. Required, and must be unique (ignoring case and surrounding spaces). |
+| **Override Buildings Per Block** | When on, this district uses its own **Buildings Per Block** slider (0-4) instead of the one in General Options. When off, it follows the global value, including later changes to it. An override of 0 leaves the district's blocks without buildings. |
+| **Buildings** | The district's own building prefabs, added and removed like the Buildings card. Each one appears at least once in the district whenever it has enough slots for it. |
+| **×** (button) | Removes the district. |
+
+Custom Places inside a district keep their slot: the district only fills the free corners, and
+a full-block Custom Place leaves that block without district buildings.
+
+These are blocking errors, shown in the validation panel and marking the card in red: an
+empty or duplicate name, a district with no blocks, a block outside the grid (or no longer in
+the custom shape — blocks are never pruned silently when the grid changes), a plaza block, a
+block claimed by two districts, or a district with no usable building prefab. An empty entry
+in a district's building list, or a prefab with no Renderer, is only a warning.
+
+With no districts, the same seed still generates exactly the same city as before.
+
+### 4.7 Vegetation
 
 ![Vegetation card](images/manual/card-vegetation.png)
 
@@ -230,21 +263,22 @@ no per-prefab weights here — for weighted distribution, see Vehicles and Pedes
 Plazas use a fraction of this density on their own denser candidate grid, so the same value
 doesn't pack noticeably more trees inside a plaza than along a street.
 
-### 4.7 Props
+### 4.8 Props
 
 ![Props card](images/manual/card-props.png)
 
-Street furniture, plus the traffic light prefab used by the traffic network.
+Street furniture, plus the traffic light prefabs used by the traffic network.
 
 | Parameter | What it does |
 |---|---|
-| **Traffic Light Prefab** | Placed at every signalled intersection — one with at least three real street arms, so a full 4-way crossroads or a T-intersection along the city's own border. Must carry a `TrafficLight` component. Required whenever the city has at least one of those, which includes a 1 × N or N × 1 grid and most custom shapes; only a single-block city has none. Required **even when Include Traffic is off**, because the network and its lights are always generated so pedestrian crossings stay wired to a real light. |
+| **Traffic Light Side** | Which sidewalk each traffic light stands on, as seen by the driver arriving at the intersection: **Right** (the default) or **Left**. Only the prefab for the chosen side is shown, placed and validated; the other keeps its value, so switching back and forth never loses a custom prefab. |
+| **Right Traffic Light Prefab** / **Left Traffic Light Prefab** | The prefab placed at every signalled intersection — one with at least three real street arms, so a full 4-way crossroads or a T-intersection along the city's own border — for the chosen side. Must carry a `TrafficLight` component. The prefab faces the arriving driver along its local −Z; a cantilevered one must reach over the road, so its arm extends along local −X on the right side and local +X on the left side. Both default to the package's own signals. Required whenever the city has at least one signalled intersection, which includes a 1 × N or N × 1 grid and most custom shapes; only a single-block city has none. Required **even when Include Traffic is off**, because the network and its lights are always generated so pedestrian crossings stay wired to a real light. |
 | **Lamp Prefab** | Optional street lamp, placed along the sidewalks. |
 | **Lamp Density** | Fraction of the candidate lamp points filled along each block side (there are 3 candidate points per side). |
 | **Bin Prefab** | Optional bin, placed at street corners. |
 | **Bin Density** | Fraction of the candidate corner points that get a bin. |
 
-### 4.8 Custom Places
+### 4.9 Custom Places
 
 ![Custom Places card](images/manual/card-custom-places.png)
 
@@ -269,7 +303,7 @@ cannot be placed on one.
 Two entries cannot claim the same slot, and a full-block entry conflicts with any other entry
 in the same block — both cases are reported as blocking errors.
 
-### 4.9 Day/Night Cycle
+### 4.10 Day/Night Cycle
 
 ![Day/Night Cycle card](images/manual/card-day-night.png)
 
@@ -673,7 +707,7 @@ The footer, bottom to top:
 | **Build City in New Scene** | Generates a city and saves it as the next free `Assets/Scenes/City<N>.unity`. Whatever scene you had open is left untouched. |
 | **Re-Build City in Current Scene** | Deletes the `City` object in the current scene and regenerates it with the current settings. Asks for confirmation first. |
 | **Reset to Defaults** | Discards every change and restores the tool's shipped defaults. |
-| **Summary line** | Live estimate of what will be generated: buildings, vehicles, pedestrians, custom places. |
+| **Summary line** | Live estimate of what will be generated: buildings (taking each District's Buildings Per Block override into account), vehicles, pedestrians, custom places. |
 | **Validation panel** | Every problem found in the current settings, live. |
 
 **What Re-Build keeps.** The camera and the player are left untouched. The Directional Light
@@ -700,7 +734,7 @@ Common blocking errors and their fix:
 | *Ground: … prefab is required* | Assign the missing prefab in the Ground card. |
 | *Ground: Empty Block prefab is required while Customize mode is on* | Assign it, or leave Customize mode. |
 | *Plaza: Lawn prefab is required when at least one plaza cell is selected* | Assign a Lawn Prefab, or unselect the plaza blocks. |
-| *Props: Traffic Light prefab is required…* / *…must have a TrafficLight component* | Assign a prefab carrying the `TrafficLight` component. |
+| *Props: Right/Left Traffic Light prefab is required…* / *…must have a TrafficLight component* | Assign a prefab carrying the `TrafficLight` component. |
 | *Vehicles / Pedestrians: percentages must sum to 100* | Click **Normalize to 100 %**. |
 | *Player: Player Prefab / Input Actions is required when Player is enabled* | Assign them, or disable the Player card. |
 | *General: … action was not found in the … action map* | Fix the action name in Player Settings > Input Actions, or the asset itself. |

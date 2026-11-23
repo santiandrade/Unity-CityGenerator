@@ -134,7 +134,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -143,12 +143,12 @@ namespace CityGenerator.Tests.EditMode
             CityGeneratorSettings settings = MakeMinimalValidSettings();
             settings.general.gridWidth = 2;
             settings.general.gridHeight = 2;
-            settings.props.trafficLightPrefab = MakePrefabLike("TrafficLightNoComponent");
+            settings.props.rightTrafficLightPrefab = MakePrefabLike("TrafficLightNoComponent");
 
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -159,9 +159,33 @@ namespace CityGenerator.Tests.EditMode
             settings.general.gridHeight = 2;
             GameObject light = MakePrefabLike("TrafficLight");
             light.AddComponent<CityGenerator.Runtime.TrafficLight>();
-            settings.props.trafficLightPrefab = light;
+            settings.props.rightTrafficLightPrefab = light;
 
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
+        }
+
+        [Test]
+        public void ValidateDetailed_LeftSide_RequiresOnlyTheLeftPrefab()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.gridWidth = 2;
+            settings.general.gridHeight = 2;
+            GameObject light = MakePrefabLike("TrafficLight");
+            light.AddComponent<CityGenerator.Runtime.TrafficLight>();
+            settings.props.rightTrafficLightPrefab = light;
+            settings.props.trafficLightSide = TrafficLightSide.Left;
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.leftTrafficLightPrefab" && !i.isWarning));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab"));
+
+            settings.props.rightTrafficLightPrefab = null;
+            settings.props.leftTrafficLightPrefab = light;
+            valid = CityGeneratorValidator.ValidateDetailed(settings, out issues);
 
             Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
         }
@@ -567,7 +591,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         // The lights are built even with Include Traffic off (CityGeneratorContentAssembler keeps
@@ -583,7 +607,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -594,7 +618,7 @@ namespace CityGenerator.Tests.EditMode
             settings.general.gridHeight = 2;
             GameObject light = MakePrefabLike("TrafficLight");
             light.AddComponent<CityGenerator.Runtime.TrafficLight>();
-            settings.props.trafficLightPrefab = light;
+            settings.props.rightTrafficLightPrefab = light;
 
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
@@ -627,7 +651,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -640,7 +664,7 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             Assert.IsFalse(valid);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.trafficLightPrefab" && !i.isWarning));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "props.rightTrafficLightPrefab" && !i.isWarning));
         }
 
         [Test]
@@ -666,6 +690,174 @@ namespace CityGenerator.Tests.EditMode
 
             Assert.IsTrue(valid);
             Assert.AreEqual(0, errors.Count);
+        }
+
+        // SPEC 21: Districts. The minimal settings are a 1x1 grid, so (0, 0) is the only block.
+        private DistrictEntry MakeValidDistrict(string name) => new()
+        {
+            name = name,
+            cells = new List<Vector2Int> { new(0, 0) },
+            buildingPrefabs = new List<GameObject> { MakePrefabLike(name + "Building") },
+        };
+
+        private GameObject MakeTrafficLightPrefab()
+        {
+            GameObject light = MakePrefabLike("TrafficLight");
+            light.AddComponent<CityGenerator.Runtime.TrafficLight>();
+            return light;
+        }
+
+        private static void AssertBlockingDistrictIssue(bool valid, List<CityGeneratorValidationIssue> issues)
+        {
+            Assert.IsFalse(valid);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && !i.isWarning), string.Join("; ", issues.ConvertAll(i => i.message)));
+        }
+
+        [Test]
+        public void ValidateDetailed_ValidDistrict_HasNoBlockingIssues()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.districts.Add(MakeValidDistrict("Downtown"));
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "districts"));
+        }
+
+        [TestCase("")]
+        [TestCase("   ")]
+        public void ValidateDetailed_DistrictWithoutName_IsBlocking(string name)
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.districts.Add(MakeValidDistrict("Downtown"));
+            DistrictEntry entry = settings.districts[0];
+            entry.name = name;
+            settings.districts[0] = entry;
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+        }
+
+        [Test]
+        public void ValidateDetailed_DuplicateDistrictName_IgnoringCaseAndSpaces_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.gridWidth = 2; // a 1x2 grid: two blocks, so the names are the only conflict
+            settings.props.rightTrafficLightPrefab = MakeTrafficLightPrefab();
+            settings.districts.Add(MakeValidDistrict("Downtown"));
+            DistrictEntry second = MakeValidDistrict(" downtown ");
+            second.cells = new List<Vector2Int> { new(1, 0) };
+            settings.districts.Add(second);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("unique")));
+        }
+
+        [Test]
+        public void ValidateDetailed_DistrictWithoutBlocks_IsBlocking([Values(true, false)] bool nullList)
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            DistrictEntry entry = MakeValidDistrict("Downtown");
+            entry.cells = nullList ? null : new List<Vector2Int>();
+            settings.districts.Add(entry);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+        }
+
+        [Test]
+        public void ValidateDetailed_DistrictBlockOutsideGrid_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            DistrictEntry entry = MakeValidDistrict("Downtown");
+            entry.cells.Add(new Vector2Int(1, 0));
+            settings.districts.Add(entry);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+        }
+
+        [Test]
+        public void ValidateDetailed_DistrictBlockMissingFromCustomShape_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.useCustomGrid = true;
+            settings.general.customBlockCells = new List<Vector2Int> { new(5, 5) };
+            settings.ground.emptyBlockPrefab = MakePrefabLike("EmptyBlock");
+            DistrictEntry entry = MakeValidDistrict("Downtown");
+            entry.cells = new List<Vector2Int> { new(5, 5), new(6, 5) };
+            settings.districts.Add(entry);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("(6, 5)")));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("(5, 5)")));
+        }
+
+        [Test]
+        public void ValidateDetailed_DistrictPlazaBlock_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.general.plazaCells = new List<Vector2Int> { new(0, 0) };
+            settings.plaza.lawnPrefab = MakePrefabLike("Lawn");
+            settings.districts.Add(MakeValidDistrict("Downtown"));
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+        }
+
+        [Test]
+        public void ValidateDetailed_BlockInTwoDistricts_IsBlocking()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            settings.districts.Add(MakeValidDistrict("Downtown"));
+            settings.districts.Add(MakeValidDistrict("Uptown"));
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("'Downtown'") && i.message.Contains("'Uptown'")));
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(-1)]
+        public void ValidateDetailed_DistrictWithNoUsablePrefab_IsBlocking(int nullEntries)
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            DistrictEntry entry = MakeValidDistrict("Downtown");
+            entry.buildingPrefabs = nullEntries < 0 ? null : new List<GameObject>();
+            for (int i = 0; i < nullEntries; i++)
+                entry.buildingPrefabs.Add(null);
+            settings.districts.Add(entry);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+        }
+
+        [Test]
+        public void ValidateDetailed_DistrictNullEntryOrRendererlessPrefab_OnlyWarns()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            DistrictEntry entry = MakeValidDistrict("Downtown");
+            entry.buildingPrefabs.Add(null);
+            entry.buildingPrefabs.Add(MakePrefabLikeNoRenderer("Hollow"));
+            settings.districts.Add(entry);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            Assert.IsTrue(valid, string.Join("; ", issues.ConvertAll(i => i.message)));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.isWarning && i.message.Contains("is empty and will be skipped")));
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.isWarning && i.message.Contains("has no Renderer")));
         }
     }
 }

@@ -8,7 +8,8 @@ namespace CityGenerator.Editor
     /// <summary>
     /// Places buildings on up to <c>buildingsPerBlock</c> fixed 22 m slots per non-plaza block,
     /// picking a random prefab per slot while guaranteeing every assigned prefab is used at
-    /// least once across the whole city (when there are enough slots for it).
+    /// least once across its pool -- the whole city outside districts for the base list, each
+    /// district's own blocks for its list (SPEC 21) -- when there are enough slots for it.
     /// </summary>
     internal static class CityGeneratorBuildingBuilder
     {
@@ -22,19 +23,50 @@ namespace CityGenerator.Editor
             new(CityGeneratorConstants.BuildingSlotPitch / 2f, CityGeneratorConstants.BuildingSlotPitch / 2f),
         };
 
-        public static List<GameObject> BuildBuildings(List<GameObject> buildingPrefabs, Transform buildingsGroup, IReadOnlyList<BlockCell> blocks, int buildingsPerBlock, System.Random random, IReadOnlyCollection<(int gridX, int gridY, int slot)> reservedSlots = null)
+        /// <summary>
+        /// SPEC 21: every block of a district draws from that district's own prefab pool (nulls
+        /// filtered out) and Buildings Per Block (its override, or the global value); every other
+        /// block draws from the base <paramref name="buildingPrefabs"/> list, untouched. The
+        /// "every prefab at least once" guarantee holds per pool. The random sequence is
+        /// deliberately the same as before districts existed when <paramref name="districts"/> is
+        /// null or empty: blocks are walked in the same order, a block with nothing to build
+        /// consumes no random number, pools are assigned in a fixed order (base first, then
+        /// districts in list order) and the rotation roll stays in global slot order.
+        /// </summary>
+        public static List<GameObject> BuildBuildings(List<GameObject> buildingPrefabs, Transform buildingsGroup, IReadOnlyList<BlockCell> blocks, int buildingsPerBlock, System.Random random, IReadOnlyCollection<(int gridX, int gridY, int slot)> reservedSlots = null, IReadOnlyList<DistrictEntry> districts = null)
         {
             var placed = new List<GameObject>();
-            if (buildingPrefabs.Count == 0)
-                return placed;
 
-            buildingsPerBlock = Mathf.Clamp(buildingsPerBlock, 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock);
-            if (buildingsPerBlock == 0)
-                return placed;
+            // Pool 0 is the base list, as-is (its null entries are handled exactly as before
+            // districts existed); pool d + 1 is districts[d], with its nulls filtered out.
+            var pools = new List<List<GameObject>> { buildingPrefabs ?? new List<GameObject>() };
+            var poolBuildingsPerBlock = new List<int> { Mathf.Clamp(buildingsPerBlock, 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock) };
+            var poolByCell = new Dictionary<(int gridX, int gridY), int>();
+            if (districts != null)
+            {
+                for (int d = 0; d < districts.Count; d++)
+                {
+                    DistrictEntry district = districts[d];
+                    var pool = new List<GameObject>();
+                    if (district.buildingPrefabs != null)
+                        pool.AddRange(district.buildingPrefabs.Where(prefab => prefab != null));
+                    pools.Add(pool);
+
+                    int districtBuildingsPerBlock = district.overrideBuildingsPerBlock ? district.buildingsPerBlock : buildingsPerBlock;
+                    poolBuildingsPerBlock.Add(Mathf.Clamp(districtBuildingsPerBlock, 0, CityGeneratorConstants.MaxBuildingSlotsPerBlock));
+
+                    if (district.cells == null)
+                        continue;
+                    // A block listed by two districts is a validation error; the first one wins
+                    // here only so a forced generation stays deterministic.
+                    foreach (Vector2Int cell in district.cells)
+                        poolByCell.TryAdd((cell.x, cell.y), d + 1);
+                }
+            }
 
             var reserved = reservedSlots ?? System.Array.Empty<(int, int, int)>();
 
-            var slots = new List<(BlockCell block, Vector2 offset)>();
+            var slots = new List<(BlockCell block, Vector2 offset, int pool)>();
             foreach (BlockCell block in blocks)
             {
                 if (block.isPlaza)
@@ -45,6 +77,14 @@ namespace CityGenerator.Editor
                 if (reserved.Contains((block.gridX, block.gridY, -1)))
                     continue;
 
+                int poolIndex = poolByCell.TryGetValue((block.gridX, block.gridY), out int districtPool) ? districtPool : 0;
+                int blockBuildings = poolBuildingsPerBlock[poolIndex];
+                // Skipped before the shuffle, so a block with nothing to build consumes no random
+                // number -- what keeps an empty base list / Buildings Per Block = 0 city on the
+                // exact random sequence it had before districts.
+                if (blockBuildings == 0 || pools[poolIndex].Count == 0)
+                    continue;
+
                 // Which corners get filled is randomised per block: with fewer than 4
                 // buildings, always picking corners 0..buildingsPerBlock-1 made every partially
                 // filled block look identical (same corners occupied, same corners empty).
@@ -53,19 +93,35 @@ namespace CityGenerator.Editor
                     .ToList();
                 CityGeneratorRandomUtility.Shuffle(cornerOrder, random);
 
-                for (int s = 0; s < buildingsPerBlock && s < cornerOrder.Count; s++)
-                    slots.Add((block, SlotOffsets[cornerOrder[s]]));
+                for (int s = 0; s < blockBuildings && s < cornerOrder.Count; s++)
+                    slots.Add((block, SlotOffsets[cornerOrder[s]], poolIndex));
             }
 
             if (slots.Count == 0)
                 return placed;
 
-            GameObject[] assignment = AssignPrefabs(buildingPrefabs, slots.Count, random);
+            var assignment = new GameObject[slots.Count];
+            for (int poolIndex = 0; poolIndex < pools.Count; poolIndex++)
+            {
+                var poolSlots = new List<int>();
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    if (slots[i].pool == poolIndex)
+                        poolSlots.Add(i);
+                }
+
+                if (poolSlots.Count == 0)
+                    continue;
+
+                GameObject[] poolAssignment = AssignPrefabs(pools[poolIndex], poolSlots.Count, random);
+                for (int i = 0; i < poolSlots.Count; i++)
+                    assignment[poolSlots[i]] = poolAssignment[i];
+            }
 
             var slotIndexPerBlock = new Dictionary<(int gridX, int gridY), int>();
             for (int i = 0; i < slots.Count; i++)
             {
-                (BlockCell block, Vector2 offset) = slots[i];
+                (BlockCell block, Vector2 offset, _) = slots[i];
                 GameObject prefab = assignment[i];
 
                 var blockKey = (block.gridX, block.gridY);

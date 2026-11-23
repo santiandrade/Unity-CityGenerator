@@ -28,7 +28,7 @@ namespace CityGenerator.Tests.EditMode
         {
             var settings = new CityGeneratorSettings();
             CityGeneratorDefaultAssets.ApplyTo(settings);
-            Assert.IsNotNull(settings.props.trafficLightPrefab, "The default assets must provide a Traffic Light prefab for this test.");
+            Assert.IsNotNull(settings.props.TrafficLightPrefab, "The default assets must provide a Traffic Light prefab for this test.");
             settings.general.useCustomGrid = false;
             settings.general.gridWidth = gridWidth;
             settings.general.gridHeight = gridHeight;
@@ -101,7 +101,7 @@ namespace CityGenerator.Tests.EditMode
 
                 var blocks = CityGeneratorGrid.BuildBlocks(gridWidth, gridHeight, settings.general.plazaCells);
                 var reservedSlots = CityGeneratorCustomPlaceBuilder.ResolveReservedSlots(settings.customPlaces, blocks);
-                CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, lightsGroup, gridWidth, gridHeight, new System.Random(0));
+                CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, lightsGroup, gridWidth, gridHeight, new System.Random(0));
                 PedestrianNetwork network = CityGeneratorPedestrianBuilder.AddNetworkComponent(networkGroup, gridWidth, gridHeight, blocks, reservedSlots);
                 network.Build();
 

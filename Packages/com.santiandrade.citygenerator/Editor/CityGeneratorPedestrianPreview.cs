@@ -99,15 +99,15 @@ namespace CityGenerator.Editor
             // (FindNearestIntersection requires a real TrafficLightIntersection with children) --
             // the preview then simply shows Ring/Interior nodes only, exactly as many nodes as a
             // real generation would produce with includeTraffic's crossings absent for the same reason.
-            if (settings.props.trafficLightPrefab != null)
+            if (settings.props.TrafficLightPrefab != null)
             {
                 if (settings.general.useCustomGrid)
                 {
-                    CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLightsGroup, settings.general.customBlockCells, random);
+                    CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, trafficLightsGroup, settings.general.customBlockCells, random);
                 }
                 else
                 {
-                    CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLightsGroup, gridWidth, gridHeight, random);
+                    CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, trafficLightsGroup, gridWidth, gridHeight, random);
                 }
             }
 
@@ -134,7 +134,7 @@ namespace CityGenerator.Editor
 
         /// <summary>
         /// Hash of every setting that determines the pedestrian graph's shape (grid/Custom Grid,
-        /// plazaCells, customPlaces, the traffic light prefab's identity). Single source of truth
+        /// plazaCells, customPlaces, the traffic light side and its prefab's identity). Single source of truth
         /// for "did anything that would change the graph change" -- used by both
         /// CityGeneratorCustomPedestrianList (to decide whether to rebuild its cached preview) and
         /// CityGeneratorValidator (same decision, for its own fallback preview) so the two never
@@ -151,7 +151,8 @@ namespace CityGenerator.Editor
                     hash = hash * 31 + cell.GetHashCode();
                 foreach (Vector2Int cell in settings.general.plazaCells)
                     hash = hash * 31 + cell.GetHashCode();
-                hash = hash * 31 + (settings.props.trafficLightPrefab != null ? settings.props.trafficLightPrefab.GetEntityId().GetHashCode() : 0);
+                hash = hash * 31 + (settings.props.TrafficLightPrefab != null ? settings.props.TrafficLightPrefab.GetEntityId().GetHashCode() : 0);
+                hash = hash * 31 + (int)settings.props.trafficLightSide;
                 foreach (CustomPlaceEntry place in settings.customPlaces)
                 {
                     hash = hash * 31 + place.blockCell.GetHashCode();

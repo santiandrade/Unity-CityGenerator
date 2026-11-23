@@ -19,8 +19,6 @@ namespace CityGenerator.Editor
     internal static class CityGeneratorDefaultAssets
     {
         private const string DefaultAssetsRoot = "Packages/com.santiandrade.citygenerator/DefaultAssets";
-        private const string LegacyTrafficLightPath = DefaultAssetsRoot + "/Prefabs/Props/TrafficLight.prefab";
-        private const string RightTrafficLightPath = DefaultAssetsRoot + "/Prefabs/Props/TrafficLight_Right.prefab";
 
         public static void ApplyTo(CityGeneratorSettings settings)
         {
@@ -59,6 +57,10 @@ namespace CityGenerator.Editor
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-C.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-D.prefab"),
                 Load($"{DefaultAssetsRoot}/Prefabs/Buildings/Building-Skyscraper-E.prefab"),
+            };
+
+            settings.districts = new List<DistrictEntry>
+            {
             };
 
             settings.vegetation.prefabs = new List<GameObject>
@@ -120,7 +122,8 @@ namespace CityGenerator.Editor
             {
             };
 
-            settings.props.trafficLightPrefab = Load(RightTrafficLightPath);
+            settings.props.rightTrafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight_Right.prefab");
+            settings.props.leftTrafficLightPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/TrafficLight_Left.prefab");
             settings.props.lampPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Lamp.prefab");
             settings.props.binPrefab = Load($"{DefaultAssetsRoot}/Prefabs/Props/Bin.prefab");
 
@@ -136,12 +139,6 @@ namespace CityGenerator.Editor
                 new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/plaza-ambiance-fountain.wav"), volume = 1f, minDistance = 4f, maxDistance = 20f },
                 new() { clip = LoadAudioClip($"{DefaultAssetsRoot}/Audio/plaza-ambiance-birds.wav"), volume = 1f, minDistance = 20f, maxDistance = 50f },
             };
-        }
-
-        internal static GameObject ResolveTrafficLightPrefab(GameObject prefab)
-        {
-            // Saved settings can still reference the original built-in prefab.
-            return AssetDatabase.GetAssetPath(prefab) == LegacyTrafficLightPath ? Load(RightTrafficLightPath) : prefab;
         }
 
         private static GameObject Load(string path) => AssetDatabase.LoadAssetAtPath<GameObject>(path);

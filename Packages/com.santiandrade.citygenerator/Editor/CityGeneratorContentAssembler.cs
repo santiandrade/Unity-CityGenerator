@@ -120,7 +120,7 @@ namespace CityGenerator.Editor
                 CityGeneratorCustomPlaceBuilder.BuildCustomPlaces(settings.customPlaces, blocks, customPlaces);
 
             Report("Buildings", 0.25f);
-            List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random, reservedSlots);
+            List<GameObject> builtBuildings = CityGeneratorBuildingBuilder.BuildBuildings(settings.buildingPrefabs, buildings, blocks, settings.general.buildingsPerBlock, random, reservedSlots, settings.districts);
 
             // Street furniture avoids buildings/plaza content, the plaza lawns, and each other via
             // one shared, growing obstacle list threaded through every category in turn; the cache
@@ -163,13 +163,13 @@ namespace CityGenerator.Editor
             if (settings.general.useCustomGrid)
             {
                 network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup);
-                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, settings.general.customBlockCells, random);
+                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, trafficLights, settings.general.customBlockCells, random);
                 network.BuildFromBlockCells(settings.general.customBlockCells);
             }
             else
             {
                 network = CityGeneratorTrafficBuilder.AddNetworkComponent(trafficNetworkGroup, gridWidth, gridHeight);
-                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.trafficLightPrefab, trafficLights, gridWidth, gridHeight, random);
+                trafficLightInstances = CityGeneratorTrafficBuilder.BuildTrafficLights(settings.props.TrafficLightPrefab, settings.props.trafficLightSide, trafficLights, gridWidth, gridHeight, random);
                 network.Build();
             }
 

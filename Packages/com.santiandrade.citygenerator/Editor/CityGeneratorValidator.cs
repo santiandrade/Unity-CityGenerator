@@ -98,8 +98,11 @@ namespace CityGenerator.Editor
                     issues.Add(new CityGeneratorValidationIssue("buildingPrefabs", $"Buildings: entry {i + 1} ('{buildingPrefab.name}') has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
             }
 
-            if (settings.props.trafficLightPrefab != null && settings.props.trafficLightPrefab.GetComponentInChildren<Renderer>() == null)
-                issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+            GameObject trafficLightPrefab = settings.props.TrafficLightPrefab;
+            string trafficLightPath = settings.props.TrafficLightPrefabPath;
+            string trafficLightLabel = settings.props.trafficLightSide == TrafficLightSide.Left ? "Left Traffic Light" : "Right Traffic Light";
+            if (trafficLightPrefab != null && trafficLightPrefab.GetComponentInChildren<Renderer>() == null)
+                issues.Add(new CityGeneratorValidationIssue(trafficLightPath, $"Props: {trafficLightLabel} prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
             if (settings.props.lampPrefab != null && settings.props.lampPrefab.GetComponentInChildren<Renderer>() == null)
                 issues.Add(new CityGeneratorValidationIssue("props.lampPrefab", "Props: Lamp prefab has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
             if (settings.props.binPrefab != null && settings.props.binPrefab.GetComponentInChildren<Renderer>() == null)
@@ -123,13 +126,13 @@ namespace CityGenerator.Editor
                 : CityGeneratorTrafficBuilder.HasSignalledIntersection(settings.general.gridWidth, settings.general.gridHeight);
             if (hasSignalledIntersection)
             {
-                if (settings.props.trafficLightPrefab == null)
+                if (trafficLightPrefab == null)
                 {
-                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab is required when the grid has at least one signalled intersection (a 4-way, or a T-intersection along the grid's border)."));
+                    issues.Add(new CityGeneratorValidationIssue(trafficLightPath, $"Props: {trafficLightLabel} prefab is required when the grid has at least one signalled intersection (a 4-way, or a T-intersection along the grid's border)."));
                 }
-                else if (settings.props.trafficLightPrefab.GetComponent<Runtime.TrafficLight>() == null)
+                else if (trafficLightPrefab.GetComponent<Runtime.TrafficLight>() == null)
                 {
-                    issues.Add(new CityGeneratorValidationIssue("props.trafficLightPrefab", "Props: Traffic Light prefab must have a TrafficLight component."));
+                    issues.Add(new CityGeneratorValidationIssue(trafficLightPath, $"Props: {trafficLightLabel} prefab must have a TrafficLight component."));
                 }
             }
 
@@ -233,6 +236,7 @@ namespace CityGenerator.Editor
             if (settings.crowd.staggerDistance < 0f)
                 issues.Add(new CityGeneratorValidationIssue("crowd.staggerDistance", "Crowd: Stagger Distance must not be negative."));
 
+            ValidateDistricts(settings, issues);
             ValidateCustomPlaces(settings, issues);
             ValidateCustomPedestrians(settings, issues, pedestrianPreview);
             ValidateMinimap(settings, issues);
@@ -305,6 +309,113 @@ namespace CityGenerator.Editor
                 issues.Add(new CityGeneratorValidationIssue("minimap.viewRadiusMeters",
                     $"Minimap: View Radius ({settings.minimap.viewRadiusMeters:0.#}m) is larger than the snapshot's covered world size (~{coveredHalfExtent:0.#}m half-extent) — the HUD could never zoom out far enough to show it.",
                     isWarning: true));
+        }
+
+        /// <summary>
+        /// SPEC 21. Blocking: a missing or duplicate name (trimmed, case-insensitive), no blocks,
+        /// a block outside the grid / no longer in the Custom Grid shape, a plaza block, a block
+        /// claimed by two districts, or no usable building prefab. A stray null entry or a prefab
+        /// with no Renderer only warns, worded like the base Buildings list. A block that stops
+        /// existing when the grid changes is reported rather than pruned, so the user never loses
+        /// or keeps data without knowing.
+        /// </summary>
+        private static void ValidateDistricts(CityGeneratorSettings settings, List<CityGeneratorValidationIssue> issues)
+        {
+            List<DistrictEntry> districts = settings.districts;
+            if (districts == null || districts.Count == 0)
+                return;
+
+            var plazaLookup = new HashSet<Vector2Int>(settings.general.plazaCells);
+            var customBlockLookup = settings.general.useCustomGrid ? new HashSet<Vector2Int>(settings.general.customBlockCells) : null;
+            var ownerByCell = new Dictionary<Vector2Int, int>();
+
+            for (int i = 0; i < districts.Count; i++)
+            {
+                DistrictEntry entry = districts[i];
+                bool hasName = !string.IsNullOrWhiteSpace(entry.name);
+                string label = hasName ? $"'{entry.name.Trim()}'" : $"entry {i + 1}";
+
+                if (!hasName)
+                    issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: entry {i + 1} needs a name."));
+
+                if (entry.cells == null || entry.cells.Count == 0)
+                {
+                    issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} has no blocks — click at least one block in its grid preview."));
+                }
+                else
+                {
+                    var seenInEntry = new HashSet<Vector2Int>();
+                    foreach (Vector2Int cell in entry.cells)
+                    {
+                        if (!seenInEntry.Add(cell))
+                            continue;
+
+                        if (settings.general.useCustomGrid)
+                        {
+                            if (!customBlockLookup.Contains(cell))
+                            {
+                                issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block ({cell.x}, {cell.y}), which no longer exists in the custom grid shape."));
+                                continue;
+                            }
+                        }
+                        else if (cell.x < 0 || cell.x >= settings.general.gridWidth || cell.y < 0 || cell.y >= settings.general.gridHeight)
+                        {
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block ({cell.x}, {cell.y}), outside the {settings.general.gridWidth}x{settings.general.gridHeight} grid."));
+                            continue;
+                        }
+
+                        if (plazaLookup.Contains(cell))
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block ({cell.x}, {cell.y}), which is a plaza block."));
+
+                        if (ownerByCell.TryGetValue(cell, out int owner))
+                        {
+                            DistrictEntry other = districts[owner];
+                            string otherLabel = string.IsNullOrWhiteSpace(other.name) ? $"entry {owner + 1}" : $"'{other.name.Trim()}'";
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: block ({cell.x}, {cell.y}) belongs to both {otherLabel} and {label} — a block can belong to one district at most."));
+                        }
+                        else
+                        {
+                            ownerByCell[cell] = i;
+                        }
+                    }
+                }
+
+                bool hasUsablePrefab = false;
+                if (entry.buildingPrefabs != null)
+                {
+                    for (int p = 0; p < entry.buildingPrefabs.Count; p++)
+                    {
+                        GameObject prefab = entry.buildingPrefabs[p];
+                        if (prefab == null)
+                        {
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} building entry {p + 1} is empty and will be skipped.", isWarning: true));
+                            continue;
+                        }
+
+                        hasUsablePrefab = true;
+                        if (prefab.GetComponentInChildren<Renderer>() == null)
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} building entry {p + 1} ('{prefab.name}') has no Renderer in its hierarchy, so its footprint falls back to a fake 0.5m size.", isWarning: true));
+                    }
+                }
+
+                if (!hasUsablePrefab)
+                    issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} needs at least one building prefab."));
+            }
+
+            for (int i = 0; i < districts.Count; i++)
+            {
+                if (string.IsNullOrWhiteSpace(districts[i].name))
+                    continue;
+
+                for (int j = i + 1; j < districts.Count; j++)
+                {
+                    if (string.IsNullOrWhiteSpace(districts[j].name)
+                        || !string.Equals(districts[i].name.Trim(), districts[j].name.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: entries {i + 1} and {j + 1} both use the name '{districts[i].name.Trim()}' — names must be unique."));
+                }
+            }
         }
 
         /// <summary>
