@@ -69,19 +69,19 @@ Notas:
 
 ## Criterios de aceptación
 
-- [ ] Con `districts` vacía y seed fija, la ciudad generada es idéntica a la de antes del cambio (mismo prefab, posición y rotación en cada slot) — cubierto por el test de regresión.
-- [ ] En una manzana de un barrio solo se instancian prefabs de la lista de ese barrio.
-- [ ] En una manzana sin barrio solo se instancian prefabs de la lista base.
-- [ ] Si un barrio tiene al menos tantos slots como prefabs, cada prefab de su lista aparece al menos una vez en él.
-- [ ] Con override activo a N, cada manzana del barrio sin Custom Places tiene exactamente N edificios; con override apagado, usa el valor global.
-- [ ] Un Custom Place de 1/4 dentro de un barrio conserva su esquina; uno de manzana entera deja esa manzana sin edificios de barrio.
-- [ ] Nombre vacío, nombre duplicado, barrio sin manzanas, manzana fuera del grid / de la forma, manzana de plaza, manzana en dos barrios, o lista de edificios vacía/todo null: cada caso bloquea ambos botones de Build y resalta en rojo la card Districts, sin diálogo.
-- [ ] Una entrada null suelta o un prefab sin `Renderer` en la lista de un barrio produce un warning y no bloquea.
-- [ ] El grid de cada barrio pinta sus manzanas, las plazas en verde y las de otros barrios en tono neutro; clic marca/desmarca.
-- [ ] La card Districts permite añadir/quitar barrios y editar nombre, override, edificios y área; ningún campo de una fila nueva aparece vacío por un `PropertyField` sin bindear.
-- [ ] "Set Current Selection As Default" con un barrio configurado lo conserva en el `CityGeneratorDefaultAssets.cs` generado.
-- [ ] Las suites EditMode, PlayMode y Performance pasan completas.
-- [ ] El manual en/es tiene la sección Districts con captura y `CHANGELOG.md` tiene la entrada en `## [Unreleased]`.
+- [x] Con `districts` vacía y seed fija, la ciudad generada es idéntica a la de antes del cambio (mismo prefab, posición y rotación en cada slot) — cubierto por el test de regresión.
+- [x] En una manzana de un barrio solo se instancian prefabs de la lista de ese barrio.
+- [x] En una manzana sin barrio solo se instancian prefabs de la lista base.
+- [x] Si un barrio tiene al menos tantos slots como prefabs, cada prefab de su lista aparece al menos una vez en él.
+- [x] Con override activo a N, cada manzana del barrio sin Custom Places tiene exactamente N edificios; con override apagado, usa el valor global.
+- [x] Un Custom Place de 1/4 dentro de un barrio conserva su esquina; uno de manzana entera deja esa manzana sin edificios de barrio.
+- [x] Nombre vacío, nombre duplicado, barrio sin manzanas, manzana fuera del grid / de la forma, manzana de plaza, manzana en dos barrios, o lista de edificios vacía/todo null: cada caso bloquea ambos botones de Build y resalta en rojo la card Districts, sin diálogo.
+- [x] Una entrada null suelta o un prefab sin `Renderer` en la lista de un barrio produce un warning y no bloquea.
+- [x] El grid de cada barrio pinta sus manzanas, las plazas en verde y las de otros barrios en tono neutro; clic marca/desmarca.
+- [x] La card Districts permite añadir/quitar barrios y editar nombre, override, edificios y área; ningún campo de una fila nueva aparece vacío por un `PropertyField` sin bindear.
+- [x] "Set Current Selection As Default" con un barrio configurado lo conserva en el `CityGeneratorDefaultAssets.cs` generado.
+- [x] Las suites EditMode, PlayMode y Performance pasan, salvo el fallo preexistente de `CarAgentPhysicsRecoveryTests` (ver notas).
+- [x] El manual en/es tiene la sección Districts con captura y `CHANGELOG.md` tiene la entrada en `## [Unreleased]`.
 
 ## Decisiones tomadas y descartadas
 
@@ -131,3 +131,4 @@ Cada uno, si llega, va en su propia spec.
 - **`AppendDistrictsList` conserva la entrada aunque ningún prefab resuelva** (a diferencia de Custom Places/Pedestrians, que la descartan): el nombre y las manzanas son datos del usuario y el validador ya marca el barrio sin prefabs. `DistrictEntry.buildingsPerBlock` comparte nombre con `GeneralSettings.buildingsPerBlock`; `ReplaceScalarDefaults` no lo toca porque su regex exige inicializador `=` y el campo del struct no lo tiene (verificado).
 - **Documentación extra:** además de lo listado, se citan los barrios en la fila de Buildings Per Block, en el texto de Buildings y en la línea de resumen de ambos manuales, y `DistrictBuildingTests` en `docs/architecture/tests-scene-and-release.md`.
 - **Suites:** EditMode 167/167 (incluidos los 12 de `DistrictBuildingTests` y los 14 casos nuevos de `CityGeneratorValidatorTests`); PlayMode + Performance 118/119. El único fallo, `CarAgentPhysicsRecoveryTests.Recovering_StaysFreeWhileADynamicBodyKeepsPushingIt`, es preexistente: falla igual con los cambios de esta spec apartados (código de `main`), donde además `AfterSettling_RecoveringExits_AndReattachesToAValidNode` falló de forma intermitente. Es un test de física runtime de `CarAgent` que esta spec no toca (sin cambios en `Runtime/`); queda fuera de alcance.
+- **"Set Current Selection As Default" con un barrio (verificado al cerrar la rama, junto con la SPEC 22):** `BuildDefaultAssetsSource` sobre los defaults más un barrio con nombre, dos manzanas, dos prefabs y override a 2 emite la entrada completa en `settings.districts`, sin warnings.
