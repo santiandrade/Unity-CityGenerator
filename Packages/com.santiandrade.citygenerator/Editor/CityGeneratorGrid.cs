@@ -39,6 +39,47 @@ namespace CityGenerator.Editor
             return (index - count / 2f) * CityGeneratorConstants.CellPitch;
         }
 
+        /// <summary>
+        /// Number of rows the grid previews draw, and so the count rows are numbered against: the
+        /// fixed <see cref="CityGeneratorConstants.MaxGridSize"/> canvas in Custom Grid mode, Grid
+        /// Height otherwise.
+        /// </summary>
+        public static int DisplayRowCount(bool useCustomGrid, int gridHeight) =>
+            useCustomGrid ? CityGeneratorConstants.MaxGridSize : Mathf.Max(1, gridHeight);
+
+        /// <summary>
+        /// 1-based row shown for a block whose grid Y is <paramref name="gridY"/>, on a board of
+        /// <paramref name="rowCount"/> rows (<see cref="DisplayRowCount"/>): rows count top-down, so
+        /// row 1 is the highest +Z row, the one drawn at the top of every preview. On a rectangular
+        /// grid a block's row number therefore changes when Grid Height does.
+        /// </summary>
+        public static int DisplayRow(int gridY, int rowCount) => rowCount - gridY;
+
+        /// <summary>1-based column shown for a block whose grid X is <paramref name="gridX"/>: columns count left to right (+X).</summary>
+        public static int DisplayColumn(int gridX) => gridX + 1;
+
+        /// <summary>
+        /// User-facing name of a block: "(row, column)", 1-based, exactly the numbers the grid
+        /// previews' axis labels show for a board of <paramref name="rowCount"/> rows
+        /// (<see cref="DisplayRowCount"/>). The stored <see cref="Vector2Int"/> stays (x = column,
+        /// y = row counted from the bottom, 0-based); this and <see cref="DisplayRow"/> are the only
+        /// places that translate it for display, so the boards and the validator's messages can
+        /// never name the same block differently.
+        /// </summary>
+        public static string FormatCell(Vector2Int cell, int rowCount) => $"({DisplayRow(cell.y, rowCount)}, {DisplayColumn(cell.x)})";
+
+        /// <summary>
+        /// Names a block that lies outside a rectangular grid, for the validator's "outside the
+        /// grid" messages: "block (row, column)" while its row still exists, but just "a block in
+        /// column N" once the row itself is out of range -- rows count top-down from Grid Height
+        /// (<see cref="DisplayRow"/>), so a row left above the grid after shrinking it would
+        /// otherwise be printed as row 0 or a negative number.
+        /// </summary>
+        public static string FormatCellOutsideGrid(Vector2Int cell, int rowCount) =>
+            cell.y >= 0 && cell.y < rowCount
+                ? $"block {FormatCell(cell, rowCount)}"
+                : $"a block in column {DisplayColumn(cell.x)}";
+
         public static Vector3 GetBlockCenter(int gridX, int gridY, int gridWidth, int gridHeight)
         {
             return new Vector3(GetBlockAxisPosition(gridWidth, gridX), 0f, GetBlockAxisPosition(gridHeight, gridY));

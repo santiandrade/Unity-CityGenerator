@@ -327,6 +327,8 @@ namespace CityGenerator.Editor
 
             var plazaLookup = new HashSet<Vector2Int>(settings.general.plazaCells);
             var customBlockLookup = settings.general.useCustomGrid ? new HashSet<Vector2Int>(settings.general.customBlockCells) : null;
+            // Blocks are named with the same (row, column) numbers the grid previews show.
+            int displayRowCount = CityGeneratorGrid.DisplayRowCount(settings.general.useCustomGrid, settings.general.gridHeight);
             var ownerByCell = new Dictionary<Vector2Int, int>();
 
             for (int i = 0; i < districts.Count; i++)
@@ -354,24 +356,24 @@ namespace CityGenerator.Editor
                         {
                             if (!customBlockLookup.Contains(cell))
                             {
-                                issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block ({cell.x}, {cell.y}), which no longer exists in the custom grid shape."));
+                                issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block {CityGeneratorGrid.FormatCell(cell, displayRowCount)}, which no longer exists in the custom grid shape."));
                                 continue;
                             }
                         }
                         else if (cell.x < 0 || cell.x >= settings.general.gridWidth || cell.y < 0 || cell.y >= settings.general.gridHeight)
                         {
-                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block ({cell.x}, {cell.y}), outside the {settings.general.gridWidth}x{settings.general.gridHeight} grid."));
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes {CityGeneratorGrid.FormatCellOutsideGrid(cell, displayRowCount)}, outside the grid ({settings.general.gridHeight} rows x {settings.general.gridWidth} columns)."));
                             continue;
                         }
 
                         if (plazaLookup.Contains(cell))
-                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block ({cell.x}, {cell.y}), which is a plaza block."));
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: {label} includes block {CityGeneratorGrid.FormatCell(cell, displayRowCount)}, which is a plaza block."));
 
                         if (ownerByCell.TryGetValue(cell, out int owner))
                         {
                             DistrictEntry other = districts[owner];
                             string otherLabel = string.IsNullOrWhiteSpace(other.name) ? $"entry {owner + 1}" : $"'{other.name.Trim()}'";
-                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: block ({cell.x}, {cell.y}) belongs to both {otherLabel} and {label} — a block can belong to one district at most."));
+                            issues.Add(new CityGeneratorValidationIssue("districts", $"Districts: block {CityGeneratorGrid.FormatCell(cell, displayRowCount)} belongs to both {otherLabel} and {label} — a block can belong to one district at most."));
                         }
                         else
                         {
@@ -430,6 +432,8 @@ namespace CityGenerator.Editor
             List<CustomPlaceEntry> customPlaces = settings.customPlaces;
             var plazaLookup = new HashSet<Vector2Int>(settings.general.plazaCells);
             var customBlockLookup = settings.general.useCustomGrid ? new HashSet<Vector2Int>(settings.general.customBlockCells) : null;
+            // Blocks are named with the same (row, column) numbers the grid previews show.
+            int displayRowCount = CityGeneratorGrid.DisplayRowCount(settings.general.useCustomGrid, settings.general.gridHeight);
 
             for (int i = 0; i < customPlaces.Count; i++)
             {
@@ -451,18 +455,18 @@ namespace CityGenerator.Editor
                 if (settings.general.useCustomGrid)
                 {
                     if (!customBlockLookup.Contains(entry.blockCell))
-                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which no longer exists in the custom grid shape."));
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block {CityGeneratorGrid.FormatCell(entry.blockCell, displayRowCount)}, which no longer exists in the custom grid shape."));
                     else if (plazaLookup.Contains(entry.blockCell))
-                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which is a plaza block."));
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block {CityGeneratorGrid.FormatCell(entry.blockCell, displayRowCount)}, which is a plaza block."));
                 }
                 else
                 {
                     bool inGrid = entry.blockCell.x >= 0 && entry.blockCell.x < settings.general.gridWidth
                         && entry.blockCell.y >= 0 && entry.blockCell.y < settings.general.gridHeight;
                     if (!inGrid)
-                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), outside the {settings.general.gridWidth}x{settings.general.gridHeight} grid."));
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at {CityGeneratorGrid.FormatCellOutsideGrid(entry.blockCell, displayRowCount)}, outside the grid ({settings.general.gridHeight} rows x {settings.general.gridWidth} columns)."));
                     else if (plazaLookup.Contains(entry.blockCell))
-                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block ({entry.blockCell.x}, {entry.blockCell.y}), which is a plaza block."));
+                        issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {label} points at block {CityGeneratorGrid.FormatCell(entry.blockCell, displayRowCount)}, which is a plaza block."));
                 }
             }
 
@@ -484,7 +488,7 @@ namespace CityGenerator.Editor
 
                     string labelA = string.IsNullOrEmpty(a.title) ? $"entry {i + 1}" : $"'{a.title}'";
                     string labelB = string.IsNullOrEmpty(b.title) ? $"entry {j + 1}" : $"'{b.title}'";
-                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {labelA} and {labelB} both claim the same slot in block ({a.blockCell.x}, {a.blockCell.y})."));
+                    issues.Add(new CityGeneratorValidationIssue("customPlaces", $"Custom Places: {labelA} and {labelB} both claim the same slot in block {CityGeneratorGrid.FormatCell(a.blockCell, displayRowCount)}."));
                 }
             }
 

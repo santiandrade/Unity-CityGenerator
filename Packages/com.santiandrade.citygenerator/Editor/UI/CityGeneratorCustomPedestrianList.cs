@@ -76,6 +76,8 @@ namespace CityGenerator.Editor.UI
                     entry.FindPropertyRelative("selectedNodeIndices"),
                     entry.FindPropertyRelative("graphFingerprint"),
                     onChanged);
+                // Plazas/districts/Custom Places don't all rebuild the graph, so repaint regardless.
+                gridPreviews[i].Refresh();
             }
         }
 
@@ -146,10 +148,11 @@ namespace CityGenerator.Editor.UI
                 var preview = new CityGeneratorGridPreview();
                 if (pedestrianPreview != null)
                     preview.BindNodeGraph(pedestrianPreview, selectedNodeIndicesProperty, fingerprintProperty, onChanged);
+                preview.SetOccupancy(CityGeneratorGridOccupancy.SettingsRootOf(listProperty));
                 row.Add(preview);
                 gridPreviews.Add(preview);
 
-                var hint = new Label("Click a line above to add/remove that zone from this entry's route. Only a zone sharing a point with the current selection can be added, except the first. Ring edge = green, crossing = orange, interior spoke = blue; selected zones are highlighted in yellow.");
+                var hint = new Label("Click a line above to add/remove that zone from this entry's route. Only a zone sharing a point with the current selection can be added, except the first. Ring edge = green, crossing = orange, interior spoke = blue; selected zones are highlighted in yellow. The blocks underneath show plazas (green), districts (their colours) and Custom Places (white squares). " + CityGeneratorGridPreview.AxisHint);
                 hint.AddToClassList("cg-grid-preview__caption");
                 row.Add(hint);
 

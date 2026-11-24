@@ -781,6 +781,24 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             AssertBlockingDistrictIssue(valid, issues);
+            // Its row still exists (row 1 of a 1-row grid), so the block is named (row, column).
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("block (1, 2), outside the grid")));
+        }
+
+        [Test]
+        public void ValidateDetailed_DistrictBlockAboveGrid_NamesOnlyItsColumn()
+        {
+            CityGeneratorSettings settings = MakeMinimalValidSettings();
+            DistrictEntry entry = MakeValidDistrict("Downtown");
+            entry.cells.Add(new Vector2Int(0, 2)); // a row left above a 1-row grid after shrinking it
+            settings.districts.Add(entry);
+
+            bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
+
+            AssertBlockingDistrictIssue(valid, issues);
+            // Rows count top-down from Grid Height, so that row has no valid number to print.
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("a block in column 1, outside the grid")));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("block (")));
         }
 
         [Test]
@@ -797,8 +815,10 @@ namespace CityGenerator.Tests.EditMode
             bool valid = CityGeneratorValidator.ValidateDetailed(settings, out List<CityGeneratorValidationIssue> issues);
 
             AssertBlockingDistrictIssue(valid, issues);
-            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("(6, 5)")));
-            Assert.IsFalse(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("(5, 5)")));
+            // Messages name a block as 1-based (row, column), rows counted top-down over the Custom
+            // Grid's 15-row canvas: cell (x 6, y 5) is row 15 - 5 = 10, column 7.
+            Assert.IsTrue(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("block (10, 7)")));
+            Assert.IsFalse(issues.Exists(i => i.settingsPath == "districts" && i.message.Contains("block (10, 6)")));
         }
 
         [Test]

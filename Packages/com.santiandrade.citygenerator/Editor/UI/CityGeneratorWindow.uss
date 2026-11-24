@@ -209,8 +209,22 @@
 .cg-grid-preview__caption {
     color: var(--cg-text-muted);
     font-size: 11px;
+    white-space: normal;
     -unity-text-align: middle-center;
     margin-bottom: 6px;
+}
+
+/* Row/column numbers in the gutter CityGeneratorGridPreview leaves left of and below every board;
+   positioned (left/top/width/height) from code, so only their look lives here. */
+.cg-grid-preview__axis-label {
+    position: absolute;
+    color: var(--cg-text-muted);
+    font-size: 9px;
+    margin: 0;
+    padding: 0;
+    -unity-font-style: normal;
+    white-space: nowrap;
+    overflow: visible;
 }
 
 .cg-summary-line {
@@ -465,6 +479,15 @@
 
 .cg-custom-place-list__row-header .cg-field-row {
     flex-grow: 1;
+}
+
+/* A district row's colour, matching how that district is painted on every grid preview. */
+.cg-district-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    margin-left: 4px;
 }
 
 .cg-custom-place-list__remove {
