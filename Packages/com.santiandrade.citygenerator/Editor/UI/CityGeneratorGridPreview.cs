@@ -20,7 +20,7 @@ namespace CityGenerator.Editor.UI
         CustomAreaEdit,
         /// <summary>A Custom Pedestrian entry's own picker (SPEC 12): draws the real pedestrian graph (Ring/Curb/Crossing/Interior) grouped into clickable line zones instead of blocks or raw nodes; clicking a zone adds/removes all of its underlying nodes from the entry's selectedNodeIndices subgraph.</summary>
         NodeGraphPicker,
-        /// <summary>A District entry's own picker (SPEC 21): clicking a cell toggles it in that district's cells list. Plazas (SetPlazaMask) and other districts' blocks (SetOccupiedMask) are only painted as a reference and stay clickable -- an overlap is the validator's to report.</summary>
+        /// <summary>A District entry's own picker (SPEC 21): clicking a cell toggles it in that district's cells list. Plazas, other districts and Custom Places are only painted as a reference (see SetOccupancy) and stay clickable -- an overlap is the validator's to report.</summary>
         DistrictMultiToggle,
     }
 
@@ -33,6 +33,14 @@ namespace CityGenerator.Editor.UI
     /// out of sync with the picture. In <see cref="CityGeneratorGridPreviewMode.SingleSelectQuadrant"/>
     /// mode it instead picks a single block (and, unless occupying the full block, one of its 4
     /// corner quadrants) for one Custom Place entry.
+    ///
+    /// Every mode shares two overlays: the occupancy layer (<see cref="SetOccupancy"/>: plazas,
+    /// every District in its own colour and every positioned Custom Place as a mark over its slot),
+    /// so each board shows what all the others have claimed, and 1-based row/column axis labels
+    /// (rows top-down, the same numbers <see cref="CityGeneratorGrid.FormatCell"/> prints in the
+    /// validator's messages). The labels are child <see cref="Label"/>s placed in a gutter left of
+    /// and above the board, and every mode's drawing and hit-testing is laid out to leave that
+    /// gutter free, through <see cref="TryComputeCellLayout"/> / <see cref="TryComputeNodeGraphLayout"/>.
     /// </summary>
     internal class CityGeneratorGridPreview : VisualElement
     {
@@ -63,14 +71,84 @@ namespace CityGenerator.Editor.UI
 
         // DistrictMultiToggle mode.
         private SerializedProperty districtCellsProperty;
-        private Func<HashSet<Vector2Int>> occupiedCellsGetter;
+
+        // Occupancy overlay, shared by every mode.
+        private SerializedProperty occupancySource;
+        private CityGeneratorGridOccupancyOwner occupancyOwner = CityGeneratorGridOccupancyOwner.None;
+        private int occupancyOwnerIndex = -1;
+
+        // Axis labels: pooled child Labels, repositioned only when their layout key changes.
+        private readonly List<Label> rowLabels = new();
+        private readonly List<Label> columnLabels = new();
+        private AxisLabelKey lastAxisLabelKey;
+        private bool hasAxisLabelKey;
+
+        // Shown when the pointer is over no cell (gutter, street). Deliberately NOT the element's own
+        // `tooltip` property: VisualElement answers a TooltipEvent with that property itself and it
+        // overrides whatever OnTooltip wrote, even after StopImmediatePropagation, so a non-empty
+        // `tooltip` hides every per-cell tooltip.
+        private string instructionTooltip;
+
+        // Last pointer position over this board, for the per-cell tooltip (TooltipEvent carries none).
+        private Vector2 lastPointerLocal;
+        private bool hasPointer;
+
+        // Gutter reserved left of (row numbers) and above (column numbers) the board for the axis labels.
+        private const float RowLabelGutter = 16f;
+        private const float ColumnLabelGutter = 13f;
+
+        private static readonly Color StreetColor = new(0f, 0f, 0f, 0.15f);
+        private static readonly Color BlockColor = new(0.5f, 0.5f, 0.5f, 0.35f);
+        private static readonly Color HoleColor = new(0.5f, 0.5f, 0.5f, 0.08f);
+        private static readonly Color PlazaColor = new(0.35f, 0.75f, 0.4f, 0.7f);
+        private static readonly Color IconColor = new(1f, 1f, 1f, 0.9f);
+        private static readonly Color OwnDistrictOutlineColor = new(1f, 1f, 1f, 0.9f);
+        private static readonly Color OwnCustomPlaceFill = new(0.95f, 0.6f, 0.15f, 0.95f);
+        private static readonly Color OwnCustomPlaceOutline = new(1f, 1f, 1f, 0.95f);
+        private static readonly Color OtherCustomPlaceFill = new(1f, 1f, 1f, 0.45f);
+        private static readonly Color OtherCustomPlaceOutline = new(0.1f, 0.1f, 0.1f, 0.8f);
+        private const float OwnDistrictAlpha = 0.85f;
+        private const float OtherDistrictAlpha = 0.5f;
+
+        // One colour per District, by its index in the list (cycled past the end). Deliberately
+        // avoids green (plazas) and orange (the Custom Place being edited).
+        private static readonly Color[] DistrictPalette =
+        {
+            new(0.30f, 0.55f, 0.95f), // blue
+            new(0.70f, 0.40f, 0.90f), // purple
+            new(0.90f, 0.35f, 0.60f), // magenta
+            new(0.20f, 0.75f, 0.85f), // cyan
+            new(0.85f, 0.25f, 0.25f), // red
+            new(0.60f, 0.45f, 0.30f), // brown
+            new(0.45f, 0.55f, 0.70f), // slate
+            new(0.15f, 0.50f, 0.55f), // dark teal
+        };
+
+        /// <summary>Caption sentence every board's hint ends with, explaining the axis labels.</summary>
+        public const string AxisHint = "Rows are numbered top-down and columns left to right; validation messages name a block as (row, column). Hover a block to see what is on it.";
+
+        /// <summary>The colour every board paints District <paramref name="districtIndex"/> with, so a district row can show a matching swatch.</summary>
+        public static Color DistrictColor(int districtIndex, float alpha = 1f)
+        {
+            Color color = DistrictPalette[Mathf.Abs(districtIndex) % DistrictPalette.Length];
+            color.a = alpha;
+            return color;
+        }
 
         public CityGeneratorGridPreview()
         {
             AddToClassList("cg-grid-preview");
-            tooltip = "Click a block to toggle it as a plaza.";
+            instructionTooltip = "Click a block to toggle it as a plaza.";
             generateVisualContent += OnGenerateVisualContent;
             RegisterCallback<PointerDownEvent>(OnPointerDown);
+            RegisterCallback<GeometryChangedEvent>(_ => UpdateAxisLabels());
+            RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                lastPointerLocal = evt.localPosition;
+                hasPointer = true;
+            });
+            RegisterCallback<PointerLeaveEvent>(_ => hasPointer = false);
+            RegisterCallback<TooltipEvent>(OnTooltip);
         }
 
         /// <summary>Binds this preview as the plaza editor. Call once; <see cref="SetGrid"/> drives repaints/pruning afterwards.</summary>
@@ -79,7 +157,7 @@ namespace CityGenerator.Editor.UI
             mode = CityGeneratorGridPreviewMode.PlazaMultiToggle;
             this.plazaCellsProperty = plazaCellsProperty;
             this.onChanged = onChanged;
-            tooltip = "Click a block to toggle it as a plaza.";
+            instructionTooltip = "Click a block to toggle it as a plaza.";
         }
 
         /// <summary>
@@ -97,7 +175,7 @@ namespace CityGenerator.Editor.UI
             this.positionAssignedProperty = positionAssignedProperty;
             this.occupiesFullBlockGetter = occupiesFullBlockGetter;
             this.onChanged = onChanged;
-            tooltip = "Click a block to place this entry there; click a corner of the block for a quadrant slot.";
+            instructionTooltip = "Click a block to place this entry there; click a corner of the block for a quadrant slot.";
         }
 
         /// <summary>
@@ -110,7 +188,7 @@ namespace CityGenerator.Editor.UI
             mode = CityGeneratorGridPreviewMode.CustomAreaEdit;
             shapeCellsProperty = customBlockCellsProperty;
             this.onChanged = onChanged;
-            tooltip = "Click a \"+\" to add a block, or a \"-\" to remove one.";
+            instructionTooltip = "Click a \"+\" to add a block, or a \"-\" to remove one.";
         }
 
         /// <summary>
@@ -135,7 +213,7 @@ namespace CityGenerator.Editor.UI
             this.selectedNodeIndicesProperty = selectedNodeIndicesProperty;
             this.graphFingerprintProperty = graphFingerprintProperty;
             this.onChanged = onChanged;
-            tooltip = "Click a line to add/remove the zone it represents from this entry's route. Only a zone sharing a node with the current selection can be added, except the first.";
+            instructionTooltip = "Click a line to add/remove the zone it represents from this entry's route. Only a zone sharing a node with the current selection can be added, except the first.";
 
             if (preview != null && selectedNodeIndicesProperty != null && graphFingerprintProperty != null)
             {
@@ -150,6 +228,7 @@ namespace CityGenerator.Editor.UI
                 }
             }
 
+            UpdateAxisLabels();
             MarkDirtyRepaint();
         }
 
@@ -164,18 +243,25 @@ namespace CityGenerator.Editor.UI
             mode = CityGeneratorGridPreviewMode.DistrictMultiToggle;
             this.districtCellsProperty = districtCellsProperty;
             this.onChanged = onChanged;
-            tooltip = "Click a block to add it to, or remove it from, this district.";
+            instructionTooltip = "Click a block to add it to, or remove it from, this district.";
             MarkDirtyRepaint();
         }
 
         /// <summary>
-        /// DistrictMultiToggle mode only: blocks already claimed by other districts, painted in a
-        /// neutral tone as a reference. Read at paint time, so it never goes stale between
-        /// repaints. Pass <c>null</c> to disable.
+        /// Overlays everything that claims a block -- plazas (green), every District (its own
+        /// colour, <see cref="DistrictColor"/>) and every positioned Custom Place (a mark over its
+        /// slot) -- read from <paramref name="source"/> at paint time, so it never goes stale between
+        /// repaints. <paramref name="settings"/> is the serialized <c>CityGeneratorSettings</c>.
+        /// <paramref name="owner"/>/<paramref name="ownerIndex"/> name the layer this board
+        /// itself edits, which is highlighted instead of painted as a reference. Reference layers
+        /// never block a click: an overlap is the validator's to report. Pass a <c>null</c>
+        /// <paramref name="settings"/> to disable.
         /// </summary>
-        public void SetOccupiedMask(Func<HashSet<Vector2Int>> occupiedCellsGetter)
+        public void SetOccupancy(SerializedProperty settings, CityGeneratorGridOccupancyOwner owner = CityGeneratorGridOccupancyOwner.None, int ownerIndex = -1)
         {
-            this.occupiedCellsGetter = occupiedCellsGetter;
+            occupancySource = settings;
+            occupancyOwner = owner;
+            occupancyOwnerIndex = ownerIndex;
             MarkDirtyRepaint();
         }
 
@@ -188,17 +274,6 @@ namespace CityGenerator.Editor.UI
         public void SetShapeMask(SerializedProperty customBlockCellsProperty)
         {
             shapeCellsProperty = customBlockCellsProperty;
-            MarkDirtyRepaint();
-        }
-
-        /// <summary>
-        /// SingleSelectQuadrant/DistrictMultiToggle modes only: overlays the General Options grid's
-        /// configured plazas (<c>general.plazaCells</c>) as a reference so the user can see where
-        /// plazas already sit while placing a Custom Place or a District. Pass <c>null</c> to disable.
-        /// </summary>
-        public void SetPlazaMask(SerializedProperty plazaCellsProperty)
-        {
-            this.plazaCellsProperty = plazaCellsProperty;
             MarkDirtyRepaint();
         }
 
@@ -222,10 +297,11 @@ namespace CityGenerator.Editor.UI
             gridHeight = height;
             if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
                 PruneOutOfRangeCells();
+            UpdateAxisLabels();
             MarkDirtyRepaint();
         }
 
-        /// <summary>Forces a repaint after an external change to the bound property (e.g. occupiesFullBlock toggled elsewhere).</summary>
+        /// <summary>Forces a repaint after an external change to the bound property or to any occupancy layer (e.g. occupiesFullBlock toggled, or another board edited).</summary>
         public void Refresh() => MarkDirtyRepaint();
 
         // Cells picked while the grid was larger than it is now would otherwise linger as plazas
@@ -267,11 +343,12 @@ namespace CityGenerator.Editor.UI
                 return;
             }
 
-            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
-            float totalWidth = cellSize * gridWidth;
-            float totalHeight = cellSize * gridHeight;
-            float originX = (area.width - totalWidth) * 0.5f;
-            float originY = (area.height - totalHeight) * 0.5f;
+            if (!TryComputeCellLayout(area, out CellLayout layout))
+                return;
+
+            float cellSize = layout.CellSize;
+            float originX = layout.OriginX;
+            float originY = layout.OriginY;
 
             Vector2 local = evt.localPosition;
             int gx = Mathf.FloorToInt((local.x - originX) / cellSize);
@@ -446,20 +523,52 @@ namespace CityGenerator.Editor.UI
 
         private void OnGenerateVisualContent(MeshGenerationContext context)
         {
-            if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit)
-                DrawCustomAreaEdit(context);
-            else if (mode == CityGeneratorGridPreviewMode.PlazaMultiToggle)
-                DrawPlazaMultiToggle(context);
-            else if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
+            if (mode == CityGeneratorGridPreviewMode.NodeGraphPicker)
                 DrawZoneGraph(context);
-            else if (mode == CityGeneratorGridPreviewMode.DistrictMultiToggle)
-                DrawDistrictMultiToggle(context);
             else
-                DrawSingleSelection(context);
+                DrawCellBoard(context);
+        }
+
+        // Cell-board geometry (every mode except NodeGraphPicker): shared by drawing, hit-testing
+        // and the axis labels, so the three can never disagree about where a cell is.
+        private readonly struct CellLayout
+        {
+            public readonly float CellSize;
+            public readonly float OriginX;
+            public readonly float OriginY;
+            public readonly float TotalWidth;
+            public readonly float TotalHeight;
+
+            public CellLayout(float cellSize, float originX, float originY, float totalWidth, float totalHeight)
+            {
+                CellSize = cellSize;
+                OriginX = originX;
+                OriginY = originY;
+                TotalWidth = totalWidth;
+                TotalHeight = totalHeight;
+            }
+        }
+
+        private bool TryComputeCellLayout(Rect area, out CellLayout layout)
+        {
+            layout = default;
+            float availableWidth = area.width - RowLabelGutter;
+            float availableHeight = area.height - ColumnLabelGutter;
+            if (availableWidth <= 0f || availableHeight <= 0f)
+                return false;
+
+            float cellSize = Mathf.Min(availableWidth / gridWidth, availableHeight / gridHeight);
+            float totalWidth = cellSize * gridWidth;
+            float totalHeight = cellSize * gridHeight;
+            float originX = RowLabelGutter + (availableWidth - totalWidth) * 0.5f;
+            float originY = ColumnLabelGutter + (availableHeight - totalHeight) * 0.5f;
+
+            layout = new CellLayout(cellSize, originX, originY, totalWidth, totalHeight);
+            return true;
         }
 
         // NodeGraphPicker geometry: world XZ -> screen mapping shared by drawing and hit-testing,
-        // fit to the node bounds (there is no fixed block grid to size against in this mode).
+        // fit to the node and block bounds (there is no fixed block grid to size against in this mode).
         private readonly struct NodeGraphLayout
         {
             public readonly float minX;
@@ -498,12 +607,33 @@ namespace CityGenerator.Editor.UI
                 maxZ = Mathf.Max(maxZ, p.z);
             }
 
+            // The blocks painted under the graph reach past its outermost Ring nodes (inset
+            // PedestrianRingInset into each block), so they widen the fitted bounds too.
+            IReadOnlyList<BlockCell> blocks = pedestrianPreview.Blocks;
+            if (blocks != null)
+            {
+                float half = CityGeneratorConstants.BlockSize * 0.5f;
+                for (int i = 0; i < blocks.Count; i++)
+                {
+                    Vector3 c = blocks[i].center;
+                    minX = Mathf.Min(minX, c.x - half);
+                    maxX = Mathf.Max(maxX, c.x + half);
+                    minZ = Mathf.Min(minZ, c.z - half);
+                    maxZ = Mathf.Max(maxZ, c.z + half);
+                }
+            }
+
+            float availableWidth = area.width - RowLabelGutter;
+            float availableHeight = area.height - ColumnLabelGutter;
+            if (availableWidth <= 0f || availableHeight <= 0f)
+                return false;
+
             float spanX = Mathf.Max(0.01f, maxX - minX);
             float spanZ = Mathf.Max(0.01f, maxZ - minZ);
-            const float padding = 0.92f;
-            float scale = Mathf.Min(area.width / spanX, area.height / spanZ) * padding;
-            float originX = (area.width - spanX * scale) * 0.5f;
-            float originY = (area.height - spanZ * scale) * 0.5f;
+            const float padding = 0.96f;
+            float scale = Mathf.Min(availableWidth / spanX, availableHeight / spanZ) * padding;
+            float originX = RowLabelGutter + (availableWidth - spanX * scale) * 0.5f;
+            float originY = ColumnLabelGutter + (availableHeight - spanZ * scale) * 0.5f;
 
             layout = new NodeGraphLayout(minX, maxZ, scale, originX, originY);
             return true;
@@ -653,7 +783,14 @@ namespace CityGenerator.Editor.UI
             if (zones == null)
                 return;
 
-            Vector2 local = evt.localPosition;
+            int hitZone = FindZoneAt(zones, layout, evt.localPosition);
+            if (hitZone >= 0)
+                ToggleZone(hitZone);
+        }
+
+        // Closest zone within ZoneHitDistance of a board-local point, or -1. Shared by clicking and the hover tooltip.
+        private int FindZoneAt(List<GraphZone> zones, NodeGraphLayout layout, Vector2 local)
+        {
             int hitZone = -1;
             float bestDistance = ZoneHitDistance;
             for (int z = 0; z < zones.Count; z++)
@@ -672,8 +809,7 @@ namespace CityGenerator.Editor.UI
                 }
             }
 
-            if (hitZone >= 0)
-                ToggleZone(hitZone);
+            return hitZone;
         }
 
         private static float DistancePointToSegment(Vector2 point, Vector2 a, Vector2 b)
@@ -846,6 +982,8 @@ namespace CityGenerator.Editor.UI
                 return;
 
             Painter2D painter = context.painter2D;
+            DrawGraphBlocks(painter, layout);
+
             List<int> selected = selectedNodeIndicesProperty != null ? ReadSelectedNodeIndices() : new List<int>();
             var selectedSet = new HashSet<int>(selected);
 
@@ -861,6 +999,53 @@ namespace CityGenerator.Editor.UI
             {
                 if (IsZoneSelected(zones[z], selectedSet))
                     DrawZonePolyline(painter, layout, zones[z], selectedColor, 4f);
+            }
+        }
+
+        // Graph-picker blocks are painted fainter than on the cell boards, so the zone lines drawn
+        // over them (green/blue/orange) stay the most visible thing on the board.
+        private const float GraphBlockAlphaScale = 0.5f;
+
+        /// <summary>
+        /// Paints the preview's real blocks under the graph with the same occupancy layers as the
+        /// cell boards (plaza, District colour, Custom Place marks), at reduced alpha.
+        /// </summary>
+        private void DrawGraphBlocks(Painter2D painter, NodeGraphLayout layout)
+        {
+            IReadOnlyList<BlockCell> blocks = pedestrianPreview.Blocks;
+            if (blocks == null)
+                return;
+
+            CityGeneratorGridOccupancy occupancy = occupancySource != null ? ReadOccupancy() : null;
+            float half = CityGeneratorConstants.BlockSize * 0.5f;
+            float size = CityGeneratorConstants.BlockSize * layout.scale;
+            var blockOrigins = new Dictionary<Vector2Int, Vector2>(blocks.Count);
+
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                BlockCell block = blocks[i];
+                var cell = new Vector2Int(block.gridX, block.gridY);
+                Vector2 topLeft = NodeGraphScreenPoint(layout, block.center + new Vector3(-half, 0f, half));
+                blockOrigins[cell] = topLeft;
+
+                bool isPlaza = occupancy != null ? occupancy.PlazaCells.Contains(cell) : block.isPlaza;
+                Color fill = BlockColor;
+                if (isPlaza)
+                    fill = PlazaColor;
+                else if (occupancy != null && occupancy.TryGetDistrict(cell, -1, out int districtIndex))
+                    fill = DistrictColor(districtIndex, OtherDistrictAlpha);
+
+                fill.a *= GraphBlockAlphaScale;
+                DrawRect(painter, fill, topLeft.x, topLeft.y, size, size);
+            }
+
+            if (occupancy == null)
+                return;
+
+            foreach (CityGeneratorCustomPlaceMark mark in occupancy.CustomPlaces)
+            {
+                if (blockOrigins.TryGetValue(mark.Cell, out Vector2 topLeft))
+                    DrawCustomPlaceMark(painter, topLeft.x, topLeft.y, size, mark.OccupiesFullBlock, mark.CornerSlot, own: false, alphaScale: GraphBlockAlphaScale);
             }
         }
 
@@ -888,54 +1073,151 @@ namespace CityGenerator.Editor.UI
             _ => new Color(1f, 1f, 1f, 0.5f)
         };
 
-        private void DrawCustomAreaEdit(MeshGenerationContext context)
+        /// <summary>
+        /// Every cell-based mode's drawing (CustomAreaEdit, PlazaMultiToggle, DistrictMultiToggle,
+        /// SingleSelectQuadrant), in three passes: each cell's fill (own layer first, then plaza,
+        /// then another District, else a plain block -- or a hole outside the Custom Grid shape),
+        /// then every Custom Place mark on top, then the "+"/"-" icons of Define City Area.
+        /// </summary>
+        private void DrawCellBoard(MeshGenerationContext context)
         {
             Rect area = contentRect;
-            if (area.width <= 0f || area.height <= 0f)
+            if (area.width <= 0f || area.height <= 0f || !TryComputeCellLayout(area, out CellLayout layout))
                 return;
 
             Painter2D painter = context.painter2D;
+            DrawRect(painter, StreetColor, layout.OriginX, layout.OriginY, layout.TotalWidth, layout.TotalHeight);
 
-            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
-            float totalWidth = cellSize * gridWidth;
-            float totalHeight = cellSize * gridHeight;
-            float originX = (area.width - totalWidth) * 0.5f;
-            float originY = (area.height - totalHeight) * 0.5f;
+            CityGeneratorGridOccupancy occupancy = occupancySource != null ? ReadOccupancy() : null;
+            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
+            // The plaza editor always paints its own bound list, so it stays right even without an occupancy source.
+            HashSet<Vector2Int> plazaCells = mode == CityGeneratorGridPreviewMode.PlazaMultiToggle || occupancy == null
+                ? ReadPlazaCells()
+                : occupancy.PlazaCells;
+            HashSet<Vector2Int> ownDistrictCells = mode == CityGeneratorGridPreviewMode.DistrictMultiToggle ? ReadDistrictCells() : null;
+            int excludedDistrict = occupancyOwner == CityGeneratorGridOccupancyOwner.District ? occupancyOwnerIndex : -1;
+            float inset = layout.CellSize * 0.08f;
+            float size = layout.CellSize - inset * 2f;
 
-            Color streetColor = new Color(0f, 0f, 0f, 0.15f);
-            Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
-            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
-            Color iconColor = new Color(1f, 1f, 1f, 0.9f);
-
-            DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
-
-            HashSet<Vector2Int> existing = ReadShapeCells();
-            float inset = cellSize * 0.08f;
-
+            // Screen row y=0 is the top of the picture; it must show the block that renders at
+            // the top of Unity's own top-down view, which is the highest gy (largest +Z), so the
+            // row read from the data is flipped relative to the screen row being painted.
             for (int y = 0; y < gridHeight; y++)
             {
                 int gy = gridHeight - 1 - y;
                 for (int x = 0; x < gridWidth; x++)
                 {
                     var cell = new Vector2Int(x, gy);
-                    bool isReal = existing.Contains(cell);
+                    float cx = layout.OriginX + x * layout.CellSize + inset;
+                    float cy = layout.OriginY + y * layout.CellSize + inset;
 
-                    float cx = originX + x * cellSize + inset;
-                    float cy = originY + y * cellSize + inset;
-                    float size = cellSize - inset * 2f;
-                    DrawRect(painter, isReal ? blockColor : holeColor, cx, cy, size, size);
+                    if (shapeCells != null && !shapeCells.Contains(cell))
+                    {
+                        DrawRect(painter, HoleColor, cx, cy, size, size);
+                        if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit && CityGeneratorGrid.IsValidAddition(shapeCells, cell))
+                            DrawPlusIcon(painter, IconColor, cx, cy, size);
+                        continue;
+                    }
 
-                    if (isReal)
-                    {
-                        if (CityGeneratorGrid.CanRemoveWithoutSplitting(existing, cell))
-                            DrawMinusIcon(painter, iconColor, cx, cy, size);
-                    }
-                    else if (CityGeneratorGrid.IsValidAddition(existing, cell))
-                    {
-                        DrawPlusIcon(painter, iconColor, cx, cy, size);
-                    }
+                    bool isOwnDistrict = ownDistrictCells != null && ownDistrictCells.Contains(cell);
+                    Color fill = BlockColor;
+                    if (isOwnDistrict)
+                        fill = DistrictColor(occupancyOwnerIndex, OwnDistrictAlpha);
+                    else if (plazaCells.Contains(cell))
+                        fill = PlazaColor;
+                    else if (occupancy != null && occupancy.TryGetDistrict(cell, excludedDistrict, out int districtIndex))
+                        fill = DistrictColor(districtIndex, OtherDistrictAlpha);
+
+                    DrawRect(painter, fill, cx, cy, size, size);
+                    if (isOwnDistrict)
+                        StrokeRect(painter, OwnDistrictOutlineColor, 1.5f, cx, cy, size, size);
                 }
             }
+
+            if (occupancy != null)
+            {
+                int ownCustomPlace = mode == CityGeneratorGridPreviewMode.SingleSelectQuadrant ? occupancyOwnerIndex : -1;
+                foreach (CityGeneratorCustomPlaceMark mark in occupancy.CustomPlaces)
+                {
+                    if (mark.Index == ownCustomPlace)
+                        continue;
+                    if (TryGetCellScreenRect(layout, mark.Cell, shapeCells, inset, out float cx, out float cy))
+                        DrawCustomPlaceMark(painter, cx, cy, size, mark.OccupiesFullBlock, mark.CornerSlot, own: false);
+                }
+            }
+
+            // The entry being edited is drawn from its own bound properties, last, so it is on top
+            // and reflects the click immediately even without an occupancy source.
+            if (mode == CityGeneratorGridPreviewMode.SingleSelectQuadrant
+                && positionAssignedProperty != null && positionAssignedProperty.boolValue
+                && blockCellProperty != null
+                && TryGetCellScreenRect(layout, blockCellProperty.vector2IntValue, shapeCells, inset, out float ownX, out float ownY))
+            {
+                bool occupiesFullBlock = occupiesFullBlockGetter != null && occupiesFullBlockGetter();
+                int cornerSlot = cornerSlotProperty != null ? cornerSlotProperty.intValue : 0;
+                DrawCustomPlaceMark(painter, ownX, ownY, size, occupiesFullBlock, cornerSlot, own: true);
+            }
+
+            if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit && shapeCells != null)
+            {
+                foreach (Vector2Int cell in shapeCells)
+                {
+                    if (CityGeneratorGrid.CanRemoveWithoutSplitting(shapeCells, cell)
+                        && TryGetCellScreenRect(layout, cell, shapeCells, inset, out float cx, out float cy))
+                        DrawMinusIcon(painter, IconColor, cx, cy, size);
+                }
+            }
+        }
+
+        // Top-left corner (after the per-cell inset) of a real, in-range cell; false for a cell
+        // outside the board or, with a shape mask, outside the shape.
+        private bool TryGetCellScreenRect(CellLayout layout, Vector2Int cell, HashSet<Vector2Int> shapeCells, float inset, out float cx, out float cy)
+        {
+            cx = cy = 0f;
+            if (cell.x < 0 || cell.x >= gridWidth || cell.y < 0 || cell.y >= gridHeight)
+                return false;
+            if (shapeCells != null && !shapeCells.Contains(cell))
+                return false;
+
+            int row = gridHeight - 1 - cell.y;
+            cx = layout.OriginX + cell.x * layout.CellSize + inset;
+            cy = layout.OriginY + row * layout.CellSize + inset;
+            return true;
+        }
+
+        /// <summary>
+        /// A Custom Place over the block whose (inset) square starts at <paramref name="cx"/>,<paramref name="cy"/>:
+        /// the whole block, or the quadrant of <paramref name="cornerSlot"/> (bit 0 = +X/right,
+        /// bit 1 = +Z/top, matching the click-side flip in SelectSingleCell). Drawn as a translucent
+        /// mark with an outline so the District/plaza fill underneath stays readable.
+        /// </summary>
+        private static void DrawCustomPlaceMark(Painter2D painter, float cx, float cy, float size, bool occupiesFullBlock, int cornerSlot, bool own, float alphaScale = 1f)
+        {
+            float x = cx, y = cy, width = size;
+            if (!occupiesFullBlock)
+            {
+                width = size * 0.5f;
+                x = cx + ((cornerSlot & 1) != 0 ? width : 0f);
+                y = cy + ((cornerSlot & 2) != 0 ? 0f : width);
+            }
+
+            float padding = Mathf.Min(2f, width * 0.12f);
+            x += padding;
+            y += padding;
+            width -= padding * 2f;
+
+            Color fill = own ? OwnCustomPlaceFill : OtherCustomPlaceFill;
+            Color outline = own ? OwnCustomPlaceOutline : OtherCustomPlaceOutline;
+            fill.a *= alphaScale;
+            outline.a *= alphaScale;
+            DrawRect(painter, fill, x, y, width, width);
+            StrokeRect(painter, outline, own ? 1.5f : 1f, x, y, width, width);
+        }
+
+        private CityGeneratorGridOccupancy ReadOccupancy()
+        {
+            occupancySource.serializedObject.Update();
+            return CityGeneratorGridOccupancy.Read(occupancySource);
         }
 
         private static void DrawPlusIcon(Painter2D painter, Color color, float cx, float cy, float size)
@@ -959,113 +1241,319 @@ namespace CityGenerator.Editor.UI
             DrawRect(painter, color, centerX - barLength * 0.5f, centerY - barThickness * 0.5f, barLength, barThickness);
         }
 
-        private void DrawPlazaMultiToggle(MeshGenerationContext context)
+        /// <summary>
+        /// Per-cell tooltip: whatever sits under the pointer right now (the block's (row, column),
+        /// plaza, District(s), Custom Place(s) and, on the graph picker, the zone line), read from the
+        /// same occupancy snapshot the board paints. <see cref="TooltipEvent.rect"/> is set to the
+        /// hovered cell (a small square around the pointer on the graph picker, where zones and
+        /// blocks overlap), so moving onto another cell asks for a fresh tooltip. Over a gutter or a
+        /// street the board's instruction text (<see cref="instructionTooltip"/>) shows instead.
+        /// </summary>
+        private void OnTooltip(TooltipEvent evt)
+        {
+            string text = null;
+            Rect localRect = default;
+            bool described = hasPointer && (mode == CityGeneratorGridPreviewMode.NodeGraphPicker
+                ? TryDescribeGraphAt(lastPointerLocal, out text, out localRect)
+                : TryDescribeCellAt(lastPointerLocal, out text, out localRect));
+
+            if (described)
+            {
+                evt.tooltip = text;
+                evt.rect = this.LocalToWorld(localRect);
+            }
+            else if (!string.IsNullOrEmpty(instructionTooltip))
+            {
+                evt.tooltip = instructionTooltip;
+                evt.rect = worldBound;
+            }
+            else
+            {
+                return;
+            }
+
+            evt.StopImmediatePropagation();
+        }
+
+        private bool TryDescribeCellAt(Vector2 local, out string text, out Rect localRect)
+        {
+            text = null;
+            localRect = default;
+            if (!TryComputeCellLayout(contentRect, out CellLayout layout))
+                return false;
+
+            int gx = Mathf.FloorToInt((local.x - layout.OriginX) / layout.CellSize);
+            int row = Mathf.FloorToInt((local.y - layout.OriginY) / layout.CellSize);
+            if (gx < 0 || gx >= gridWidth || row < 0 || row >= gridHeight)
+                return false;
+
+            var cell = new Vector2Int(gx, gridHeight - 1 - row);
+            localRect = new Rect(layout.OriginX + gx * layout.CellSize, layout.OriginY + row * layout.CellSize, layout.CellSize, layout.CellSize);
+            text = DescribeCell(cell, gridHeight, shapeCellsProperty != null ? ReadShapeCells() : null);
+            return true;
+        }
+
+        private bool TryDescribeGraphAt(Vector2 local, out string text, out Rect localRect)
+        {
+            text = null;
+            localRect = new Rect(local.x - 3f, local.y - 3f, 6f, 6f);
+            if (pedestrianPreview == null || !TryComputeNodeGraphLayout(contentRect, out NodeGraphLayout layout))
+                return false;
+
+            var builder = new System.Text.StringBuilder();
+            List<GraphZone> zones = GetZones();
+            int zone = zones != null ? FindZoneAt(zones, layout, local) : -1;
+            if (zone >= 0)
+            {
+                var selectedSet = new HashSet<int>(selectedNodeIndicesProperty != null ? ReadSelectedNodeIndices() : new List<int>());
+                bool selected = IsZoneSelected(zones[zone], selectedSet);
+                builder.Append(ZoneKindName(zones[zone].Kind)).Append(selected ? ": in this entry's route" : ": not in this entry's route");
+            }
+
+            IReadOnlyList<BlockCell> blocks = pedestrianPreview.Blocks;
+            if (blocks != null)
+            {
+                float half = CityGeneratorConstants.BlockSize * 0.5f;
+                float size = CityGeneratorConstants.BlockSize * layout.scale;
+                foreach (BlockCell block in blocks)
+                {
+                    Vector2 topLeft = NodeGraphScreenPoint(layout, block.center + new Vector3(-half, 0f, half));
+                    if (!new Rect(topLeft.x, topLeft.y, size, size).Contains(local))
+                        continue;
+
+                    if (builder.Length > 0)
+                        builder.Append('\n');
+                    builder.Append(DescribeCell(new Vector2Int(block.gridX, block.gridY), pedestrianPreview.RowCount, null));
+                    break;
+                }
+            }
+
+            text = builder.ToString();
+            return builder.Length > 0;
+        }
+
+        private static string ZoneKindName(PedestrianNodeKind kind) => kind switch
+        {
+            PedestrianNodeKind.Ring => "Sidewalk ring edge",
+            PedestrianNodeKind.Interior => "Interior spoke",
+            PedestrianNodeKind.Crossing => "Crossing",
+            _ => "Zone",
+        };
+
+        // Same 0-3 convention as CityGeneratorBuildingBuilder.SlotOffsets: bit 0 = +X (right), bit 1 = +Z (top).
+        private static string QuadrantName(int cornerSlot) =>
+            ((cornerSlot & 2) != 0 ? "top" : "bottom") + "-" + ((cornerSlot & 1) != 0 ? "right" : "left") + " quadrant";
+
+        /// <summary>
+        /// One line per thing that claims <paramref name="cell"/>, under a "Block (row, column)"
+        /// header: plaza, every District (more than one is a conflict the validator reports, so all
+        /// are listed), every Custom Place with its slot, and what an unclaimed block gets. The layer
+        /// this board edits is tagged as "this district"/"this entry". Define City Area adds what a
+        /// click there would do, matching its "+"/"-" icons.
+        /// </summary>
+        private string DescribeCell(Vector2Int cell, int rowCount, HashSet<Vector2Int> shapeCells)
+        {
+            var builder = new System.Text.StringBuilder();
+            builder.Append("Block ").Append(CityGeneratorGrid.FormatCell(cell, rowCount));
+
+            if (shapeCells != null && !shapeCells.Contains(cell))
+            {
+                builder.Append("\nNot part of the city.");
+                if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit && CityGeneratorGrid.IsValidAddition(shapeCells, cell))
+                    builder.Append("\nClick to add it to the city.");
+                return builder.ToString();
+            }
+
+            CityGeneratorGridOccupancy occupancy = occupancySource != null ? ReadOccupancy() : null;
+            HashSet<Vector2Int> plazaCells = mode == CityGeneratorGridPreviewMode.PlazaMultiToggle || occupancy == null
+                ? ReadPlazaCells()
+                : occupancy.PlazaCells;
+            bool isPlaza = plazaCells.Contains(cell);
+            if (isPlaza)
+                builder.Append("\nPlaza");
+
+            bool inDistrict = false;
+            bool fullBlockPlace = false;
+            if (occupancy != null)
+            {
+                for (int d = 0; d < occupancy.DistrictCells.Count; d++)
+                {
+                    if (!occupancy.DistrictCells[d].Contains(cell))
+                        continue;
+
+                    inDistrict = true;
+                    bool own = occupancyOwner == CityGeneratorGridOccupancyOwner.District && d == occupancyOwnerIndex;
+                    builder.Append("\nDistrict ").Append(occupancy.DistrictLabels[d]).Append(own ? " (this district)" : string.Empty);
+                }
+
+                foreach (CityGeneratorCustomPlaceMark mark in occupancy.CustomPlaces)
+                {
+                    if (mark.Cell != cell)
+                        continue;
+
+                    fullBlockPlace |= mark.OccupiesFullBlock;
+                    bool own = occupancyOwner == CityGeneratorGridOccupancyOwner.CustomPlace && mark.Index == occupancyOwnerIndex;
+                    builder.Append("\nCustom Place ").Append(mark.Label)
+                        .Append(", ").Append(mark.OccupiesFullBlock ? "full block" : QuadrantName(mark.CornerSlot))
+                        .Append(own ? " (this entry)" : string.Empty);
+                }
+            }
+
+            // A full-block Custom Place leaves no slot for buildings; a quadrant one leaves the other three.
+            if (!isPlaza && !fullBlockPlace)
+                builder.Append(inDistrict ? "\nBuildings from its district." : "\nBuildings from the Buildings card.");
+
+            if (mode == CityGeneratorGridPreviewMode.CustomAreaEdit && shapeCells != null)
+            {
+                builder.Append(CityGeneratorGrid.CanRemoveWithoutSplitting(shapeCells, cell)
+                    ? "\nClick to remove it from the city."
+                    : "\nCan't be removed: the city would split in two or be left empty.");
+            }
+
+            return builder.ToString();
+        }
+
+        // What the axis labels' placement depends on; they are only re-placed when this changes.
+        private readonly struct AxisLabelKey : IEquatable<AxisLabelKey>
+        {
+            private readonly bool isGraph;
+            private readonly int gridWidth;
+            private readonly int gridHeight;
+            private readonly Vector2 areaSize;
+            private readonly CityGeneratorPedestrianPreview graphSource;
+
+            public AxisLabelKey(bool isGraph, int gridWidth, int gridHeight, Vector2 areaSize, CityGeneratorPedestrianPreview graphSource)
+            {
+                this.isGraph = isGraph;
+                this.gridWidth = gridWidth;
+                this.gridHeight = gridHeight;
+                this.areaSize = areaSize;
+                this.graphSource = graphSource;
+            }
+
+            public bool Equals(AxisLabelKey other) =>
+                isGraph == other.isGraph && gridWidth == other.gridWidth && gridHeight == other.gridHeight
+                && areaSize == other.areaSize && ReferenceEquals(graphSource, other.graphSource);
+        }
+
+        /// <summary>
+        /// Places the 1-based row numbers (left gutter, top-down) and column numbers (top
+        /// gutter, left to right) -- the numbers <see cref="CityGeneratorGrid.FormatCell"/> uses.
+        /// Cell boards label every row/column of the board; the graph picker labels each row/column
+        /// that holds at least one real block, at that block's centre.
+        /// </summary>
+        private void UpdateAxisLabels()
         {
             Rect area = contentRect;
-            if (area.width <= 0f || area.height <= 0f)
+            bool isGraph = mode == CityGeneratorGridPreviewMode.NodeGraphPicker;
+            var key = new AxisLabelKey(isGraph, gridWidth, gridHeight, area.size, isGraph ? pedestrianPreview : null);
+            if (hasAxisLabelKey && key.Equals(lastAxisLabelKey))
                 return;
 
-            Painter2D painter = context.painter2D;
+            lastAxisLabelKey = key;
+            hasAxisLabelKey = true;
 
-            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
-            float totalWidth = cellSize * gridWidth;
-            float totalHeight = cellSize * gridHeight;
-            float originX = (area.width - totalWidth) * 0.5f;
-            float originY = (area.height - totalHeight) * 0.5f;
+            int usedRows = 0;
+            int usedColumns = 0;
+            if (isGraph)
+                PlaceGraphAxisLabels(area, ref usedRows, ref usedColumns);
+            else
+                PlaceCellAxisLabels(area, ref usedRows, ref usedColumns);
 
-            Color streetColor = new Color(0f, 0f, 0f, 0.15f);
-            Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
-            Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
-            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
+            HideUnusedLabels(rowLabels, usedRows);
+            HideUnusedLabels(columnLabels, usedColumns);
+        }
 
-            DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
+        private void PlaceCellAxisLabels(Rect area, ref int usedRows, ref int usedColumns)
+        {
+            if (area.width <= 0f || area.height <= 0f || !TryComputeCellLayout(area, out CellLayout layout))
+                return;
 
-            HashSet<Vector2Int> plazaCells = ReadPlazaCells();
-            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
-            float inset = cellSize * 0.08f;
-
-            // Screen row y=0 is the top of the picture; it must show the block that renders at
-            // the top of Unity's own top-down view, which is the highest gy (largest +Z), so the
-            // row read from plazaCells is flipped relative to the screen row being painted.
             for (int y = 0; y < gridHeight; y++)
             {
                 int gy = gridHeight - 1 - y;
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    var cell = new Vector2Int(x, gy);
-                    float cx = originX + x * cellSize + inset;
-                    float cy = originY + y * cellSize + inset;
-                    float size = cellSize - inset * 2f;
+                float centerY = layout.OriginY + (y + 0.5f) * layout.CellSize;
+                PlaceRowLabel(usedRows++, CityGeneratorGrid.DisplayRow(gy, gridHeight), layout.OriginX, centerY);
+            }
 
-                    if (shapeCells != null && !shapeCells.Contains(cell))
-                    {
-                        DrawRect(painter, holeColor, cx, cy, size, size);
-                        continue;
-                    }
-
-                    bool isPlaza = plazaCells.Contains(cell);
-                    DrawRect(painter, isPlaza ? plazaColor : blockColor, cx, cy, size, size);
-                }
+            for (int x = 0; x < gridWidth; x++)
+            {
+                float centerX = layout.OriginX + (x + 0.5f) * layout.CellSize;
+                PlaceColumnLabel(usedColumns++, CityGeneratorGrid.DisplayColumn(x), centerX, layout.OriginY);
             }
         }
 
-        private void DrawDistrictMultiToggle(MeshGenerationContext context)
+        private void PlaceGraphAxisLabels(Rect area, ref int usedRows, ref int usedColumns)
         {
-            Rect area = contentRect;
-            if (area.width <= 0f || area.height <= 0f)
+            if (area.width <= 0f || area.height <= 0f || pedestrianPreview == null || pedestrianPreview.Blocks == null
+                || !TryComputeNodeGraphLayout(area, out NodeGraphLayout layout))
                 return;
 
-            Painter2D painter = context.painter2D;
-
-            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
-            float totalWidth = cellSize * gridWidth;
-            float totalHeight = cellSize * gridHeight;
-            float originX = (area.width - totalWidth) * 0.5f;
-            float originY = (area.height - totalHeight) * 0.5f;
-
-            Color streetColor = new Color(0f, 0f, 0f, 0.15f);
-            Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
-            Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
-            Color districtColor = new Color(0.85f, 0.6f, 0.2f, 0.75f);
-            Color occupiedColor = new Color(0.55f, 0.55f, 0.62f, 0.75f);
-            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
-
-            DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
-
-            HashSet<Vector2Int> ownCells = ReadDistrictCells();
-            HashSet<Vector2Int> plazaCells = plazaCellsProperty != null ? ReadPlazaCells() : null;
-            HashSet<Vector2Int> occupiedCells = occupiedCellsGetter?.Invoke();
-            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
-            float inset = cellSize * 0.08f;
-
-            // Same row flip as DrawPlazaMultiToggle: screen row y=0 (top) must show gy = gridHeight-1
-            // (largest +Z), matching Unity's own top-down view.
-            for (int y = 0; y < gridHeight; y++)
+            var rowCenters = new SortedDictionary<int, float>();
+            var columnCenters = new SortedDictionary<int, float>();
+            foreach (BlockCell block in pedestrianPreview.Blocks)
             {
-                int gy = gridHeight - 1 - y;
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    var cell = new Vector2Int(x, gy);
-                    float cx = originX + x * cellSize + inset;
-                    float cy = originY + y * cellSize + inset;
-                    float size = cellSize - inset * 2f;
-
-                    if (shapeCells != null && !shapeCells.Contains(cell))
-                    {
-                        DrawRect(painter, holeColor, cx, cy, size, size);
-                        continue;
-                    }
-
-                    Color cellColor = blockColor;
-                    if (ownCells.Contains(cell))
-                        cellColor = districtColor;
-                    else if (plazaCells != null && plazaCells.Contains(cell))
-                        cellColor = plazaColor;
-                    else if (occupiedCells != null && occupiedCells.Contains(cell))
-                        cellColor = occupiedColor;
-                    DrawRect(painter, cellColor, cx, cy, size, size);
-                }
+                rowCenters[block.gridY] = block.center.z;
+                columnCenters[block.gridX] = block.center.x;
             }
+
+            float left = layout.originX;
+            foreach (KeyValuePair<int, float> row in rowCenters)
+            {
+                float centerY = NodeGraphScreenPoint(layout, new Vector3(0f, 0f, row.Value)).y;
+                PlaceRowLabel(usedRows++, CityGeneratorGrid.DisplayRow(row.Key, pedestrianPreview.RowCount), left, centerY);
+            }
+
+            foreach (KeyValuePair<int, float> column in columnCenters)
+            {
+                float centerX = NodeGraphScreenPoint(layout, new Vector3(column.Value, 0f, 0f)).x;
+                PlaceColumnLabel(usedColumns++, CityGeneratorGrid.DisplayColumn(column.Key), centerX, layout.originY);
+            }
+        }
+
+        // Row numbers sit right-aligned in the gutter just left of the board, centred on the row.
+        private void PlaceRowLabel(int poolIndex, int number, float boardLeft, float centerY)
+        {
+            Label label = GetPooledLabel(rowLabels, poolIndex, TextAnchor.MiddleRight);
+            label.text = number.ToString();
+            label.style.left = boardLeft - RowLabelGutter;
+            label.style.top = centerY - RowLabelGutter * 0.5f;
+            label.style.width = RowLabelGutter - 2f;
+            label.style.height = RowLabelGutter;
+            label.style.display = DisplayStyle.Flex;
+        }
+
+        // Column numbers sit just above the board, centred on the column.
+        private void PlaceColumnLabel(int poolIndex, int number, float centerX, float boardTop)
+        {
+            const float width = 20f;
+            Label label = GetPooledLabel(columnLabels, poolIndex, TextAnchor.LowerCenter);
+            label.text = number.ToString();
+            label.style.left = centerX - width * 0.5f;
+            label.style.top = boardTop - ColumnLabelGutter;
+            label.style.width = width;
+            label.style.height = ColumnLabelGutter;
+            label.style.display = DisplayStyle.Flex;
+        }
+
+        private Label GetPooledLabel(List<Label> pool, int index, TextAnchor alignment)
+        {
+            while (pool.Count <= index)
+            {
+                var label = new Label { pickingMode = PickingMode.Ignore };
+                label.AddToClassList("cg-grid-preview__axis-label");
+                label.style.unityTextAlign = alignment;
+                Add(label);
+                pool.Add(label);
+            }
+
+            return pool[index];
+        }
+
+        private static void HideUnusedLabels(List<Label> pool, int usedCount)
+        {
+            for (int i = usedCount; i < pool.Count; i++)
+                pool[i].style.display = DisplayStyle.None;
         }
 
         private HashSet<Vector2Int> ReadDistrictCells()
@@ -1077,74 +1565,6 @@ namespace CityGenerator.Editor.UI
             for (int i = 0; i < districtCellsProperty.arraySize; i++)
                 result.Add(districtCellsProperty.GetArrayElementAtIndex(i).vector2IntValue);
             return result;
-        }
-
-        private void DrawSingleSelection(MeshGenerationContext context)
-        {
-            Rect area = contentRect;
-            if (area.width <= 0f || area.height <= 0f)
-                return;
-
-            Painter2D painter = context.painter2D;
-
-            float cellSize = Mathf.Min(area.width / gridWidth, area.height / gridHeight);
-            float totalWidth = cellSize * gridWidth;
-            float totalHeight = cellSize * gridHeight;
-            float originX = (area.width - totalWidth) * 0.5f;
-            float originY = (area.height - totalHeight) * 0.5f;
-
-            Color streetColor = new Color(0f, 0f, 0f, 0.15f);
-            Color blockColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
-            Color plazaColor = new Color(0.35f, 0.75f, 0.4f, 0.7f);
-            Color selectedColor = new Color(0.85f, 0.6f, 0.2f, 0.75f);
-            Color quadrantColor = new Color(0.95f, 0.75f, 0.3f, 0.9f);
-            Color holeColor = new Color(0.5f, 0.5f, 0.5f, 0.08f);
-
-            DrawRect(painter, streetColor, originX, originY, totalWidth, totalHeight);
-
-            bool positionAssigned = positionAssignedProperty != null && positionAssignedProperty.boolValue;
-            Vector2Int selectedCell = blockCellProperty != null ? blockCellProperty.vector2IntValue : new Vector2Int(-1, -1);
-            bool occupiesFullBlock = occupiesFullBlockGetter != null && occupiesFullBlockGetter();
-            int cornerSlot = cornerSlotProperty != null ? cornerSlotProperty.intValue : -1;
-            HashSet<Vector2Int> shapeCells = shapeCellsProperty != null ? ReadShapeCells() : null;
-            HashSet<Vector2Int> plazaCells = plazaCellsProperty != null ? ReadPlazaCells() : null;
-
-            float inset = cellSize * 0.08f;
-
-            // Same row flip as DrawPlazaMultiToggle: screen row y=0 (top) must show gy = gridHeight-1
-            // (largest +Z), matching Unity's own top-down view.
-            for (int y = 0; y < gridHeight; y++)
-            {
-                int gy = gridHeight - 1 - y;
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    var cell = new Vector2Int(x, gy);
-                    float cx = originX + x * cellSize + inset;
-                    float cy = originY + y * cellSize + inset;
-                    float size = cellSize - inset * 2f;
-
-                    if (shapeCells != null && !shapeCells.Contains(cell))
-                    {
-                        DrawRect(painter, holeColor, cx, cy, size, size);
-                        continue;
-                    }
-
-                    bool isSelected = positionAssigned && selectedCell.x == x && selectedCell.y == gy;
-                    bool isPlaza = plazaCells != null && plazaCells.Contains(cell);
-                    Color cellColor = isSelected ? selectedColor : (isPlaza ? plazaColor : blockColor);
-                    DrawRect(painter, cellColor, cx, cy, size, size);
-
-                    if (isSelected && !occupiesFullBlock && cornerSlot >= 0)
-                    {
-                        float half = size * 0.5f;
-                        // Bit 2 (+Z slots 2/3) draws in the top half of the cell, matching the
-                        // click-side flip in SelectSingleCell.
-                        float qx = cx + ((cornerSlot & 1) != 0 ? half : 0f);
-                        float qy = cy + ((cornerSlot & 2) != 0 ? 0f : half);
-                        DrawRect(painter, quadrantColor, qx, qy, half, half);
-                    }
-                }
-            }
         }
 
         private HashSet<Vector2Int> ReadPlazaCells()
@@ -1179,6 +1599,19 @@ namespace CityGenerator.Editor.UI
             painter.LineTo(new Vector2(x, y + height));
             painter.ClosePath();
             painter.Fill();
+        }
+
+        private static void StrokeRect(Painter2D painter, Color color, float lineWidth, float x, float y, float width, float height)
+        {
+            painter.strokeColor = color;
+            painter.lineWidth = lineWidth;
+            painter.BeginPath();
+            painter.MoveTo(new Vector2(x, y));
+            painter.LineTo(new Vector2(x + width, y));
+            painter.LineTo(new Vector2(x + width, y + height));
+            painter.LineTo(new Vector2(x, y + height));
+            painter.ClosePath();
+            painter.Stroke();
         }
     }
 }

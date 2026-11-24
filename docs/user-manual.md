@@ -130,6 +130,25 @@ The grid preview at the top *is* the city's floor plan: each square is one block
 block to toggle it as a plaza** — a plaza block gets the plaza layout (lawn, centrepiece,
 benches) instead of buildings, and appears green.
 
+> **Reading any grid preview.** Every grid preview in the window (this one, Define City Area,
+> each District, each Custom Place and each Custom Pedestrian picker) numbers its **rows** on the
+> left and its **columns** above it, starting at 1. Rows count **top-down**, so the top row is
+> row 1; on a rectangular grid, changing Grid Height therefore renumbers the rows. A block is
+> named **(row, column)** — the same numbers validation messages use, so *"block (3, 2)"* is
+> row 3, column 2.
+>
+> Every preview also shows what the others have claimed, for reference: plazas in **green**,
+> each District in **its own colour** (the swatch next to its name), and each Custom Place as a
+> **white square** over the quadrant or whole block it occupies. A reference never stops you
+> clicking a block; a conflict (a District on a plaza, two Custom Places in the same slot…) is
+> reported by validation instead.
+>
+> **Hover a block** in any preview to see a tooltip with what is on it right now: its
+> (row, column), whether it is a plaza, which District it belongs to, every Custom Place in it
+> (and which quadrant, or the whole block), and where its buildings come from. In Define City
+> Area it also says what a click would do; on a Custom Pedestrian picker it also names the
+> segment under the pointer and whether it is part of the route.
+
 Under the preview, a caption reports the number of blocks, how many are plazas, and the
 resulting world size in metres.
 
@@ -229,9 +248,9 @@ instead of the base Buildings list: a skyscraper downtown, low-rise houses in th
 block outside a district keeps using [4.5 Buildings](#45-buildings).
 
 Click **+ Add District** to add an entry. Each entry has its own grid preview: click a block to
-add it to the district, click it again to remove it. Its own blocks are drawn in orange, plaza
-blocks in green and blocks of other districts in a neutral grey-blue, for reference; in
-Customize mode only the blocks of the custom shape are drawn.
+add it to the district, click it again to remove it. Its own blocks are drawn in the district's
+colour, outlined; plazas, other districts (fainter, in their own colours) and Custom Places are
+shown for reference. In Customize mode only the blocks of the custom shape are drawn.
 
 | Parameter | What it does |
 |---|---|
@@ -288,8 +307,9 @@ hero building.
 
 Click **+ Add Custom Place** to add an entry. Each entry has its own grid preview: click a
 block to place the entry there, and click a quadrant of that block to choose which of the
-four corner slots it occupies. Plaza blocks are shown in green for reference — a Custom Place
-cannot be placed on one.
+four corner slots it occupies. The entry's own slot is drawn in orange; plazas, districts and
+the other Custom Places are shown for reference — a Custom Place cannot be placed on a plaza,
+nor on a slot another Custom Place already occupies.
 
 | Parameter | What it does |
 |---|---|
@@ -570,7 +590,9 @@ Below the fields, each entry gets a **node-graph picker**: a preview of the real
 graph for your current settings, colour-coded — **green** for a sidewalk ring edge, **orange**
 for a crossing, **blue** for an interior spoke through a block. Click a segment to add it to
 the route (it turns yellow), click it again to remove it. Only a segment sharing a point with
-the current selection can be added, so the traced route always stays connected.
+the current selection can be added, so the traced route always stays connected. The blocks
+under the graph are shaded with the same plazas, districts and Custom Places as every other
+grid preview, and its rows and columns are numbered the same way.
 
 The entry in the screenshot is outlined in red because it has no route traced yet: an entry
 needs **at least two connected nodes** selected, otherwise generation is blocked. If you

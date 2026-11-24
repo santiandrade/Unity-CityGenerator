@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Every grid preview (General Options, Define City Area, each District, each Custom Place and
+  each Custom Pedestrian picker) numbers its rows (on the left, top-down) and its columns (above
+  it, left to right), starting at 1.
+- Every grid preview shows what the others have claimed: plazas, each District in its own
+  colour (also shown as a swatch next to the district's name) and each Custom Place over the
+  quadrant or block it occupies.
+- Hovering a block on any grid preview shows a tooltip with what is on it: its (row, column),
+  plaza, District, Custom Places (with their quadrant) and where its buildings come from; on a
+  Custom Pedestrian picker, also the segment under the pointer and whether it is in the route.
+
+### Changed
+
+- Validation messages name a block as 1-based (row, column), the same numbers the grid
+  previews show, instead of the 0-based (x, y) coordinates used before.
+- A District's own blocks are drawn in its own colour instead of orange, and a Custom Place's
+  own slot is drawn in orange over the block instead of filling the whole block.
 
 ## [3.8.0] - 2026-11-23
 ### Added

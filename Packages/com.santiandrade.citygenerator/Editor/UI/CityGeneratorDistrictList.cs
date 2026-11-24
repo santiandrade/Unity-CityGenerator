@@ -26,7 +26,6 @@ namespace CityGenerator.Editor.UI
         private readonly List<CityGeneratorGridPreview> gridPreviews = new();
         private SerializedProperty listProperty;
         private SerializedProperty shapeMaskProperty;
-        private SerializedProperty plazaMaskProperty;
         private int gridWidth = 1;
         private int gridHeight = 1;
 
@@ -74,15 +73,7 @@ namespace CityGenerator.Editor.UI
             }
         }
 
-        /// <summary>Paints the configured plazas (<c>general.plazaCells</c>) green on every row's picker, as a reference.</summary>
-        public void SetPlazaMask(SerializedProperty plazaCellsProperty)
-        {
-            plazaMaskProperty = plazaCellsProperty;
-            foreach (CityGeneratorGridPreview preview in gridPreviews)
-                preview.SetPlazaMask(plazaMaskProperty);
-        }
-
-        /// <summary>Repaints every row's picker, so one district's edit shows up as "occupied" on the others right away.</summary>
+        /// <summary>Repaints every row's picker, so an edit on any board (another district, a plaza, a Custom Place) shows up on these right away.</summary>
         public void RefreshPreviews()
         {
             foreach (CityGeneratorGridPreview preview in gridPreviews)
@@ -136,6 +127,11 @@ namespace CityGenerator.Editor.UI
                 nameField.AddToClassList("cg-field-row");
                 nameField.RegisterValueChangedCallback(evt => SetString(nameProperty, evt.newValue));
                 header.Add(nameField);
+                // Same colour this district is painted with on every board, so the boards can be read back to their row.
+                var swatch = new VisualElement { tooltip = "This district's colour on every grid preview." };
+                swatch.AddToClassList("cg-district-swatch");
+                swatch.style.backgroundColor = CityGeneratorGridPreview.DistrictColor(capturedIndex);
+                header.Add(swatch);
                 var removeButton = new Button(() => RemoveEntryAt(capturedIndex)) { text = "×", tooltip = "Remove this district from the list." };
                 removeButton.AddToClassList("cg-custom-place-list__remove");
                 header.Add(removeButton);
@@ -177,36 +173,16 @@ namespace CityGenerator.Editor.UI
                 preview.BindDistrictCells(entry.FindPropertyRelative("cells"), onChanged);
                 preview.SetShapeMask(shapeMaskProperty);
                 preview.SetGrid(gridWidth, gridHeight);
-                preview.SetPlazaMask(plazaMaskProperty);
-                preview.SetOccupiedMask(() => ReadOtherDistrictCells(capturedIndex));
+                preview.SetOccupancy(CityGeneratorGridOccupancy.SettingsRootOf(listProperty), CityGeneratorGridOccupancyOwner.District, capturedIndex);
                 row.Add(preview);
                 gridPreviews.Add(preview);
 
-                var hint = new Label("Click a block to add/remove it. Green: plaza. Grey-blue: another district.");
+                var hint = new Label("Click a block to add/remove it. Outlined: this district. Green: plaza. Other colours: other districts. White square: a Custom Place. " + CityGeneratorGridPreview.AxisHint);
                 hint.AddToClassList("cg-grid-preview__caption");
                 row.Add(hint);
 
                 rowsContainer.Add(row);
             }
-        }
-
-        private HashSet<Vector2Int> ReadOtherDistrictCells(int excludedIndex)
-        {
-            var result = new HashSet<Vector2Int>();
-            if (listProperty == null)
-                return result;
-
-            for (int i = 0; i < listProperty.arraySize; i++)
-            {
-                if (i == excludedIndex)
-                    continue;
-
-                SerializedProperty cells = listProperty.GetArrayElementAtIndex(i).FindPropertyRelative("cells");
-                for (int c = 0; c < cells.arraySize; c++)
-                    result.Add(cells.GetArrayElementAtIndex(c).vector2IntValue);
-            }
-
-            return result;
         }
 
         private void SetString(SerializedProperty property, string value)

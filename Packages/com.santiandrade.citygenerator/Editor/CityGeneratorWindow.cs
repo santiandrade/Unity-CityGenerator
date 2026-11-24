@@ -79,6 +79,7 @@ namespace CityGenerator.Editor
         private CityGeneratorCard plazaAudioCard;
         private CityGeneratorTabBar tabBar;
         private HelpBox referenceSpeedMismatchWarning;
+        private const string PlazaBoardHint = "Click a block above to toggle it as a plaza. Districts are shown in their colours and Custom Places as white squares. " + CityGeneratorGridPreview.AxisHint;
         private CityGeneratorGridPreview gridPreview;
         private Label gridPreviewCaption;
         private Label gridPreviewHint;
@@ -326,11 +327,12 @@ namespace CityGenerator.Editor
             gridPreview = new CityGeneratorGridPreview();
             gridPreview.AddToClassList("cg-grid-preview--main");
             gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
+            gridPreview.SetOccupancy(serializedWindow.FindProperty("settings"), CityGeneratorGridOccupancyOwner.Plazas);
             content.Add(gridPreview);
             gridPreviewCaption = new Label();
             gridPreviewCaption.AddToClassList("cg-grid-preview__caption");
             content.Add(gridPreviewCaption);
-            gridPreviewHint = new Label("Click a block above to toggle it as a plaza.");
+            gridPreviewHint = new Label(PlazaBoardHint);
             gridPreviewHint.AddToClassList("cg-grid-preview__caption");
             content.Add(gridPreviewHint);
 
@@ -845,25 +847,26 @@ namespace CityGenerator.Editor
             if (useCustomGrid && customAreaSubmode)
             {
                 gridPreview.BindCustomArea(FindProperty("general.customBlockCells"), RefreshDynamicUi);
-                gridPreviewHint.text = "Click a \"+\" to add a block adjacent to the shape, or a \"-\" to remove a block without splitting it or emptying the shape.";
+                gridPreviewHint.text = "Click a \"+\" to add a block adjacent to the shape, or a \"-\" to remove a block without splitting it or emptying the shape. Plazas (green), districts (their colours) and Custom Places (white squares) are shown for reference. " + CityGeneratorGridPreview.AxisHint;
             }
             else
             {
                 gridPreview.Bind(FindProperty("general.plazaCells"), RefreshDynamicUi);
                 gridPreview.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
-                gridPreviewHint.text = "Click a block above to toggle it as a plaza.";
+                gridPreviewHint.text = PlazaBoardHint;
             }
 
             gridPreview.SetGrid(gridWidth, gridHeight);
             customPlaceList.SetGrid(gridWidth, gridHeight);
             districtList.SetGrid(gridWidth, gridHeight);
             districtList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
-            districtList.SetPlazaMask(FindProperty("general.plazaCells"));
+            // Every board paints what all the others claim, so any edit repaints all of them.
+            gridPreview.Refresh();
             districtList.RefreshPreviews();
             int districtCount = FindProperty("districts").arraySize;
             districtsCard.SetBadge(districtCount == 1 ? "1 district" : $"{districtCount} districts");
             customPlaceList.SetShapeMask(useCustomGrid ? FindProperty("general.customBlockCells") : null);
-            customPlaceList.SetPlazaMask(FindProperty("general.plazaCells"));
+            customPlaceList.RefreshPreviews();
             customPlacesCard.SetBadge($"{FindProperty("customPlaces").arraySize} entries");
             customPedestrianList.RefreshPreview(settings);
             customPedestriansCard.SetBadge($"{FindProperty("customPedestrians").arraySize} entries");

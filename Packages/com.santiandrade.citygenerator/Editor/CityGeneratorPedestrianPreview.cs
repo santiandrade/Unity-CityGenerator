@@ -49,15 +49,24 @@ namespace CityGenerator.Editor
 
         private readonly GameObject root;
         private readonly PedestrianNetwork network;
+        private readonly List<BlockCell> blocks;
 
         public int NodeCount => network.NodeCount;
 
         public PedestrianNode GetNode(int index) => network.GetNode(index);
 
-        private CityGeneratorPedestrianPreview(GameObject root, PedestrianNetwork network)
+        /// <summary>The real blocks the graph was built over (grid cell + world centre, in the same space as the node positions), so the picker can paint the blocks under the graph.</summary>
+        public IReadOnlyList<BlockCell> Blocks => blocks;
+
+        /// <summary>Row count the picker numbers its rows against (<see cref="CityGeneratorGrid.DisplayRowCount"/>), so its labels match every other grid preview's.</summary>
+        public int RowCount { get; }
+
+        private CityGeneratorPedestrianPreview(GameObject root, PedestrianNetwork network, List<BlockCell> blocks, int rowCount)
         {
             this.root = root;
             this.network = network;
+            this.blocks = blocks;
+            RowCount = rowCount;
         }
 
         /// <summary>
@@ -129,7 +138,7 @@ namespace CityGenerator.Editor
                 network.Build();
             }
 
-            return new CityGeneratorPedestrianPreview(root, network);
+            return new CityGeneratorPedestrianPreview(root, network, blocks, CityGeneratorGrid.DisplayRowCount(settings.general.useCustomGrid, gridHeight));
         }
 
         /// <summary>

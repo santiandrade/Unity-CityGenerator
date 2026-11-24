@@ -131,6 +131,25 @@ La vista previa de la retícula *es* el plano de la ciudad: cada cuadrado es una
 clic en una manzana para marcarla como plaza**: una manzana-plaza recibe el layout de plaza
 (césped, pieza central, bancos) en lugar de edificios, y se muestra en verde.
 
+> **Cómo leer cualquier vista previa.** Todas las vistas previas de la ventana (esta, Define City
+> Area, la de cada District, cada Custom Place y cada selector de Custom Pedestrians) numeran sus
+> **filas** a la izquierda y sus **columnas** encima, empezando en 1. Las filas se cuentan **de
+> arriba abajo**, así que la fila superior es la 1; en un grid rectangular, cambiar Grid Height
+> renumera por tanto las filas. Una manzana se nombra **(fila, columna)**, con los mismos números
+> que usan los mensajes de validación: *"block (3, 2)"* es la fila 3, columna 2.
+>
+> Cada vista previa muestra también lo que han ocupado las demás, como referencia: las plazas en
+> **verde**, cada District en **su propio color** (la muestra junto a su nombre) y cada Custom
+> Place como un **cuadrado blanco** sobre el cuadrante o la manzana entera que ocupa. Una
+> referencia nunca impide hacer clic en una manzana; los conflictos (un District sobre una plaza,
+> dos Custom Places en el mismo hueco…) los señala la validación.
+>
+> **Pasa el ratón por encima de una manzana** en cualquier vista previa para ver un tooltip con
+> lo que hay en ella ahora mismo: su (fila, columna), si es plaza, a qué District pertenece, cada
+> Custom Place que contiene (y en qué cuadrante, o si ocupa la manzana entera) y de dónde salen
+> sus edificios. En Define City Area indica además qué haría un clic; en el selector de Custom
+> Pedestrians nombra también el tramo bajo el puntero y si forma parte de la ruta.
+
 Bajo la vista previa, una leyenda indica el número de manzanas, cuántas son plazas y el tamaño
 resultante en metros.
 
@@ -234,8 +253,9 @@ en las afueras. Las manzanas que no pertenecen a ningún barrio siguen usando
 
 Pulsa **+ Add District** para añadir una entrada. Cada entrada tiene su propia vista previa del
 grid: haz clic en una manzana para añadirla al barrio y vuelve a hacer clic para quitarla. Sus
-manzanas se pintan en naranja, las plazas en verde y las de otros barrios en un gris azulado
-neutro, como referencia; en modo Customize solo se dibujan las manzanas de la forma.
+manzanas se pintan con el color del barrio y un borde; las plazas, los demás barrios (más
+tenues, cada uno con su color) y los Custom Places se muestran como referencia. En modo
+Customize solo se dibujan las manzanas de la forma.
 
 | Parámetro | Qué hace |
 |---|---|
@@ -294,8 +314,9 @@ edificio protagonista.
 
 Pulsa **+ Add Custom Place** para añadir una entrada. Cada entrada tiene su propia vista previa:
 haz clic en una manzana para situarla ahí, y en un cuadrante de esa manzana para elegir cuál de
-las cuatro esquinas ocupa. Las manzanas-plaza se muestran en verde como referencia: un Custom
-Place no puede colocarse en una.
+las cuatro esquinas ocupa. El hueco de la propia entrada se pinta en naranja; las plazas, los
+barrios y los demás Custom Places se muestran como referencia: un Custom Place no puede
+colocarse en una plaza ni en un hueco que ya ocupe otro Custom Place.
 
 | Parámetro | Qué hace |
 |---|---|
@@ -583,7 +604,9 @@ del grafo peatonal real para tus ajustes actuales, con código de color — **ve
 del anillo de acera, **naranja** para un cruce y **azul** para un radio interior que atraviesa
 una manzana. Haz clic en un tramo para añadirlo a la ruta (se pone amarillo) y otra vez para
 quitarlo. Solo se puede añadir un tramo que comparta un punto con la selección actual, así que
-la ruta trazada siempre queda conectada.
+la ruta trazada siempre queda conectada. Las manzanas bajo el grafo se sombrean con las mismas
+plazas, barrios y Custom Places que el resto de vistas previas, y sus filas y columnas se
+numeran igual.
 
 La entrada de la captura aparece con borde rojo porque todavía no tiene ruta trazada: cada
 entrada necesita **al menos dos nodos conectados** seleccionados, o la generación se bloquea. Si
