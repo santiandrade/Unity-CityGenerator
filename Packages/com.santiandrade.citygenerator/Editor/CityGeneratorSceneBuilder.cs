@@ -31,6 +31,18 @@ namespace CityGenerator.Editor
         /// <summary>Same as <see cref="BuildAndSaveScene(CityGeneratorSettings)"/>, forwarding generation progress to <paramref name="onProgress"/> — see <see cref="CityGeneratorContentAssembler.Assemble(CityGeneratorSettings, Transform, System.Action{string, float})"/>.</summary>
         public static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings, System.Action<string, float> onProgress)
         {
+            return BuildAndSaveScene(settings, GetNextFreeScenePath(), onProgress);
+        }
+
+        /// <summary>
+        /// Same as <see cref="BuildAndSaveScene(CityGeneratorSettings, System.Action{string, float})"/>,
+        /// but saving to an explicit <paramref name="scenePath"/> instead of the next free
+        /// <c>Assets/Scenes/City&lt;N&gt;.unity</c> -- lets tests generate into a disposable folder.
+        /// Once the scene is saved, SPEC 24 writes the settings it was generated with next to it
+        /// (<see cref="CityGeneratorSettingsAsset.WriteForScene"/>).
+        /// </summary>
+        internal static (string scenePath, CityBuildSummary summary) BuildAndSaveScene(CityGeneratorSettings settings, string scenePath, System.Action<string, float> onProgress)
+        {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
 
             try
@@ -41,7 +53,6 @@ namespace CityGenerator.Editor
 
                 // Known now (before the scene itself is saved) purely so the sibling PNG asset can
                 // be named after it; see CityGeneratorMinimapBuilder's remarks on the two-phase split.
-                string scenePath = GetNextFreeScenePath();
                 CityGeneratorMinimapBuilder.SaveSnapshotAsset(cityRootGO.transform, scenePath);
 
                 CityGeneratorInfo info = cityRootGO.GetComponent<CityGeneratorInfo>();
@@ -62,6 +73,10 @@ namespace CityGenerator.Editor
                 info.minimapHUD = CreateMinimapHud(scene, settings.minimap);
 
                 EditorSceneManager.SaveScene(scene, scenePath);
+
+                // SPEC 24: the recipe of this scene, written only once generation has fully
+                // succeeded, at the same per-scene path on every generation (stable GUID).
+                CityGeneratorSettingsAsset.WriteForScene(settings, scenePath);
 
                 return (scenePath, summary);
             }
@@ -177,6 +192,10 @@ namespace CityGenerator.Editor
             Undo.CollapseUndoOperations(undoGroup);
 
             EditorSceneManager.MarkSceneDirty(scene);
+
+            // SPEC 24: overwrites the scene's settings asset in place (same GUID). An unsaved
+            // scene has no path, so nothing is written -- same as the minimap PNG above.
+            CityGeneratorSettingsAsset.WriteForScene(settings, scene.path);
             return summary;
         }
 

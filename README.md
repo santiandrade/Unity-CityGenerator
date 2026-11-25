@@ -39,6 +39,11 @@ District any position lies in (`city.City.TryGetDistrictAt`).
   - **Minimap:** texture resolution and view radius for the in-game HUD.
   - **Audio:** looping 2D city ambience, plus positional 3D sources placed in each
     generated plaza.
+- **Keep each city's recipe:** every generation saves the settings it used as an asset next
+  to its scene (`<Scene>/<Scene>_CityGeneratorSettings.asset`). Commit it with the scene, and
+  load it back from the window's **Settings** bar (**Load From Scene**) to regenerate that city
+  identically — on any machine. Settings can also be saved to and loaded from any asset of
+  your own.
 - **Install and generate immediately:** it ships as the embedded package
   `com.santiandrade.citygenerator`, installable directly from a git URL, with a complete
   set of demo prefabs included. No package code needs to be touched.

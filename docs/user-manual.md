@@ -22,6 +22,7 @@ already installed.
 - [1. Opening the tool](#1-opening-the-tool)
 - [2. Quick start: your first city](#2-quick-start-your-first-city)
 - [3. Anatomy of the window](#3-anatomy-of-the-window)
+  - [3.1 Settings assets: saving and reloading a city's settings](#31-settings-assets-saving-and-reloading-a-citys-settings)
 - [4. City tab](#4-city-tab)
   - [4.1 General Options](#41-general-options)
   - [4.2 Custom Grid (Customize mode)](#42-custom-grid-customize-mode)
@@ -96,11 +97,12 @@ To iterate on the result, use **Re-Build City in Current Scene** instead: it del
 
 ![The City Generator window](images/manual/window-overview.png)
 
-The window has four parts, top to bottom:
+The window has five parts, top to bottom:
 
 | Part | What it is |
 |---|---|
 | **Banner** | The tool's header image. Hovering it shows the installed package version. |
+| **Settings bar** | The settings asset the window is linked to, and the buttons to load, revert and save it — see [3.1](#31-settings-assets-saving-and-reloading-a-citys-settings). |
 | **Tab bar** | Six tabs: City, Player, Traffic, Pedestrians, Minimap, Audio. A tab whose settings contain a blocking error is highlighted. |
 | **Cards** | The parameters of the selected tab, grouped into collapsible cards. Click a card's header to expand/collapse it; each card remembers its state between sessions. |
 | **Footer** | Summary line, validation panel and the three action buttons. |
@@ -114,7 +116,70 @@ turn red while empty. The mark is conditional: for example the Lawn Prefab is on
 once at least one plaza block is selected.
 
 **Nothing is applied to your project until you press a Build button.** Editing settings in
-this window never touches your scene or your assets.
+this window never touches your scene or your assets — the only exception is the settings
+asset you explicitly **Save** to (see below).
+
+### 3.1 Settings assets: saving and reloading a city's settings
+
+![The Settings bar](images/manual/settings-bar.png)
+
+The window keeps a single set of settings. To keep the settings of each city you generate —
+so you can regenerate it identically later, on another machine or after resetting the Editor
+layout — they are stored in **settings assets** (`CityGeneratorSettingsAsset`), ordinary
+project assets you commit like any other.
+
+**Every generation writes one automatically.** Each successful **Build City in New Scene** and
+**Re-Build City in Current Scene** writes the settings it used next to the scene:
+
+```
+Assets/Scenes/City3.unity
+Assets/Scenes/City3/City3_Minimap.png
+Assets/Scenes/City3/City3_CityGeneratorSettings.asset
+```
+
+It is always the same path, so a Re-Build overwrites it in place (it keeps its GUID) and it
+always holds the settings of the **last** generation of that scene. An unsaved scene has no
+folder, so nothing is written for it. **Commit the `.asset` and its `.meta` together with the
+scene.** After generating, the window is linked to that asset.
+
+**The Settings bar** sits between the banner and the tabs:
+
+| Control | What it does |
+|---|---|
+| **Settings** field | The asset the window is linked to, or None. Pick or drag an asset onto it to **load** it: its settings replace the window's and the window links to it. Set it to None to **unlink**: the window keeps its current settings and loads nothing. |
+| **Modified** | Shown when the window's settings differ from the linked asset. |
+| **Revert** | Reloads the linked asset, discarding the window's changes. Only enabled while Modified. |
+| **Load From Scene** | Loads and links the active scene's own `<Scene>_CityGeneratorSettings.asset`, without looking for it in the Project window. Only enabled if that asset exists. |
+| **Save** | Writes the window's settings into the linked asset. Only enabled while Modified. |
+| **Save As…** | Writes them into a new asset (proposing the active city scene's folder, or `Assets/`) and links the window to it. Use it to keep a variant: the per-scene asset is overwritten by the next generation of that scene. |
+
+Anything that would replace the window's settings — picking another asset, **Revert**, **Load
+From Scene** or **Open in City Generator** — asks for confirmation first if the window has
+unsaved changes (or, with no asset linked, settings that differ from the defaults). Cancelling
+leaves everything as it was. Loading and **Save** can be undone with Ctrl+Z. **Reset to
+Defaults** keeps the link, so the reset shows as Modified until you save or revert.
+
+**To regenerate a city exactly as it was:** open its scene, click **Load From Scene** and then
+**Re-Build City in Current Scene**. With **Custom Seed** on, the result is the same city.
+
+**Creating one by hand:** **Assets > Create > City Generator > City Settings** creates an asset
+with the package's default settings. Selecting any settings asset shows a read-only summary
+(grid, seed, Districts, Custom Places, prefab counts and the package version that saved it) and
+an **Open in City Generator** button. The settings themselves are edited in the window, not in
+the Inspector.
+
+Notes:
+
+- Settings assets are Editor-only: nothing in your game references them and they are not
+  included in builds. Don't put them in a `Resources/` folder, which would force them into the
+  build.
+- An asset saved with an older package version loads fine; settings added since then take their
+  default value. One saved with a newer version also loads, with a Console warning that settings
+  this version doesn't know were ignored.
+- If a prefab an asset references has been deleted, its entry loads empty and the validation
+  panel reports it, exactly as if you had cleared it by hand.
+- Cities generated before settings assets existed have none, and their settings can't be
+  recovered from the scene: configure them once more and Re-Build to get one.
 
 ---
 
@@ -783,6 +848,10 @@ Generation creates a single root object named **`City`**, with one group per con
 
 Alongside it, a new scene also gets a `Directional Light`, a `Main Camera` (carrying the
 third-person and, if enabled, the Free Camera controller), the `Player`, and the minimap HUD.
+
+Next to the scene, in a folder with the scene's name, go the minimap snapshot
+(`<Scene>_Minimap.png`) and the settings the city was generated with
+(`<Scene>_CityGeneratorSettings.asset`, see [3.1](#31-settings-assets-saving-and-reloading-a-citys-settings)).
 
 Everything except `Vehicles` and `Pedestrians` is flagged static for batching and occlusion,
 so lightmap and occlusion bakes are ready to run — the tool just doesn't run them for you.

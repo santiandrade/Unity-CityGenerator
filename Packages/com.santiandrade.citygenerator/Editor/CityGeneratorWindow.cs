@@ -39,6 +39,28 @@ namespace CityGenerator.Editor
         [SerializeField] internal CityGeneratorSettings settings = new();
         [SerializeField] private bool defaultsInitialized;
 
+        // SPEC 24: the settings asset this window is linked to (or none). Serialized like
+        // `settings`, so it survives domain reloads and the Editor layout.
+        [SerializeField] internal CityGeneratorSettingsAsset linkedSettingsAsset;
+        // Bumped (under Undo) every time `settings` is replaced wholesale by a load, so an Undo/Redo
+        // that crosses a load can tell the UI must be rebuilt rather than just refreshed: the cards
+        // were built against the previous settings' structure.
+        [SerializeField] private int settingsLoadRevision;
+        [NonSerialized] private int builtSettingsLoadRevision = -1;
+        // Cache of the linked asset's JSON, keyed by the asset and its dirty count, so the Modified
+        // check costs one ToJson (the window's) per settings change instead of two.
+        [NonSerialized] private string linkedAssetJson;
+        [NonSerialized] private CityGeneratorSettingsAsset linkedAssetJsonSource;
+        [NonSerialized] private int linkedAssetJsonDirtyCount;
+        [NonSerialized] private bool settingsModified;
+
+        private ObjectField settingsAssetField;
+        private Label settingsModifiedLabel;
+        private Button revertSettingsButton;
+        private Button loadFromSceneButton;
+        private Button saveSettingsButton;
+        private Button saveSettingsAsButton;
+
         private SerializedObject serializedWindow;
 
         // Populated by BuildUi; consulted by RefreshValidation to mark a card/field/tab as the
@@ -170,6 +192,11 @@ namespace CityGenerator.Editor
         // initializer, so the tool's own reference-city prefabs are assigned here instead.
         private void OnEnable()
         {
+            Undo.undoRedoPerformed += OnUndoRedoPerformed;
+            EditorApplication.projectChanged += OnProjectOrSceneChanged;
+            UnityEditor.SceneManagement.EditorSceneManager.activeSceneChangedInEditMode += OnActiveSceneChanged;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneSaved += OnSceneSaved;
+
             if (defaultsInitialized)
                 return;
 
@@ -182,7 +209,56 @@ namespace CityGenerator.Editor
         // instead of leaving a hidden HideAndDontSave object behind.
         private void OnDisable()
         {
+            Undo.undoRedoPerformed -= OnUndoRedoPerformed;
+            EditorApplication.projectChanged -= OnProjectOrSceneChanged;
+            UnityEditor.SceneManagement.EditorSceneManager.activeSceneChangedInEditMode -= OnActiveSceneChanged;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneSaved -= OnSceneSaved;
             customPedestrianList?.Dispose();
+        }
+
+        private void OnFocus()
+        {
+            RefreshSettingsBar();
+        }
+
+        private void OnActiveSceneChanged(UnityEngine.SceneManagement.Scene previous, UnityEngine.SceneManagement.Scene current)
+        {
+            RefreshSettingsBar();
+        }
+
+        private void OnSceneSaved(UnityEngine.SceneManagement.Scene scene)
+        {
+            RefreshSettingsBar();
+        }
+
+        private void OnProjectOrSceneChanged()
+        {
+            // The linked asset may have been reimported (e.g. a git pull) or deleted.
+            linkedAssetJsonSource = null;
+            RefreshSettingsBar();
+        }
+
+        /// <summary>
+        /// SPEC 24: loading an asset replaces <see cref="settings"/> wholesale under Undo, so undoing
+        /// or redoing across a load needs the UI rebuilt against the restored object; any other
+        /// Undo/Redo (a field edit, Save, linking/unlinking) only needs the dynamic UI and the
+        /// settings bar refreshed.
+        /// </summary>
+        private void OnUndoRedoPerformed()
+        {
+            linkedAssetJsonSource = null;
+            if (serializedWindow == null)
+                return;
+
+            if (builtSettingsLoadRevision != settingsLoadRevision)
+            {
+                customPedestrianList?.Dispose();
+                BuildUi();
+                return;
+            }
+
+            serializedWindow.Update();
+            RefreshDynamicUi();
         }
 
         private void CreateGUI()
@@ -220,8 +296,10 @@ namespace CityGenerator.Editor
             rootVisualElement.styleSheets.Add(baseStyle);
 
             serializedWindow = new SerializedObject(this);
+            builtSettingsLoadRevision = settingsLoadRevision;
 
             BuildBanner();
+            BuildSettingsBar();
 
             VisualElement tabsContainer = rootVisualElement.Q<VisualElement>("cg-tabs");
             VisualElement cityContainer = rootVisualElement.Q<VisualElement>("cg-cards-city");
@@ -297,6 +375,314 @@ namespace CityGenerator.Editor
             UnityEditor.PackageManager.PackageInfo packageInfo =
                 UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(CityGeneratorWindow).Assembly);
             banner.tooltip = packageInfo != null ? $"City Generator v{packageInfo.version}" : "City Generator";
+        }
+
+        /// <summary>
+        /// SPEC 24: the "Settings" bar between the banner and the tabs. The ObjectField is the
+        /// asset picker itself (no Load button) and is deliberately left unbound: picking an asset
+        /// goes through <see cref="OnSettingsAssetFieldChanged"/> so it can ask for confirmation
+        /// and put the field back if the user cancels.
+        /// </summary>
+        private void BuildSettingsBar()
+        {
+            VisualElement bar = rootVisualElement.Q<VisualElement>("cg-settings-bar");
+            if (bar == null)
+                return;
+
+            var row = new VisualElement();
+            row.AddToClassList("cg-settings-bar__row");
+            bar.Add(row);
+
+            settingsAssetField = new ObjectField("Settings")
+            {
+                objectType = typeof(CityGeneratorSettingsAsset),
+                allowSceneObjects = false,
+                tooltip = "Settings asset linked to this window. Pick or drag one here to load it; set to None to unlink and keep the current settings.",
+            };
+            settingsAssetField.AddToClassList("cg-settings-bar__field");
+            settingsAssetField.labelElement.style.minWidth = 56;
+            settingsAssetField.SetValueWithoutNotify(linkedSettingsAsset);
+            settingsAssetField.RegisterValueChangedCallback(OnSettingsAssetFieldChanged);
+            row.Add(settingsAssetField);
+
+            settingsModifiedLabel = new Label("Modified")
+            {
+                tooltip = "The window has changes that are not saved to the linked settings asset.",
+            };
+            settingsModifiedLabel.AddToClassList("cg-settings-bar__modified");
+            row.Add(settingsModifiedLabel);
+
+            var buttons = new VisualElement();
+            buttons.AddToClassList("cg-settings-bar__buttons");
+            bar.Add(buttons);
+
+            revertSettingsButton = AddSettingsBarButton(buttons, "Revert", RevertSettings,
+                "Reload the linked settings asset, discarding the window's unsaved changes.");
+            loadFromSceneButton = AddSettingsBarButton(buttons, "Load From Scene", LoadSettingsFromActiveScene,
+                "Load and link the settings asset written next to the active scene when its city was generated (<Scene>/<Scene>" + CityGeneratorSettingsAssetPaths.SettingsAssetSuffix + ").");
+            saveSettingsButton = AddSettingsBarButton(buttons, "Save", SaveSettingsToLinkedAsset,
+                "Write the window's settings into the linked settings asset.");
+            saveSettingsAsButton = AddSettingsBarButton(buttons, "Save As...", SaveSettingsAs,
+                "Write the window's settings into a new settings asset and link the window to it.");
+        }
+
+        private static Button AddSettingsBarButton(VisualElement parent, string text, Action onClick, string tooltip)
+        {
+            var button = new Button(onClick) { text = text, tooltip = tooltip };
+            button.AddToClassList("cg-settings-bar__button");
+            parent.Add(button);
+            return button;
+        }
+
+        /// <summary>
+        /// Recomputes Modified (window JSON vs. the linked asset's JSON) and the enabled state of
+        /// every settings bar button. Called after every settings change from
+        /// <see cref="RefreshDynamicUi"/>, plus on focus, project and scene changes.
+        /// </summary>
+        private void RefreshSettingsBar()
+        {
+            if (settingsAssetField == null)
+                return;
+
+            // A linked asset deleted from the Project compares equal to null from here on.
+            if (linkedSettingsAsset == null && !ReferenceEquals(linkedSettingsAsset, null))
+                linkedSettingsAsset = null;
+
+            settingsAssetField.SetValueWithoutNotify(linkedSettingsAsset);
+            settingsModified = IsModifiedAgainstLinkedAsset();
+
+            settingsModifiedLabel.style.display = settingsModified ? DisplayStyle.Flex : DisplayStyle.None;
+            revertSettingsButton.SetEnabled(linkedSettingsAsset != null && settingsModified);
+            saveSettingsButton.SetEnabled(linkedSettingsAsset != null && settingsModified);
+            loadFromSceneButton.SetEnabled(FindActiveSceneSettingsAsset() != null);
+        }
+
+        /// <summary>True when a settings asset is linked and the window's settings differ from it.</summary>
+        internal bool IsModifiedAgainstLinkedAsset()
+        {
+            if (linkedSettingsAsset == null)
+                return false;
+
+            int dirtyCount = EditorUtility.GetDirtyCount(linkedSettingsAsset);
+            if (linkedAssetJsonSource != linkedSettingsAsset || linkedAssetJsonDirtyCount != dirtyCount || linkedAssetJson == null)
+            {
+                linkedAssetJson = CityGeneratorSettingsAsset.ToJson(linkedSettingsAsset.settings);
+                linkedAssetJsonSource = linkedSettingsAsset;
+                linkedAssetJsonDirtyCount = dirtyCount;
+            }
+
+            return CityGeneratorSettingsAsset.ToJson(settings) != linkedAssetJson;
+        }
+
+        /// <summary>
+        /// Whether replacing the window's settings would lose something: with an asset linked,
+        /// whether the window is Modified; with none, whether the settings differ from the package
+        /// defaults -- they aren't stored in any asset, so anything but the defaults would be lost.
+        /// </summary>
+        private bool HasUnsavedSettings()
+        {
+            if (linkedSettingsAsset != null)
+                return IsModifiedAgainstLinkedAsset();
+
+            var defaults = new CityGeneratorSettings();
+            CityGeneratorDefaultAssets.ApplyTo(defaults);
+            return CityGeneratorSettingsAsset.ToJson(settings) != CityGeneratorSettingsAsset.ToJson(defaults);
+        }
+
+        private bool ConfirmReplaceSettings()
+        {
+            if (!HasUnsavedSettings())
+                return true;
+
+            string message = linkedSettingsAsset != null
+                ? $"The window has changes not saved to '{linkedSettingsAsset.name}'. Replacing the settings discards them."
+                : "The window's current settings are not saved in any settings asset. Replacing them discards them.";
+            return EditorUtility.DisplayDialog("City Generator - Unsaved Settings", message, "Discard Changes", "Cancel");
+        }
+
+        private void OnSettingsAssetFieldChanged(ChangeEvent<UnityEngine.Object> evt)
+        {
+            var asset = evt.newValue as CityGeneratorSettingsAsset;
+            if (asset == linkedSettingsAsset)
+                return;
+
+            if (asset == null)
+            {
+                // Unlink only: the window keeps its current settings and loads nothing.
+                Undo.RecordObject(this, "Unlink City Generator Settings");
+                linkedSettingsAsset = null;
+                RefreshSettingsBar();
+                return;
+            }
+
+            if (!TryLoadSettingsAsset(asset, "Load City Generator Settings"))
+                settingsAssetField.SetValueWithoutNotify(linkedSettingsAsset);
+        }
+
+        private void RevertSettings()
+        {
+            if (linkedSettingsAsset == null || !ConfirmReplaceSettings())
+                return;
+
+            RevertToLinkedAsset();
+        }
+
+        /// <summary>Revert without the confirmation dialog: reloads the linked asset, discarding the window's changes.</summary>
+        internal void RevertToLinkedAsset()
+        {
+            if (linkedSettingsAsset != null)
+                LoadSettingsAsset(linkedSettingsAsset, "Revert City Generator Settings");
+        }
+
+        private void LoadSettingsFromActiveScene()
+        {
+            CityGeneratorSettingsAsset asset = FindActiveSceneSettingsAsset();
+            if (asset == null)
+            {
+                RefreshSettingsBar();
+                return;
+            }
+
+            TryLoadSettingsAsset(asset, "Load City Generator Settings From Scene");
+        }
+
+        /// <summary>The active scene's per-scene settings asset, or null if it is unsaved or has none.</summary>
+        private static CityGeneratorSettingsAsset FindActiveSceneSettingsAsset()
+        {
+            string path = CityGeneratorSettingsAssetPaths.ForScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path);
+            return path == null ? null : AssetDatabase.LoadAssetAtPath<CityGeneratorSettingsAsset>(path);
+        }
+
+        /// <summary>
+        /// Asks for confirmation if the window has unsaved settings, then loads <paramref name="asset"/>.
+        /// Returns false, changing nothing, if the user cancels.
+        /// </summary>
+        internal bool TryLoadSettingsAsset(CityGeneratorSettingsAsset asset, string undoName)
+        {
+            if (asset == null || !ConfirmReplaceSettings())
+                return false;
+
+            LoadSettingsAsset(asset, undoName);
+            return true;
+        }
+
+        /// <summary>
+        /// Replaces the window's settings with a deep copy of <paramref name="asset"/>'s and links
+        /// it, under Undo (no confirmation: see <see cref="TryLoadSettingsAsset"/>).
+        /// </summary>
+        internal void LoadSettingsAsset(CityGeneratorSettingsAsset asset, string undoName = "Load City Generator Settings")
+        {
+            Undo.RecordObject(this, undoName);
+            customPedestrianList?.Dispose();
+            settings = asset.CopySettings();
+            linkedSettingsAsset = asset;
+            settingsLoadRevision++;
+            linkedAssetJsonSource = null;
+            asset.WarnIfFromNewerPackageVersion();
+
+            if (serializedWindow != null)
+                BuildUi();
+        }
+
+        /// <summary>Writes the window's settings into the linked asset, under Undo on the asset.</summary>
+        internal void SaveSettingsToLinkedAsset()
+        {
+            if (linkedSettingsAsset == null)
+                return;
+
+            Undo.RecordObject(linkedSettingsAsset, "Save City Generator Settings");
+            linkedSettingsAsset.Store(settings);
+            EditorUtility.SetDirty(linkedSettingsAsset);
+            AssetDatabase.SaveAssetIfDirty(linkedSettingsAsset);
+            linkedAssetJsonSource = null;
+            RefreshSettingsBar();
+        }
+
+        private void SaveSettingsAs()
+        {
+            string path = EditorUtility.SaveFilePanelInProject(
+                "Save City Generator Settings",
+                "CityGeneratorSettings",
+                "asset",
+                "Choose where to save these City Generator settings.",
+                GetSaveAsDefaultFolder());
+            if (string.IsNullOrEmpty(path))
+                return;
+
+            SaveSettingsAsAt(path);
+        }
+
+        /// <summary>
+        /// Save As without the file panel: writes the window's settings to <paramref name="path"/>
+        /// (overwriting a settings asset already there in place, so it keeps its GUID) and links it.
+        /// </summary>
+        internal CityGeneratorSettingsAsset SaveSettingsAsAt(string path)
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<CityGeneratorSettingsAsset>(path);
+            CityGeneratorSettingsAsset asset;
+            if (existing != null)
+            {
+                Undo.RecordObject(existing, "Save City Generator Settings");
+                asset = CityGeneratorSettingsAsset.WriteAt(settings, path);
+            }
+            else
+            {
+                asset = CityGeneratorSettingsAsset.WriteAt(settings, path);
+            }
+
+            Undo.RecordObject(this, "Link City Generator Settings");
+            linkedSettingsAsset = asset;
+            linkedAssetJsonSource = null;
+            RefreshSettingsBar();
+            return asset;
+        }
+
+        /// <summary>
+        /// Save As proposes the active scene's own folder when it is a generated city (its
+        /// per-scene folder if it already exists, where the generation wrote its settings asset),
+        /// and <c>Assets/</c> otherwise.
+        /// </summary>
+        private static string GetSaveAsDefaultFolder()
+        {
+            UnityEngine.SceneManagement.Scene scene = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene();
+            if (string.IsNullOrEmpty(scene.path) || CityGeneratorSceneBuilder.FindAllCityRoots(scene).Count == 0)
+                return "Assets";
+
+            string sceneAssetFolder = CityGeneratorSettingsAssetPaths.SceneAssetFolder(scene.path);
+            if (AssetDatabase.IsValidFolder(sceneAssetFolder))
+                return sceneAssetFolder;
+
+            string sceneFolder = System.IO.Path.GetDirectoryName(scene.path)?.Replace('\\', '/');
+            return string.IsNullOrEmpty(sceneFolder) ? "Assets" : sceneFolder;
+        }
+
+        /// <summary>
+        /// After a successful generation: links the window to the scene's freshly written settings
+        /// asset. The window's settings are what was just written, so it is left unmodified. With an
+        /// unsaved scene nothing was written and the current link is kept.
+        /// </summary>
+        private void LinkToGeneratedSceneAsset(string scenePath)
+        {
+            string path = CityGeneratorSettingsAssetPaths.ForScene(scenePath);
+            var asset = path == null ? null : AssetDatabase.LoadAssetAtPath<CityGeneratorSettingsAsset>(path);
+            if (asset == null)
+                return;
+
+            linkedSettingsAsset = asset;
+            linkedAssetJsonSource = null;
+            RefreshSettingsBar();
+        }
+
+        /// <summary>
+        /// Opens the window (or focuses it) and loads <paramref name="asset"/>, asking for
+        /// confirmation first if the window has unsaved settings. Used by the settings asset's
+        /// Inspector ("Open in City Generator").
+        /// </summary>
+        internal static void OpenWithSettingsAsset(CityGeneratorSettingsAsset asset)
+        {
+            ShowWindow();
+            var window = GetWindow<CityGeneratorWindow>();
+            window.TryLoadSettingsAsset(asset, "Open City Generator Settings");
         }
 
         private void BuildGeneralCard(VisualElement parent)
@@ -935,6 +1321,7 @@ namespace CityGenerator.Editor
             }
 
             RefreshValidation();
+            RefreshSettingsBar();
         }
 
         /// <summary>
@@ -1244,6 +1631,8 @@ namespace CityGenerator.Editor
             return $"View Radius ({viewRadiusMeters:0.#}m) is larger than the snapshot's covered world size (~{coveredHalfExtent:0.#}m half-extent for this {gridWidth}x{gridHeight} grid) — the HUD could never zoom out far enough to show it.";
         }
 
+        // SPEC 24: keeps the linked settings asset -- the reset settings simply show as Modified
+        // against it until saved or reverted.
         private void ResetToDefaults()
         {
             customPedestrianList?.Dispose();
@@ -1323,6 +1712,7 @@ namespace CityGenerator.Editor
             {
                 CityBuildSummary summary = CityGeneratorSceneBuilder.RebuildInActiveScene(settings, ReportProgress);
                 string scenePath = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().path;
+                LinkToGeneratedSceneAsset(scenePath);
                 LogSummary(scenePath, summary);
                 ShowResult(scenePath, summary, success: true);
             }
@@ -1381,6 +1771,7 @@ namespace CityGenerator.Editor
         internal (string scenePath, CityBuildSummary summary) GenerateCity(Action<string, float> onProgress = null)
         {
             (string scenePath, CityBuildSummary summary) = CityGeneratorSceneBuilder.BuildAndSaveScene(settings, onProgress);
+            LinkToGeneratedSceneAsset(scenePath);
             LogSummary(scenePath, summary);
             return (scenePath, summary);
         }

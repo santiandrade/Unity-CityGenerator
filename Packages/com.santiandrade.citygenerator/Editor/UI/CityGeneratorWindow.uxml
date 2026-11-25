@@ -2,6 +2,8 @@
     <engine:VisualElement name="cg-root" class="cg-root">
         <engine:VisualElement name="cg-banner" class="cg-banner" />
 
+        <engine:VisualElement name="cg-settings-bar" class="cg-settings-bar" />
+
         <engine:VisualElement name="cg-tabs" class="cg-tabs" />
 
         <engine:ScrollView name="cg-scroll" class="cg-scroll">
