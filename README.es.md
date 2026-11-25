@@ -40,6 +40,11 @@ incluido en qué barrio (District) cae cualquier posición (`city.City.TryGetDis
   - **Minimap:** resolución de textura y radio de visión del HUD de minimapa en el juego.
   - **Audio:** ambiente 2D de ciudad en bucle, más fuentes 3D posicionales en cada plaza
     generada.
+- **Conserva la receta de cada ciudad:** cada generación guarda los ajustes que usó en un
+  asset junto a su escena (`<Escena>/<Escena>_CityGeneratorSettings.asset`). Haz commit de él
+  con la escena y vuelve a cargarlo desde la barra **Settings** de la ventana (**Load From
+  Scene**) para regenerar esa ciudad igual, en cualquier máquina. Los ajustes también se pueden
+  guardar en y cargar desde cualquier asset propio.
 - **Instálala y genera de inmediato:** se distribuye como el package embebido
   `com.santiandrade.citygenerator`, instalable directamente desde una git URL, con un
   conjunto completo de prefabs de demostración incluido. No hace falta tocar el código

@@ -225,13 +225,10 @@ namespace CityGenerator.Editor
             if (data == null || data.snapshot == null || string.IsNullOrEmpty(scenePath))
                 return;
 
-            string sceneFolder = Path.GetDirectoryName(scenePath)?.Replace('\\', '/');
-            string sceneName = Path.GetFileNameWithoutExtension(scenePath);
-            string folder = $"{sceneFolder}/{sceneName}";
-            string pngPath = $"{folder}/{sceneName}_Minimap.png";
-
-            if (!AssetDatabase.IsValidFolder(folder))
-                AssetDatabase.CreateFolder(sceneFolder, sceneName);
+            // SPEC 24: the per-scene folder is shared with the settings asset, so it's computed in
+            // one place only (CityGeneratorSettingsAssetPaths).
+            CityGeneratorSettingsAssetPaths.EnsureSceneAssetFolder(scenePath);
+            string pngPath = CityGeneratorSettingsAssetPaths.MinimapForScene(scenePath);
 
             byte[] pngBytes = data.snapshot.EncodeToPNG();
             File.WriteAllBytes(Path.GetFullPath(pngPath), pngBytes);
@@ -528,13 +525,8 @@ namespace CityGenerator.Editor
                 return;
             }
 
-            string sceneFolder = Path.GetDirectoryName(scenePath)?.Replace('\\', '/');
-            string sceneName = Path.GetFileNameWithoutExtension(scenePath);
-            string folder = $"{sceneFolder}/{sceneName}";
-            string pngPath = $"{folder}/{sceneName}_Minimap.png";
-
-            if (!AssetDatabase.IsValidFolder(folder))
-                AssetDatabase.CreateFolder(sceneFolder, sceneName);
+            CityGeneratorSettingsAssetPaths.EnsureSceneAssetFolder(scenePath);
+            string pngPath = CityGeneratorSettingsAssetPaths.MinimapForScene(scenePath);
 
             byte[] pngBytes = snapshot.EncodeToPNG();
             File.WriteAllBytes(Path.GetFullPath(pngPath), pngBytes);

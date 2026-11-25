@@ -21,6 +21,7 @@ documento da por hecho que el paquete ya está instalado.
 - [1. Abrir la herramienta](#1-abrir-la-herramienta)
 - [2. Inicio rápido: tu primera ciudad](#2-inicio-rápido-tu-primera-ciudad)
 - [3. Anatomía de la ventana](#3-anatomía-de-la-ventana)
+  - [3.1 Assets de ajustes: guardar y recargar los ajustes de una ciudad](#31-assets-de-ajustes-guardar-y-recargar-los-ajustes-de-una-ciudad)
 - [4. Pestaña City](#4-pestaña-city)
   - [4.1 General Options](#41-general-options)
   - [4.2 Custom Grid (modo Customize)](#42-custom-grid-modo-customize)
@@ -97,11 +98,12 @@ de la escena abierta y lo regenera, conservando la cámara y el jugador.
 
 ![La ventana de City Generator](images/manual/window-overview.png)
 
-La ventana tiene cuatro partes, de arriba abajo:
+La ventana tiene cinco partes, de arriba abajo:
 
 | Parte | Qué es |
 |---|---|
 | **Banner** | La imagen de cabecera de la herramienta. Al pasar el ratón por encima muestra la versión instalada del paquete. |
+| **Barra Settings** | El asset de ajustes al que está vinculada la ventana y los botones para cargarlo, revertirlo y guardarlo — ver [3.1](#31-assets-de-ajustes-guardar-y-recargar-los-ajustes-de-una-ciudad). |
 | **Barra de pestañas** | Seis pestañas: City, Player, Traffic, Pedestrians, Minimap, Audio. Una pestaña cuyos ajustes contengan un error bloqueante aparece resaltada. |
 | **Cards** | Los parámetros de la pestaña seleccionada, agrupados en secciones plegables. Haz clic en la cabecera de una card para plegarla/desplegarla; cada card recuerda su estado entre sesiones. |
 | **Pie** | Línea de resumen, panel de validación y los tres botones de acción. |
@@ -115,7 +117,71 @@ marcados, y se ponen en rojo mientras estén vacíos. La marca es condicional: p
 Lawn Prefab solo es obligatorio cuando hay al menos una manzana marcada como plaza.
 
 **Nada se aplica a tu proyecto hasta que pulsas un botón de Build.** Editar ajustes en esta
-ventana nunca toca tu escena ni tus assets.
+ventana nunca toca tu escena ni tus assets — salvo el asset de ajustes en el que guardes
+explícitamente con **Save** (ver abajo).
+
+### 3.1 Assets de ajustes: guardar y recargar los ajustes de una ciudad
+
+![La barra Settings](images/manual/settings-bar.png)
+
+La ventana tiene un único juego de ajustes. Para conservar los de cada ciudad que generes —y
+poder regenerarla igual más adelante, en otra máquina o tras resetear el layout del Editor— se
+guardan en **assets de ajustes** (`CityGeneratorSettingsAsset`), assets normales del proyecto
+que se suben al control de versiones como cualquier otro.
+
+**Cada generación escribe uno automáticamente.** Cada **Build City in New Scene** y cada
+**Re-Build City in Current Scene** que termina bien escribe los ajustes usados junto a la escena:
+
+```
+Assets/Scenes/City3.unity
+Assets/Scenes/City3/City3_Minimap.png
+Assets/Scenes/City3/City3_CityGeneratorSettings.asset
+```
+
+Siempre es la misma ruta, así que un Re-Build lo sobrescribe en su sitio (conserva su GUID) y
+siempre contiene los ajustes de la **última** generación de esa escena. Una escena sin guardar
+no tiene carpeta, así que no se escribe nada. **Haz commit del `.asset` y su `.meta` junto con
+la escena.** Tras generar, la ventana queda vinculada a ese asset.
+
+**La barra Settings** está entre el banner y las pestañas:
+
+| Control | Qué hace |
+|---|---|
+| Campo **Settings** | El asset al que está vinculada la ventana, o None. Elige o arrastra un asset para **cargarlo**: sus ajustes sustituyen a los de la ventana y la ventana queda vinculada a él. Déjalo en None para **desvincular**: la ventana conserva sus ajustes y no carga nada. |
+| **Modified** | Aparece cuando los ajustes de la ventana difieren de los del asset vinculado. |
+| **Revert** | Vuelve a cargar el asset vinculado y descarta los cambios de la ventana. Solo activo con Modified. |
+| **Load From Scene** | Carga y vincula el `<Escena>_CityGeneratorSettings.asset` de la escena activa, sin buscarlo en el Project. Solo activo si ese asset existe. |
+| **Save** | Escribe los ajustes de la ventana en el asset vinculado. Solo activo con Modified. |
+| **Save As…** | Los escribe en un asset nuevo (propone la carpeta de la escena activa si es una ciudad, o `Assets/`) y vincula la ventana a él. Úsalo para conservar una variante: el asset de la escena se sobrescribe en su siguiente generación. |
+
+Todo lo que sustituya los ajustes de la ventana —elegir otro asset, **Revert**, **Load From
+Scene** u **Open in City Generator**— pide confirmación antes si la ventana tiene cambios sin
+guardar (o, sin asset vinculado, ajustes distintos de los de por defecto). Cancelar lo deja todo
+como estaba. Cargar y **Save** se deshacen con Ctrl+Z. **Reset to Defaults** conserva el
+vínculo, así que los ajustes reseteados aparecen como Modified hasta que guardes o reviertas.
+
+**Para regenerar una ciudad exactamente igual:** abre su escena, pulsa **Load From Scene** y
+después **Re-Build City in Current Scene**. Con **Custom Seed** activado, sale la misma ciudad.
+
+**Crear uno a mano:** **Assets > Create > City Generator > City Settings** crea un asset con los
+ajustes por defecto del paquete. Al seleccionar cualquier asset de ajustes se ve un resumen de
+solo lectura (cuadrícula, semilla, Districts, Custom Places, número de prefabs y la versión del
+paquete que lo guardó) y un botón **Open in City Generator**. Los ajustes se editan en la
+ventana, no en el Inspector.
+
+Notas:
+
+- Los assets de ajustes son solo de Editor: nada de tu juego los referencia y no se incluyen en
+  las builds. No los pongas en una carpeta `Resources/`, que obligaría a incluirlos en la build.
+- Un asset guardado con una versión anterior del paquete se carga sin problema; los ajustes
+  añadidos desde entonces toman su valor por defecto. Uno guardado con una versión más nueva
+  también se carga, con un aviso en la consola de que se han ignorado los ajustes que esta
+  versión no conoce.
+- Si se ha borrado un prefab al que hace referencia un asset, su entrada se carga vacía y el
+  panel de validación lo indica, igual que si la hubieras vaciado a mano.
+- Las ciudades generadas antes de que existieran los assets de ajustes no tienen ninguno, y sus
+  ajustes no se pueden recuperar de la escena: configúralas una vez más y haz Re-Build para
+  obtenerlo.
 
 ---
 
@@ -801,6 +867,10 @@ La generación crea un único objeto raíz llamado **`City`**, con un grupo por 
 Junto a él, una escena nueva recibe además una `Directional Light`, una `Main Camera` (con el
 controlador de tercera persona y, si está activada, el de Free Camera), el `Player` y el HUD del
 minimapa.
+
+Junto a la escena, en una carpeta con su nombre, van la captura del minimapa
+(`<Escena>_Minimap.png`) y los ajustes con los que se generó la ciudad
+(`<Escena>_CityGeneratorSettings.asset`, ver [3.1](#31-assets-de-ajustes-guardar-y-recargar-los-ajustes-de-una-ciudad)).
 
 Todo salvo `Vehicles` y `Pedestrians` queda marcado como estático para batching y occlusion, de
 modo que los bakes de iluminación y occlusion están listos para lanzarse — la herramienta

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Settings assets (`CityGeneratorSettingsAsset`): every successful Build or Re-Build saves the
+  settings it used next to its scene, as `<Scene>/<Scene>_CityGeneratorSettings.asset` (same
+  folder as the minimap PNG, same path and GUID on every Re-Build; nothing for an unsaved
+  scene). Commit it with the scene to keep the recipe of each city.
+- A **Settings** bar in the window, under the banner: link the window to a settings asset by
+  picking it (which loads it), unlink with None, see when the window is **Modified** against
+  it, **Revert**, **Load From Scene** (the active scene's own asset), **Save** and **Save As…**.
+  Replacing unsaved settings asks for confirmation; loading and saving can be undone.
+- **Assets > Create > City Generator > City Settings** creates a settings asset with the
+  package defaults. Its Inspector shows a read-only summary (grid, seed, Districts, Custom
+  Places, prefab counts, the package version that saved it) and **Open in City Generator**.
+
+### Notes
+
+- Settings assets are Editor-only and never enter a build (keep them out of `Resources/`).
+- An asset from an older version loads with the defaults of any setting added since; one from a
+  newer version loads with a Console warning. A deleted prefab loads as an empty entry, reported
+  by validation.
+- Cities generated with an earlier version have no settings asset until they are generated again.
+
 ## [3.10.0] - 2026-11-25
 ### Added
 

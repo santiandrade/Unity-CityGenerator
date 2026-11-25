@@ -1,0 +1,317 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c6adec3910902848b3a0e17f0d5c627, type: 3}
+  m_Name: City_CityGeneratorSettings
+  m_EditorClassIdentifier: CityGenerator.Editor::CityGenerator.Editor.CityGeneratorSettingsAsset
+  settings:
+    general:
+      gridWidth: 5
+      gridHeight: 5
+      plazaCells:
+      - {x: 2, y: 2}
+      useCustomGrid: 0
+      customBlockCells: []
+      buildingsPerBlock: 4
+      includeTraffic: 1
+      vehicleCount: 80
+      includePedestrians: 1
+      pedestrianCount: 150
+      useCustomSeed: 0
+      seed: 0
+      playerEnabled: 1
+      playerPrefab: {fileID: 3139555725117877397, guid: ee32a85b85c9001449606e182968dff8, type: 3}
+      inputActions: {fileID: -944628639613478452, guid: a83f40e44a684cd89fa428856ddefe2d, type: 3}
+      enablePhysics: 0
+    ground:
+      roadBasePrefab: {fileID: 117610139911049874, guid: 9f4a7b17d05a88946a88b184e18c3d29, type: 3}
+      sidewalkPrefab: {fileID: 1841595389193350908, guid: 35917db16fa77b045bd48d0a947b96a2, type: 3}
+      roadLinePrefab: {fileID: 7739687500476836967, guid: ba89324b206dc1e43aeef6f67eec757c, type: 3}
+      crosswalkLinePrefab: {fileID: 2600943348913015334, guid: 3b389944bfe6a164cb3aa54fcb4f90f5, type: 3}
+      emptyBlockPrefab: {fileID: 2756690747584303337, guid: 28b737d3ae5bc1846ba7633fa003a29f, type: 3}
+    plaza:
+      centerpiecePrefab: {fileID: 4803061701439370, guid: 302e885b1e319d646a6fc8a3e349468b, type: 3}
+      lawnPrefab: {fileID: 2756690747584303337, guid: 28b737d3ae5bc1846ba7633fa003a29f, type: 3}
+      benchPrefab: {fileID: 5743231845189417412, guid: 314da310832128e4f9c9af89a620cf18, type: 3}
+    buildingPrefabs:
+    - {fileID: 1591835425656323023, guid: 9cbf426b59699e54887f5bafa5ba05fa, type: 3}
+    - {fileID: 8651853139000072500, guid: 9fd81c6bbb266d04083f1cbe4159c6ee, type: 3}
+    - {fileID: 7288696185324568770, guid: f174a796ddc4a004791638532a0a1326, type: 3}
+    - {fileID: 4992814339762302466, guid: c7dda79ea672fdd4599e1c44620c9c26, type: 3}
+    - {fileID: 8237558460172264353, guid: 78862924a2ee2a4429d3c53e1e3202d7, type: 3}
+    - {fileID: 882258551535098194, guid: 5bb3a67092995e74882440f1a65689d2, type: 3}
+    - {fileID: 1869378734342273442, guid: 4533aaa9ee7656b4b87040cc47182083, type: 3}
+    - {fileID: 4091908141634481144, guid: 357d45ec00457c4428eb56ff0733b0a7, type: 3}
+    - {fileID: 4520015751721984752, guid: 99d03e784a2fb644fa251bbe11342173, type: 3}
+    - {fileID: 8618853582619880324, guid: 4304f06ed743ad14ebb1b2d0a34a8473, type: 3}
+    - {fileID: 643419196821535491, guid: 0c70133d2c6b78c49a2c771d67c09d30, type: 3}
+    - {fileID: 214444195651250584, guid: 0f33e34332cb9da47bd1ddb9d154881a, type: 3}
+    - {fileID: 4162099098790981131, guid: 5a09a7838563f034e8a96d9eeeef9c98, type: 3}
+    - {fileID: 2593913476741304045, guid: 665c1ba8f67419d44a321451df74f1c8, type: 3}
+    - {fileID: 2383338627854996464, guid: c70e47f726c0b734fa56e3afe32ababd, type: 3}
+    - {fileID: 494511993428010523, guid: 9426a5f19e2b1364d968f3d02e14a3fa, type: 3}
+    districts: []
+    vegetation:
+      prefabs:
+      - {fileID: 2099202089797513416, guid: 381b8d5877dc89d4ea7d6fcd034cdc26, type: 3}
+      density: 0.2
+    vehicles:
+    - prefab: {fileID: 6823999750249078626, guid: ca2f6c963c1c31f49838e0d36cff8c06, type: 3}
+      percentage: 1
+    - prefab: {fileID: 3417559821124940456, guid: ce3935430d2bc994fb3fc138d3ff26f2, type: 3}
+      percentage: 7
+    - prefab: {fileID: 772324440904980526, guid: 167f06b8e4c8de346b1240a59078b963, type: 3}
+      percentage: 7
+    - prefab: {fileID: 4031943874807837357, guid: 0946b5a135abe3649a34e304ee39fcb3, type: 3}
+      percentage: 1
+    - prefab: {fileID: 2694330688970407054, guid: 229e23ea3d7622b48ad9fc386f75c405, type: 3}
+      percentage: 2
+    - prefab: {fileID: 3789724890649004095, guid: d8c61c6b04939394f852855b236db20b, type: 3}
+      percentage: 7
+    - prefab: {fileID: 4675228128519428518, guid: 8c3e70fc5b32fe64a8b78d3247780a8b, type: 3}
+      percentage: 3
+    - prefab: {fileID: 4591986896556867738, guid: 27512055a47e2064bacbdf8403a3fa03, type: 3}
+      percentage: 7
+    - prefab: {fileID: 3317532499126707405, guid: ab5bd14a42a6b8245a6884f8086afafb, type: 3}
+      percentage: 7
+    - prefab: {fileID: 7749487432722112974, guid: 921f24931e989d048b54385bc63a16d9, type: 3}
+      percentage: 7
+    - prefab: {fileID: 7803092019567836419, guid: 4f9f6b134c6c2de4a893437d40490b3a, type: 3}
+      percentage: 7
+    - prefab: {fileID: 1770749813880746678, guid: 233446cb49bb8584e958b5e9938dae15, type: 3}
+      percentage: 23
+    - prefab: {fileID: 2871369746300392970, guid: 53707897115f62c4ba22605ba8ab971a, type: 3}
+      percentage: 7
+    - prefab: {fileID: 8486866353494972174, guid: b52669dbe646f97408b8969d62b7ce9c, type: 3}
+      percentage: 7
+    - prefab: {fileID: 7955333133617650479, guid: bd02501498e918f499a97f92dc27876b, type: 3}
+      percentage: 7
+    props:
+      trafficLightSide: 0
+      rightTrafficLightPrefab: {fileID: 1191145563012181842, guid: 2891bbc3ae139634ea8e25b804e898c2, type: 3}
+      leftTrafficLightPrefab: {fileID: 4743503494120836402, guid: 27e6b861af294d24b9145cbbb5a227d8, type: 3}
+      lampPrefab: {fileID: 3911784334714882739, guid: 1570366e465dfc14eb0771f721de15cd, type: 3}
+      lampDensity: 1
+      binPrefab: {fileID: 8312355989477126645, guid: cd7bf6b6d7eec874b8397af2ee8a46bf, type: 3}
+      binDensity: 0.3
+    pedestrians:
+    - prefab: {fileID: 5457471384810703131, guid: a35e812a244ec2a4dbf3dba7f1a46d6b, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 3743443706575756985, guid: 155e9420e72ed3a428622e7bafcdda6d, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 7677542102809824623, guid: d54dbbcda55ccdd4d980d7816fa1761e, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 3139555725117877397, guid: ee32a85b85c9001449606e182968dff8, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 3295376344014835366, guid: e205e8a1265113b419b7ca1131ecf620, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 8042410030644267348, guid: c4598da605c371c4fbf853fce9e11696, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 8051623193969161969, guid: cd982b33591308c4d9877e6a1dd585d2, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 3358672791567409987, guid: 6d35a114df0b53a40b008900a6477db2, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 7039429030940537338, guid: ab14ca3d8f3717e459bfaa8fb448e309, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 3157700119278868881, guid: 0e79b9107108a80418819ca3c4084fff, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 2705026983071684762, guid: f703654f263c2f446bca9da95068a7a9, type: 3}
+      percentage: 8.333333
+    - prefab: {fileID: 1021009167794680374, guid: afe7742e5a301b7478f03f97a946bcb6, type: 3}
+      percentage: 8.333333
+    player:
+      walkSpeed: 4
+      runSpeed: 8
+      rotationSmoothTime: 0.1
+      gravity: -20
+      jumpHeight: 1.2
+      controllerHeight: 0.72
+      controllerRadius: 0.2
+      controllerCenter: {x: 0, y: 0.4, z: 0}
+      controllerSlopeLimit: 45
+      controllerStepOffset: 0.2
+      controllerSkinWidth: 0.02
+      controllerMinMoveDistance: 0.001
+      actionMapName: Player
+      moveActionName: Move
+      jumpActionName: Jump
+      sprintActionName: Sprint
+      lookActionName: Look
+      toggleActionName: Toggle
+    camera:
+      fieldOfView: 45
+      verticalOffset: 1
+      horizontalOffset: 0
+      distance: 5
+      minDistance: 1
+      sensitivity: 0.12
+      minPitch: -20
+      maxPitch: 60
+      followSmoothTime: 0.08
+      collisionMask:
+        serializedVersion: 2
+        m_Bits: 4294967295
+      collisionRadius: 0.3
+      lockCursor: 1
+    freeCamera:
+      enabled: 1
+      moveSpeed: 8
+      sprintMultiplier: 4.5
+      rotationSmoothTime: 0.08
+      actionMapName: Free View
+      moveActionName: Move
+      verticalActionName: Vertical
+      sprintActionName: Sprint
+      lookActionName: Look
+      toggleActionName: Toggle
+    pedestrianBehaviour:
+      walkReferenceSpeed: 4
+      runReferenceSpeed: 8
+      paceFraction: 0.5
+      runnerChance: 0.15
+      speedJitter: 0.1
+      lateralJitter: 0.4
+      rotationSpeed: 360
+      arriveRadius: 0.3
+      idleStopChance: 0.3
+      idleStopDurationMin: 2
+      idleStopDurationMax: 6
+    crowd:
+      separationCellSize: 8
+      separationRadius: 0.6
+      separationStrength: 2
+      playerAvoidanceRadius: 1
+      playerAvoidanceStrength: 6
+      staggerMinAgentCount: 60
+      staggerDistance: 60
+      staggerFrames: 4
+    customPlaces:
+    - title: Hospital
+      prefab: {fileID: 1160956010873235132, guid: 6357f2b644f57f040a875d7edaa53445, type: 3}
+      isPointOfInterest: 1
+      occupiesFullBlock: 1
+      blockCell: {x: 3, y: 3}
+      cornerSlot: 0
+      facing: 1
+      positionAssigned: 1
+    customPedestrians: []
+    minimap:
+      enabled: 1
+      textureResolution: 2048
+      viewRadiusMeters: 60
+    dayNight:
+      enabled: 1
+      startHour: 10
+      speedMultiplier: 30
+      lightColorOverTime:
+        serializedVersion: 2
+        key0: {r: 0.12, g: 0.16, b: 0.35, a: 1}
+        key1: {r: 1, g: 0.6, b: 0.3, a: 1}
+        key2: {r: 1, g: 1, b: 1, a: 0}
+        key3: {r: 1, g: 0.55, b: 0.25, a: 0}
+        key4: {r: 0.12, g: 0.16, b: 0.35, a: 0}
+        key5: {r: 0, g: 0, b: 0, a: 0}
+        key6: {r: 0, g: 0, b: 0, a: 0}
+        key7: {r: 0, g: 0, b: 0, a: 0}
+        ctime0: 0
+        ctime1: 16384
+        ctime2: 32768
+        ctime3: 49151
+        ctime4: 65535
+        ctime5: 0
+        ctime6: 0
+        ctime7: 0
+        atime0: 0
+        atime1: 65535
+        atime2: 0
+        atime3: 0
+        atime4: 0
+        atime5: 0
+        atime6: 0
+        atime7: 0
+        m_Mode: 0
+        m_ColorSpace: -1
+        m_NumColorKeys: 5
+        m_NumAlphaKeys: 2
+      lightIntensityOverTime:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0.1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 0.25
+          value: 0.6
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 0.5
+          value: 1.2
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 0.75
+          value: 0.6
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 0.1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 4
+    audio:
+      ambience:
+        enabled: 1
+        clips:
+        - clip: {fileID: 8300000, guid: f6e25ed7dcad0fe41957f46561cc458c, type: 3}
+          volume: 1
+      plazaAudio:
+        enabled: 1
+        clips:
+        - clip: {fileID: 8300000, guid: da5ba41b1fa49da4897fff9a3da0d20b, type: 3}
+          volume: 1
+          minDistance: 4
+          maxDistance: 20
+        - clip: {fileID: 8300000, guid: ec9393aa0275e1e44a52172079319315, type: 3}
+          volume: 1
+          minDistance: 20
+          maxDistance: 50
+    vehiclePhysics:
+      mass: 1200
+      drag: 0.3
+      angularDrag: 1
+      physicMaterial: {fileID: 13400000, guid: 010898d83aabe1940915c74e3a252fca, type: 2}
+  packageVersion: 3.10.0
