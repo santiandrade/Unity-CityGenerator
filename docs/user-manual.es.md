@@ -276,6 +276,14 @@ aviso.
 
 Sin barrios, la misma seed sigue generando exactamente la misma ciudad que antes.
 
+El nombre y las manzanas de cada barrio también quedan guardados en la ciudad generada (se ven,
+de solo lectura, en el componente `CityGeneratorInfo` de la raíz de la ciudad), así que tu juego
+puede preguntar en runtime, también en una build, en qué barrio está una posición; por ejemplo,
+para mostrar el barrio por el que va el jugador: consulta `TryGetDistrictAt` en la
+[Referencia de la API Runtime](api-reference.es.md#qué-barrio-hay-aquí-trygetdistrictat). Se
+escriben en Build y en Re-Build, así que después de cambiar esta card hay que regenerar para que
+la escena lo recoja.
+
 ### 4.7 Vegetation
 
 ![Card Vegetation](images/manual/card-vegetation.png)

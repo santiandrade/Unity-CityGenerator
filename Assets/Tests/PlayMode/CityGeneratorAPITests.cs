@@ -1,10 +1,15 @@
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using CityGenerator.Editor;
 using CityGenerator.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.TestTools.Constraints;
+// Unity's Is (which adds AllocatingGCMemory) over NUnit's, as the Test Framework documents.
+using Is = UnityEngine.TestTools.Constraints.Is;
 
 namespace CityGenerator.Tests.PlayMode
 {
@@ -278,6 +283,120 @@ namespace CityGenerator.Tests.PlayMode
             Assert.AreEqual(0, hudGo.transform.childCount);
 
             Object.DestroyImmediate(prefabGo);
+            Object.DestroyImmediate(cityInfo.gameObject);
+        }
+
+        // ---------------------------------------------------------------- SPEC 23: districts
+
+        /// <summary>
+        /// A synthetic 3x2 city moved away from the origin: "Old Town" owns (0,0) and (1,0),
+        /// "Docks" owns (2,1); (0,1) is a free block and (1,1) stands for a plaza, which a district
+        /// never lists (SPEC 21).
+        /// </summary>
+        private static CityGeneratorInfo BuildDistrictCity()
+        {
+            CityGeneratorInfo cityInfo = BuildCity("DistrictCity");
+            cityInfo.transform.position = new Vector3(500f, 2f, -300f);
+            cityInfo.cellPitch = CityGeneratorConstants.CellPitch;
+            cityInfo.layoutSize = new Vector2Int(3, 2);
+            cityInfo.districts.Add(new CityDistrict { name = "Old Town", cells = new List<Vector2Int> { new(0, 0), new(1, 0) } });
+            cityInfo.districts.Add(new CityDistrict { name = "Docks", cells = new List<Vector2Int> { new(2, 1) } });
+            return cityInfo;
+        }
+
+        private static Vector3 BlockCenter(CityGeneratorInfo cityInfo, int gx, int gy) =>
+            cityInfo.transform.TransformPoint(CityGeneratorGrid.GetBlockCenter(gx, gy, cityInfo.layoutSize.x, cityInfo.layoutSize.y));
+
+        [Test]
+        public void TryGetDistrictAt_ResolvesEachDistrictBlock_AndNothingElse()
+        {
+            CityGeneratorInfo cityInfo = BuildDistrictCity();
+            CityModule city = CityGeneratorAPI.Default.Value.City;
+
+            Assert.AreEqual(2, city.DistrictCount);
+            Assert.AreEqual("Old Town", city.GetDistrictName(0));
+            Assert.AreEqual("Docks", city.GetDistrictName(1));
+            Assert.IsNull(city.GetDistrictName(2));
+
+            Assert.IsTrue(city.TryGetDistrictAt(BlockCenter(cityInfo, 0, 0), out int index));
+            Assert.AreEqual(0, index);
+            Assert.IsTrue(city.TryGetDistrictAt(BlockCenter(cityInfo, 1, 0), out index));
+            Assert.AreEqual(0, index);
+            Assert.IsTrue(city.TryGetDistrictAt(BlockCenter(cityInfo, 2, 1), out index));
+            Assert.AreEqual(1, index);
+
+            Assert.IsFalse(city.TryGetDistrictAt(BlockCenter(cityInfo, 0, 1), out index), "Free block");
+            Assert.AreEqual(-1, index);
+            Assert.IsFalse(city.TryGetDistrictAt(BlockCenter(cityInfo, 1, 1), out index), "Plaza");
+            Assert.AreEqual(-1, index);
+            Assert.IsFalse(city.TryGetDistrictAt(BlockCenter(cityInfo, 0, 0) + new Vector3(-100f, 0f, 0f), out index), "Outside the city");
+            Assert.AreEqual(-1, index);
+            Assert.IsFalse(city.TryGetDistrictAt(CityGeneratorGrid.GetBlockCenter(0, 0, 3, 2), out index), "The unmoved local position lies outside the moved city");
+            Assert.AreEqual(-1, index);
+
+            Object.DestroyImmediate(cityInfo.gameObject);
+        }
+
+        [Test]
+        public void TryGetDistrictAt_WithoutDistricts_IsAlwaysFalse_AndLogsNothing()
+        {
+            // A city built before SPEC 23 and never regenerated: no pitch, no canvas, no districts.
+            CityGeneratorInfo cityInfo = BuildCity("LegacyCity");
+            CityModule city = CityGeneratorAPI.Default.Value.City;
+
+            Assert.AreEqual(0, city.DistrictCount);
+            Assert.IsNull(city.GetDistrictName(0));
+            Assert.IsFalse(city.TryGetDistrictAt(Vector3.zero, out int index));
+            Assert.AreEqual(-1, index);
+
+            // Regenerated without districts: a canvas but an empty list.
+            cityInfo.cellPitch = CityGeneratorConstants.CellPitch;
+            cityInfo.layoutSize = new Vector2Int(2, 2);
+            Assert.AreEqual(0, city.DistrictCount);
+            Assert.IsFalse(city.TryGetDistrictAt(Vector3.zero, out index));
+            Assert.AreEqual(-1, index);
+            LogAssert.NoUnexpectedReceived();
+
+            Object.DestroyImmediate(cityInfo.gameObject);
+        }
+
+        [Test]
+        public void TryGetDistrictAt_DestroyedCity_ReturnsFalseWithoutThrowing()
+        {
+            CityGeneratorInfo cityInfo = BuildDistrictCity();
+            CityModule city = CityGeneratorAPI.Default.Value.City;
+            Vector3 center = BlockCenter(cityInfo, 0, 0);
+            Object.DestroyImmediate(cityInfo.gameObject);
+
+            Assert.DoesNotThrow(() =>
+            {
+                Assert.AreEqual(0, city.DistrictCount);
+                Assert.IsNull(city.GetDistrictName(0));
+                Assert.IsFalse(city.TryGetDistrictAt(center, out int index));
+                Assert.AreEqual(-1, index);
+            });
+        }
+
+        [Test]
+        public void TryGetDistrictAt_DoesNotAllocate_AfterTheFirstCall()
+        {
+            CityGeneratorInfo cityInfo = BuildDistrictCity();
+            CityModule city = CityGeneratorAPI.Default.Value.City;
+            Vector3 inside = BlockCenter(cityInfo, 2, 1);
+            Vector3 free = BlockCenter(cityInfo, 0, 1);
+            Vector3 outside = inside + new Vector3(1000f, 0f, 1000f);
+            city.TryGetDistrictAt(inside, out _); // builds the cell index once
+
+            Assert.That(() =>
+            {
+                for (int i = 0; i < 100; i++)
+                {
+                    city.TryGetDistrictAt(inside, out _);
+                    city.TryGetDistrictAt(free, out _);
+                    city.TryGetDistrictAt(outside, out _);
+                }
+            }, Is.Not.AllocatingGCMemory());
+
             Object.DestroyImmediate(cityInfo.gameObject);
         }
     }
