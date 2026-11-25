@@ -62,6 +62,33 @@ namespace CityGenerator.Runtime
         public bool IsSeeded => info != null && info.useCustomSeed;
         public int Seed => info != null ? info.seed : 0;
 
+        /// <summary>SPEC 23: number of Districts stored in this city at its last Build/Re-Build. 0 for a
+        /// city without districts, or built before SPEC 23 and not regenerated since.</summary>
+        public int DistrictCount => info != null && info.districts != null ? info.districts.Count : 0;
+
+        /// <summary>SPEC 23: name of district <paramref name="districtIndex"/>, trimmed, as set in the
+        /// generator. Null when the index is out of range.</summary>
+        public string GetDistrictName(int districtIndex)
+        {
+            return districtIndex >= 0 && districtIndex < DistrictCount ? info.districts[districtIndex].name : null;
+        }
+
+        /// <summary>
+        /// SPEC 23: the district whose block is nearest to <paramref name="worldPosition"/> (per axis,
+        /// so a block's area reaches to the axis of each street around it and a crossing is split
+        /// between its four blocks). Returns false and -1 outside the city's layout canvas, on a block
+        /// in no district, on a plaza, and on an empty Custom Grid cell. O(1) and allocation-free
+        /// after the first call, so it can be called every frame.
+        /// </summary>
+        public bool TryGetDistrictAt(Vector3 worldPosition, out int districtIndex)
+        {
+            districtIndex = -1;
+            return info != null
+                && DistrictCount > 0
+                && info.TryGetCell(worldPosition, out Vector2Int cell)
+                && info.TryGetDistrictIndex(cell, out districtIndex);
+        }
+
         public bool IsDayNightEnabled => info != null && info.dayNightCycle != null && info.dayNightCycle.enabled;
         public float CurrentHour => info != null && info.dayNightCycle != null ? info.dayNightCycle.currentHour : 0f;
 

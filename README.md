@@ -11,7 +11,8 @@ scene. Open it from **Tools > City Generator > Open**.
 screenshots, plus the full process of generating a city.
 
 🧩 **[Runtime API Reference](docs/api-reference.md)** — query a generated city's data (and a
-handful of safe setters) from your own scripts, in Play Mode and in a build.
+handful of safe setters) from your own scripts, in Play Mode and in a build — including which
+District any position lies in (`city.City.TryGetDistrictAt`).
 
 - **Generate a complete city:** roads, sidewalks, road markings, buildings, plazas,
   street furniture, traffic lights, autonomous traffic, pedestrians, an optional

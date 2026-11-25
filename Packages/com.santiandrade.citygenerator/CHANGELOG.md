@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Districts are now stored in the generated city, so a game can ask at runtime (in a build too)
+  which District a position is in: `city.City.DistrictCount`, `GetDistrictName(index)` and
+  `TryGetDistrictAt(position, out index)`. A point belongs to the nearest block on each axis, so
+  the border runs down the middle of each street; plazas, blocks in no District, empty Custom
+  Grid cells and anything outside the grid return `false`. The query is O(1) and allocation-free
+  after the first call, and works on a city moved away from the origin.
+- `CityGeneratorInfo` shows each District's name and blocks, the cell pitch and the layout size.
+
+### Notes
+
+- A city generated with an earlier version reports no Districts until it is rebuilt (Re-Build).
 
 ## [3.9.0] - 2026-11-24
 ### Added

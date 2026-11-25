@@ -270,6 +270,13 @@ in a district's building list, or a prefab with no Renderer, is only a warning.
 
 With no districts, the same seed still generates exactly the same city as before.
 
+Each district's name and blocks are also stored in the generated city (they show, read-only, on
+the city root's `CityGeneratorInfo` component), so your game can ask at runtime — in a build too —
+which district a position is in, for example to show the neighbourhood the player is driving
+through: see `TryGetDistrictAt` in the [Runtime API Reference](api-reference.md#which-district-is-here-trygetdistrictat).
+They are written on Build and Re-Build, so after changing this card, rebuild for the scene to
+pick up the change.
+
 ### 4.7 Vegetation
 
 ![Vegetation card](images/manual/card-vegetation.png)

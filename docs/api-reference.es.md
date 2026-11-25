@@ -103,6 +103,43 @@ sistema aparte).
 | `SetDayNightEnabled(bool enabled)` | Activa/desactiva el `Update` del ciclo (`DayNightCycle.enabled`) — desactivarlo congela la luz en su hora actual. |
 | `CurrentHour` | Hora simulada actual (0-24). |
 | `SetHour(float hour)` | Reposiciona la luz instantáneamente a `hour`, igual que el preview del propio Editor. |
+| `DistrictCount` | Número de [barrios (Districts)](user-manual.es.md#46-districts) guardados en esta ciudad en su último Build/Re-Build. `0` si no tiene. |
+| `GetDistrictName(int districtIndex)` | El nombre del barrio tal como está en el generador, recortado. `null` si el índice está fuera de rango. |
+| `TryGetDistrictAt(Vector3 worldPosition, out int districtIndex)` | `true` y el índice del barrio (su posición en la lista del generador) cuando `worldPosition` cae en una de sus manzanas; `false` y `-1` en otro caso. |
+
+### Qué barrio hay aquí: `TryGetDistrictAt`
+
+Cada punto pertenece a la manzana cuyo centro está más cerca **en cada eje**: el área de una
+manzana llega hasta el eje de cada calle que la rodea, así que la frontera entre dos manzanas pasa
+por el centro de la calle que las separa, y un cruce se reparte entre sus cuatro manzanas. La altura
+no cuenta, y la posición se lee relativa a la raíz de la ciudad, así que una ciudad desplazada
+responde igual. Devuelve `false` fuera de la cuadrícula de la ciudad, en una manzana que no es de
+ningún barrio, en una plaza (una plaza nunca está en un barrio) y en una celda vacía de una Custom
+Grid: la API dice exactamente lo que hay en la cuadrícula; si una plaza "pertenece" a su barrio lo
+decide tu juego.
+
+La consulta es O(1) y no asigna memoria después de la primera llamada, así que se puede hacer en
+cada frame. Devuelve un índice y no el nombre para que la comparación de cada frame no compare
+cadenas:
+
+```csharp
+CityGeneratorCity city = CityGeneratorAPI.Default.Value;
+int shownDistrict = -1;
+
+void Update()
+{
+    city.City.TryGetDistrictAt(car.position, out int district);
+    if (district != shownDistrict)
+    {
+        shownDistrict = district;
+        label.text = district >= 0 ? city.City.GetDistrictName(district) : "";
+    }
+}
+```
+
+Los barrios se guardan en la ciudad al generarla, así que una ciudad generada con una versión
+anterior devuelve `DistrictCount = 0` hasta que se regenere, y cambiar la card Districts sin
+regenerar no cambia lo que responde la escena.
 
 ## `CityGeneratorCity.Player`
 

@@ -274,6 +274,7 @@ namespace CityGenerator.Editor
             info.useCustomGrid = settings.general.useCustomGrid;
             info.gridSize = settings.general.useCustomGrid ? ComputeCustomGridBounds(blocks) : new Vector2Int(gridWidth, gridHeight);
             info.blockCount = blocks.Count;
+            WriteDistricts(info, settings);
 
             info.buildingCount = builtBuildings.Count;
             info.plazaCount = 0;
@@ -318,6 +319,32 @@ namespace CityGenerator.Editor
         public static CityBuildSummary Assemble(CityGeneratorSettings settings, Transform cityRoot)
         {
             return Assemble(settings, cityRoot, onProgress: null);
+        }
+
+        /// <summary>
+        /// SPEC 23: stores what CityGeneratorInfo needs to answer "which district is here" at
+        /// runtime -- the cell pitch and the layout canvas CityGeneratorGrid.GetBlockCenter places
+        /// block centres on (gridWidth x gridHeight, or the fixed MaxGridSize canvas with Custom
+        /// Grid), plus a copy of the settings' districts in their order, names trimmed and cell lists
+        /// never null. Reads nothing from the random stream, so the generated city is unchanged.
+        /// </summary>
+        internal static void WriteDistricts(CityGeneratorInfo info, CityGeneratorSettings settings)
+        {
+            info.cellPitch = CityGeneratorConstants.CellPitch;
+            info.layoutSize = settings.general.useCustomGrid
+                ? new Vector2Int(CityGeneratorConstants.MaxGridSize, CityGeneratorConstants.MaxGridSize)
+                : new Vector2Int(settings.general.gridWidth, settings.general.gridHeight);
+
+            info.districts = new List<CityDistrict>(settings.districts.Count);
+            foreach (DistrictEntry district in settings.districts)
+            {
+                info.districts.Add(new CityDistrict
+                {
+                    name = district.name?.Trim() ?? string.Empty,
+                    cells = district.cells != null ? new List<Vector2Int>(district.cells) : new List<Vector2Int>(),
+                });
+            }
+            info.InvalidateDistrictLookup();
         }
 
         // Custom Grid has no fixed gridWidth/gridHeight — CityGeneratorInfo.gridSize instead

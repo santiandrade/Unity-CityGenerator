@@ -99,6 +99,41 @@ its own module, since conceptually it's about the current city, not a separate s
 | `SetDayNightEnabled(bool enabled)` | Enables/disables the cycle's `Update` (`DayNightCycle.enabled`) — disabling freezes the light at its current hour. |
 | `CurrentHour` | Current simulated hour (0-24). |
 | `SetHour(float hour)` | Repositions the light instantly to `hour`, exactly like the Editor's own preview. |
+| `DistrictCount` | Number of [Districts](user-manual.md#46-districts) stored in this city at its last Build/Re-Build. `0` without districts. |
+| `GetDistrictName(int districtIndex)` | The district's name as set in the generator, trimmed. `null` when the index is out of range. |
+| `TryGetDistrictAt(Vector3 worldPosition, out int districtIndex)` | `true` and the district's index (its position in the generator's list) when `worldPosition` lies in one of its blocks; `false` and `-1` otherwise. |
+
+### Which district is here: `TryGetDistrictAt`
+
+Each point belongs to the block whose centre is nearest **on each axis**: a block's area reaches
+the axis of every street around it, so the border between two blocks runs down the middle of the
+street between them, and a crossing is split between its four blocks. Height is ignored, and the
+position is read relative to the city root, so a moved city answers the same. It returns `false`
+outside the city's grid, on a block that belongs to no district, on a plaza (a plaza is never in a
+district), and on an empty cell of a Custom Grid — the API reports exactly what the grid holds;
+whether a plaza "belongs" to its neighbourhood is up to your game.
+
+The query is O(1) and allocates nothing after the first call, so it can run every frame. It
+returns an index rather than the name so a per-frame comparison never compares strings:
+
+```csharp
+CityGeneratorCity city = CityGeneratorAPI.Default.Value;
+int shownDistrict = -1;
+
+void Update()
+{
+    city.City.TryGetDistrictAt(car.position, out int district);
+    if (district != shownDistrict)
+    {
+        shownDistrict = district;
+        label.text = district >= 0 ? city.City.GetDistrictName(district) : "";
+    }
+}
+```
+
+The districts are stored in the city when it is generated, so a city generated with an older
+version reports `DistrictCount = 0` until it is rebuilt, and changing the Districts card without
+rebuilding doesn't change what the scene answers.
 
 ## `CityGeneratorCity.Player`
 
